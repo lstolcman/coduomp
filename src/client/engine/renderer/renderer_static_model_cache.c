@@ -482,21 +482,23 @@ renderer_cached_static_model_surface_t *R_CacheStaticModelSurface(
         memcpy(vertices[vertexIndex].texCoord,
                source->texCoords[vertexIndex],
                sizeof(vertices[vertexIndex].texCoord));
-        vertices[vertexIndex].position[0] =
-            owner->entity.axis[0][0] * (*sourcePosition)[0] +
-            owner->entity.axis[1][0] * (*sourcePosition)[1] +
-            owner->entity.axis[2][0] * (*sourcePosition)[2] +
-            owner->entity.origin[0];
-        vertices[vertexIndex].position[1] =
-            owner->entity.axis[0][1] * (*sourcePosition)[0] +
-            owner->entity.axis[1][1] * (*sourcePosition)[1] +
-            owner->entity.axis[2][1] * (*sourcePosition)[2] +
-            owner->entity.origin[1];
-        vertices[vertexIndex].position[2] =
-            owner->entity.axis[0][2] * (*sourcePosition)[0] +
-            owner->entity.axis[1][2] * (*sourcePosition)[1] +
-            owner->entity.axis[2][2] * (*sourcePosition)[2] +
-            owner->entity.origin[2];
+        /* Retain the transform intermediates until each coordinate store;
+         * X accumulates Y+Z+X, while Y and Z accumulate Z+Y+X. */
+        vertices[vertexIndex].position[0] = (float)(
+            ((long double)owner->entity.axis[1][0] * (*sourcePosition)[1] +
+             (long double)owner->entity.axis[2][0] * (*sourcePosition)[2]) +
+            (long double)owner->entity.axis[0][0] * (*sourcePosition)[0] +
+            (long double)owner->entity.origin[0]);
+        vertices[vertexIndex].position[1] = (float)(
+            ((long double)owner->entity.axis[2][1] * (*sourcePosition)[2] +
+             (long double)owner->entity.axis[1][1] * (*sourcePosition)[1]) +
+            (long double)owner->entity.axis[0][1] * (*sourcePosition)[0] +
+            (long double)owner->entity.origin[1]);
+        vertices[vertexIndex].position[2] = (float)(
+            ((long double)owner->entity.axis[2][2] * (*sourcePosition)[2] +
+             (long double)owner->entity.axis[1][2] * (*sourcePosition)[1]) +
+            (long double)owner->entity.axis[0][2] * (*sourcePosition)[0] +
+            (long double)owner->entity.origin[2]);
     }
 
     stage = source->cachedShader->stages[0];
@@ -506,16 +508,18 @@ renderer_cached_static_model_surface_t *R_CacheStaticModelSurface(
              vertexIndex < source->vertexCount;
              ++vertexIndex) {
             const vec3_t *sourceNormal = &source->normals[vertexIndex];
+            /* Preserve each inverse-axis dot product's accumulation order
+             * and round only when materializing the normal for normalization. */
             vec3_t normal = {
-                inverseAxis[0][0] * (*sourceNormal)[0] +
-                    inverseAxis[0][1] * (*sourceNormal)[1] +
-                    inverseAxis[0][2] * (*sourceNormal)[2],
-                inverseAxis[1][0] * (*sourceNormal)[0] +
-                    inverseAxis[1][1] * (*sourceNormal)[1] +
-                    inverseAxis[1][2] * (*sourceNormal)[2],
-                inverseAxis[2][0] * (*sourceNormal)[0] +
-                    inverseAxis[2][1] * (*sourceNormal)[1] +
-                    inverseAxis[2][2] * (*sourceNormal)[2]
+                (float)(((long double)inverseAxis[0][1] * (*sourceNormal)[1] +
+                         (long double)inverseAxis[0][2] * (*sourceNormal)[2]) +
+                        (long double)inverseAxis[0][0] * (*sourceNormal)[0]),
+                (float)(((long double)inverseAxis[1][1] * (*sourceNormal)[1] +
+                         (long double)inverseAxis[1][0] * (*sourceNormal)[0]) +
+                        (long double)inverseAxis[1][2] * (*sourceNormal)[2]),
+                (float)(((long double)inverseAxis[2][2] * (*sourceNormal)[2] +
+                         (long double)inverseAxis[2][0] * (*sourceNormal)[0]) +
+                        (long double)inverseAxis[2][1] * (*sourceNormal)[1])
             };
 
             (void)VectorNormalize(normal);
