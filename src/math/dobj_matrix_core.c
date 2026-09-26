@@ -25,34 +25,36 @@ void DObjQuatToMatrix43(const vec4_t quat, DObjSkelMat *matrix)
     float q0Sq = quat[0] * quat[0];
     float q1Sq = quat[1] * quat[1];
     float q2Sq = quat[2] * quat[2];
-    float lengthSq =
-        ((quat[3] * quat[3] + q2Sq) + q1Sq) + q0Sq;
+    /* Keep the three squared-vector spills, while retaining the norm and
+     * scale until the individual matrix-lane stores. */
+    long double lengthSq =
+        (((long double)quat[3] * quat[3] + q2Sq) + q1Sq) + q0Sq;
 
     if (lengthSq != 0.0f) {
-        float scale = 2.0f / lengthSq;
-        float xx = q0Sq * scale;
-        float yy = q1Sq * scale;
-        float zz = q2Sq * scale;
-        float xScale = quat[0] * scale;
-        float xy = xScale * quat[1];
-        float xz = xScale * quat[2];
-        float xw = xScale * quat[3];
-        float yScale = quat[1] * scale;
-        float yz = yScale * quat[2];
-        float yw = yScale * quat[3];
-        float zw = (quat[2] * quat[3]) * scale;
+        long double scale = 2.0L / lengthSq;
+        long double xx = q0Sq * scale;
+        long double yy = q1Sq * scale;
+        long double zz = q2Sq * scale;
+        long double xScale = quat[0] * scale;
+        long double xy = xScale * quat[1];
+        float xz = (float)(xScale * quat[2]);
+        float xw = (float)(xScale * quat[3]);
+        long double yScale = quat[1] * scale;
+        float yz = (float)(yScale * quat[2]);
+        float yw = (float)(yScale * quat[3]);
+        long double zw = ((long double)quat[2] * quat[3]) * scale;
 
-        matrix->axis[0][0] = 1.0f - (yy + zz);
-        matrix->axis[0][1] = xy + zw;
+        matrix->axis[0][0] = (float)(1.0L - (yy + zz));
+        matrix->axis[0][1] = (float)(xy + zw);
         matrix->axis[0][2] = xz - yw;
         matrix->axis[0][3] = 0.0f;
-        matrix->axis[1][0] = xy - zw;
-        matrix->axis[1][1] = 1.0f - (xx + zz);
+        matrix->axis[1][0] = (float)(xy - zw);
+        matrix->axis[1][1] = (float)(1.0L - (xx + zz));
         matrix->axis[1][2] = yz + xw;
         matrix->axis[1][3] = 0.0f;
         matrix->axis[2][0] = xz + yw;
         matrix->axis[2][1] = yz - xw;
-        matrix->axis[2][2] = 1.0f - (xx + yy);
+        matrix->axis[2][2] = (float)(1.0L - (xx + yy));
         matrix->axis[2][3] = 0.0f;
     } else {
         matrix->axis[0][0] = 1.0f;
@@ -77,40 +79,38 @@ void DObjMatrixTransformVector43InPlace(
     float y = point[1];
     float z = point[2];
 
-    float outX =
-        ((z * matrix->axis[2][0] + y * matrix->axis[1][0]) +
-         x * matrix->axis[0][0]) +
+    /* Preserve all input lanes until the in-place output stores. */
+    long double outX =
+        (((long double)z * matrix->axis[2][0] + (long double)y * matrix->axis[1][0]) +
+         (long double)x * matrix->axis[0][0]) +
         matrix->origin[0];
-    float outY =
-        ((z * matrix->axis[2][1] + y * matrix->axis[1][1]) +
-         x * matrix->axis[0][1]) +
+    long double outY =
+        (((long double)z * matrix->axis[2][1] + (long double)y * matrix->axis[1][1]) +
+         (long double)x * matrix->axis[0][1]) +
         matrix->origin[1];
-    float outZ =
-        ((z * matrix->axis[2][2] + y * matrix->axis[1][2]) +
-         x * matrix->axis[0][2]) +
+    long double outZ =
+        (((long double)z * matrix->axis[2][2] + (long double)y * matrix->axis[1][2]) +
+         (long double)x * matrix->axis[0][2]) +
         matrix->origin[2];
 
-    point[2] = outZ;
-    point[0] = outX;
-    point[1] = outY;
+    point[2] = (float)outZ;
+    point[0] = (float)outX;
+    point[1] = (float)outY;
 }
 
 void DObjMatrixTransformVector43(const vec3_t point,
                                  const DObjSkelMat *matrix,
                                  vec3_t out)
 {
-    out[0] = ((point[2] * matrix->axis[2][0] +
-               point[1] * matrix->axis[1][0]) +
-              point[0] * matrix->axis[0][0]) +
-             matrix->origin[0];
-    out[1] = ((point[0] * matrix->axis[0][1] +
-               point[2] * matrix->axis[2][1]) +
-              point[1] * matrix->axis[1][1]) +
-             matrix->origin[1];
-    out[2] = ((point[0] * matrix->axis[0][2] +
-               point[2] * matrix->axis[2][2]) +
-              point[1] * matrix->axis[1][2]) +
-             matrix->origin[2];
+    out[0] = (float)((((long double)point[2] * matrix->axis[2][0] +
+                      (long double)point[1] * matrix->axis[1][0]) +
+                     (long double)point[0] * matrix->axis[0][0]) + matrix->origin[0]);
+    out[1] = (float)((((long double)point[0] * matrix->axis[0][1] +
+                      (long double)point[2] * matrix->axis[2][1]) +
+                     (long double)point[1] * matrix->axis[1][1]) + matrix->origin[1]);
+    out[2] = (float)((((long double)point[0] * matrix->axis[0][2] +
+                      (long double)point[2] * matrix->axis[2][2]) +
+                     (long double)point[1] * matrix->axis[1][2]) + matrix->origin[2]);
 }
 
 void DObjMatrixInverseTransformVector43(
@@ -136,48 +136,46 @@ void DObjMatrixInverseTransformVector43(
 
 void DObjQuatMultiplyIntoFirst(vec4_t quat, const vec4_t rhs)
 {
-    float rhsW = rhs[3];
-    float quatW = quat[3];
-    float rhsX = rhs[0];
-    float rhsY = rhs[1];
-    float rhsZ = rhs[2];
-    float quatX = quat[0];
-    float quatY = quat[1];
-    float quatZ = quat[2];
+    long double rhsW = rhs[3];
+    long double quatW = quat[3];
+    long double rhsX = rhs[0];
+    long double rhsY = rhs[1];
+    long double rhsZ = rhs[2];
+    long double quatX = quat[0];
+    long double quatY = quat[1];
+    long double quatZ = quat[2];
 
-    float outX = ((quatX * rhsW + quatW * rhsX) + quatZ * rhsY) -
-                 quatY * rhsZ;
-    float outY = ((quatY * rhsW - quatZ * rhsX) + quatW * rhsY) +
-                 quatX * rhsZ;
-    float outZ = ((quatZ * rhsW + quatY * rhsX) - quatX * rhsY) +
-                 quatW * rhsZ;
-
-    quat[3] = ((quatW * rhsW - quatX * rhsX) - quatY * rhsY) -
-              quatZ * rhsZ;
-    quat[0] = outX;
-    quat[1] = outY;
+    long double outX = ((quatW * rhsX + rhsY * quatZ) + rhsW * quatX) - quatY * rhsZ;
+    long double outY = ((quatY * rhsW - quatZ * rhsX) + quatW * rhsY) + quatX * rhsZ;
+    /* Z is spilled separately; the other quaternion lanes retain their intermediates. */
+    float outZ = (float)(((quatZ * rhsW + quatY * rhsX) - quatX * rhsY) + quatW * rhsZ);
+    long double outW = ((quatW * rhsW - quatX * rhsX) - quatY * rhsY) - quatZ * rhsZ;
     quat[2] = outZ;
+    quat[3] = (float)outW;
+    quat[0] = (float)outX;
+    quat[1] = (float)outY;
 }
 
 void DObjQuatMultiplyIntoSecond(const vec4_t lhs, vec4_t quat)
 {
-    float lhsX = lhs[0];
-    float rhsW = quat[3];
-    float lhsW = lhs[3];
-    float lhsZ = lhs[2];
-    float lhsY = lhs[1];
-    float rhsX = quat[0];
-    float rhsY = quat[1];
-    float rhsZ = quat[2];
+    long double lhsX = lhs[0];
+    long double rhsW = quat[3];
+    long double lhsW = lhs[3];
+    long double lhsZ = lhs[2];
+    long double lhsY = lhs[1];
+    long double rhsX = quat[0];
+    long double rhsY = quat[1];
+    long double rhsZ = quat[2];
 
-    float outX = ((lhsX * rhsW + lhsW * rhsX) + lhsZ * rhsY) - lhsY * rhsZ;
-    float outY = ((lhsY * rhsW - lhsZ * rhsX) + lhsW * rhsY) + lhsX * rhsZ;
-    float outZ = ((lhsZ * rhsW + lhsY * rhsX) - lhsX * rhsY) + lhsW * rhsZ;
+    long double outX = ((lhsW * rhsX + rhsY * lhsZ) + rhsW * lhsX) - lhsY * rhsZ;
+    long double outY = ((lhsY * rhsW - lhsZ * rhsX) + lhsW * rhsY) + lhsX * rhsZ;
+    float outZ = (float)(((lhsZ * rhsW + lhsY * rhsX) - lhsX * rhsY) + lhsW * rhsZ);
 
-    quat[3] = ((lhsW * rhsW - lhsX * rhsX) - lhsY * rhsY) - lhsZ * rhsZ;
-    quat[0] = outX;
-    quat[1] = outY;
+    long double outW = ((lhsW * rhsW - lhsX * rhsX) - lhsY * rhsY) - lhsZ * rhsZ;
     quat[2] = outZ;
+    quat[3] = (float)outW;
+    quat[0] = (float)outX;
+    quat[1] = (float)outY;
 }
 
 #else
