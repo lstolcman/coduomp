@@ -471,39 +471,6 @@ void Item_ListBox_Paint(itemDef_t *item)
                                     0, drawLimit,
                                     item->textStyle);
                             }
-
-                            /* NOT_FROM_ORIGINAL_SOURCE: improved server rows
-                             * may attach a second string for a subdued bot
-                             * count without changing ordinary feeder text. */
-                            if (handle == UI_FEEDER_TEXT_GREY_SUFFIX) {
-                                const int32_t prefixLength =
-                                    (int32_t)strlen(text);
-                                const char *const suffix =
-                                    text + prefixLength + 1;
-                                if (suffix[0] != '\0' &&
-                                    (col->maxChars <= 0 ||
-                                     prefixLength < col->maxChars)) {
-                                    const int32_t suffixLimit =
-                                        col->maxChars > 0
-                                            ? col->maxChars - prefixLength : 0;
-                                    const float suffixX =
-                                        textX + (float)DC->textWidth(
-                                            text, item->font,
-                                            item->textscale, prefixLength);
-                                    const vec4_t suffixColor = {
-                                        0.5f, 0.5f, 0.5f,
-                                        item->window.foreColor[3]
-                                    };
-                                    DC->drawText(
-                                        suffixX, textY,
-                                        item->font,
-                                        item->textscale,
-                                        suffixColor,
-                                        suffix,
-                                        0, suffixLimit,
-                                        item->textStyle);
-                                }
-                            }
                         }
                         col++;  /* advance one columnInfo_t (0xc bytes); 0x30057cf9 ADD EBX,0xc */
                     }

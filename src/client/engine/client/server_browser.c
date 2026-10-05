@@ -20,48 +20,6 @@ int32_t cl_serverStatusNextSlot;
 cvar_t *cl_serverStatusResendTime;
 static char cl_serverIPAddress[128];
 
-typedef enum coduomp_server_player_query_state_e {
-    CODUOMP_SERVER_PLAYER_QUERY_QUEUED = 0,
-    CODUOMP_SERVER_PLAYER_QUERY_PENDING = 1,
-    CODUOMP_SERVER_PLAYER_QUERY_COMPLETE = 2
-} coduomp_server_player_query_state_t;
-
-typedef struct coduomp_server_player_query_s {
-    netadr_t address;
-    int32_t requestStartTime;
-    int32_t timeoutMsec;
-    coduomp_server_player_query_state_t state;
-} coduomp_server_player_query_t;
-
-static coduomp_server_player_query_t
-    coduomp_serverPlayerQueries[LAN_GLOBAL_SERVER_CAPACITY];
-static int32_t coduomp_serverPlayerQueryCount;
-
-typedef struct coduomp_server_bot_cache_entry_s {
-    netadr_t address;
-    uint8_t cachedBotCount;
-    uint8_t displayedBotCount;
-    uint8_t cachedBotCountValid;
-    uint8_t occupied;
-} coduomp_server_bot_cache_entry_t;
-
-enum {
-    CODUOMP_SERVER_BOT_CACHE_CAPACITY = 65536,
-    CODUOMP_SERVER_BOT_CACHE_VERSION = 1,
-    CODUOMP_SERVER_BOT_CACHE_ADDRESS_BYTES = 10,
-    CODUOMP_SERVER_BOT_CACHE_RECORD_BYTES =
-        (int32_t)sizeof(int32_t) + (int32_t)sizeof(uint16_t) +
-        CODUOMP_SERVER_BOT_CACHE_ADDRESS_BYTES + (int32_t)sizeof(uint8_t)
-};
-
-#define CODUOMP_SERVER_ADDRESS_HASH_OFFSET UINT32_C(2166136261)
-#define CODUOMP_SERVER_ADDRESS_HASH_PRIME UINT32_C(16777619)
-
-static coduomp_server_bot_cache_entry_t
-    coduomp_serverBotCache[CODUOMP_SERVER_BOT_CACHE_CAPACITY];
-static qboolean coduomp_serverBotCacheLoaded;
-static qboolean coduomp_serverBotCacheDirty;
-
 /* Mac symbol and the call at 0x0041b2f8 identify the message-pump boundary.
  * Its recovery is owned by the common event-loop subsystem. */
 
@@ -75,11 +33,7 @@ enum {
     LAN_ADD_SERVER_BAD_ADDRESS = -2,
     LAN_SERVER_RECENT_MASTER_RESPONSE_AGE_LIMIT = 3,
     CL_SERVERINFO_CONFIGSTRING = 0,
-    CL_CDKEY_PB_COPY_LIMIT = 32,
-    CODUOMP_SERVER_BOT_PING = 999,
-    CODUOMP_SERVER_STATUS_MIN_TIMEOUT_MSEC = 1000,
-    CODUOMP_SERVER_STATUS_MAX_TIMEOUT_MSEC = 3000,
-    CODUOMP_SERVER_STATUS_TIMEOUT_BIAS_MSEC = 250
+    CL_CDKEY_PB_COPY_LIMIT = 32
 };
 
 /* Original Win32 CD-key storage at 0x005c51cc. The primary CoD:UO key and an
@@ -94,8 +48,6 @@ char cl_cdkeyChecksums[CL_CDKEY_CHECKSUM_STORAGE_SIZE] =
     {' ', ' ', ' ', ' '}; /* original 0x005c51f0 */
 
 static const char lan_serverCacheFileName[] = "uoservercache.dat";
-static const char coduomp_serverBotCacheFileName[] =
-    "uoserverbotcache.dat";
 
 /* The cache compatibility marker is the combined byte count of the two
  * serialized arrays. It is 0x2eaf00 in the original build: 0x2e6300 bytes of
@@ -429,226 +381,6 @@ void CL_ServersResponsePacket(msg_t *message)
                parsedCount, globalServerCount);
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: hash the fields used by
- * NET_CompareAdrSigned so cached roster metadata follows a server across
- * browser lists and refresh generations. */
-static uint32_t coduomp_server_address_hash(netadr_t address)
-{
-    uint32_t hash = CODUOMP_SERVER_ADDRESS_HASH_OFFSET;
-    hash = (hash ^ (uint32_t)address.type) *
-           CODUOMP_SERVER_ADDRESS_HASH_PRIME;
-
-    const uint8_t *addressBytes = NULL;
-    size_t addressByteCount = 0;
-    if (address.type == NA_IP) {
-        addressBytes = address.ip;
-        addressByteCount = sizeof(address.ip);
-    } else if (address.type == NA_IPX) {
-        addressBytes = address.ipx;
-        addressByteCount = sizeof(address.ipx);
-    }
-
-    if (addressBytes != NULL) {
-        hash = (hash ^ (uint32_t)address.port) *
-               CODUOMP_SERVER_ADDRESS_HASH_PRIME;
-        for (size_t index = 0; index < addressByteCount; ++index) {
-            hash = (hash ^ addressBytes[index]) *
-                   CODUOMP_SERVER_ADDRESS_HASH_PRIME;
-        }
-    }
-    return hash;
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: look up the persistent bot-count sidecar without
- * changing the original fixed-layout lan_server_info_t records. */
-static coduomp_server_bot_cache_entry_t *coduomp_find_server_bot_cache(
-    netadr_t address, qboolean create)
-{
-    const uint32_t slotMask = CODUOMP_SERVER_BOT_CACHE_CAPACITY - 1u;
-    const uint32_t firstSlot =
-        coduomp_server_address_hash(address) & slotMask;
-
-    for (uint32_t offset = 0;
-         offset < CODUOMP_SERVER_BOT_CACHE_CAPACITY; ++offset) {
-        coduomp_server_bot_cache_entry_t *const entry =
-            &coduomp_serverBotCache[(firstSlot + offset) & slotMask];
-        if (entry->occupied == 0) {
-            if (create == qfalse)
-                return NULL;
-            entry->address = address;
-            entry->cachedBotCount = 0;
-            entry->displayedBotCount = 0;
-            entry->cachedBotCountValid = 0;
-            entry->occupied = 1;
-            return entry;
-        }
-        if (NET_CompareAdrSigned(&address, &entry->address) == 0)
-            return entry;
-    }
-    return NULL;
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: load the master-only bot-count sidecar once per
- * client process. The compact format serializes only the address fields used
- * for browser identity, so unused bytes in netadr_t never reach disk. */
-static void coduomp_load_server_bot_cache(void)
-{
-    if (coduomp_serverBotCacheLoaded != qfalse)
-        return;
-    coduomp_serverBotCacheLoaded = qtrue;
-
-    int32_t fileHandle = 0;
-    const int32_t fileLength = FS_SV_FOpenFileRead(
-        coduomp_serverBotCacheFileName, &fileHandle);
-    if (fileLength <= 0) {
-        if (fileHandle != 0)
-            FS_FCloseFile(fileHandle);
-        return;
-    }
-
-    int32_t cacheVersion;
-    int32_t recordCount;
-    qboolean valid = qtrue;
-    if (FS_Read(&cacheVersion, (int32_t)sizeof(cacheVersion), fileHandle) !=
-            (int32_t)sizeof(cacheVersion) ||
-        cacheVersion != CODUOMP_SERVER_BOT_CACHE_VERSION ||
-        FS_Read(&recordCount, (int32_t)sizeof(recordCount), fileHandle) !=
-            (int32_t)sizeof(recordCount) ||
-        recordCount < 0 ||
-        recordCount > CODUOMP_SERVER_BOT_CACHE_CAPACITY ||
-        fileLength != (int32_t)(2 * sizeof(int32_t)) +
-                          recordCount * CODUOMP_SERVER_BOT_CACHE_RECORD_BYTES) {
-        valid = qfalse;
-    }
-
-    memset(coduomp_serverBotCache, 0, sizeof(coduomp_serverBotCache));
-    for (int32_t recordIndex = 0;
-         valid != qfalse && recordIndex < recordCount; ++recordIndex) {
-        int32_t addressType;
-        uint16_t port;
-        uint8_t addressBytes[CODUOMP_SERVER_BOT_CACHE_ADDRESS_BYTES];
-        uint8_t botCount;
-        if (FS_Read(&addressType, (int32_t)sizeof(addressType), fileHandle) !=
-                (int32_t)sizeof(addressType) ||
-            FS_Read(&port, (int32_t)sizeof(port), fileHandle) !=
-                (int32_t)sizeof(port) ||
-            FS_Read(addressBytes, (int32_t)sizeof(addressBytes), fileHandle) !=
-                (int32_t)sizeof(addressBytes) ||
-            FS_Read(&botCount, (int32_t)sizeof(botCount), fileHandle) !=
-                (int32_t)sizeof(botCount) ||
-            (addressType != NA_IP && addressType != NA_IPX) ||
-            port == 0) {
-            valid = qfalse;
-            break;
-        }
-
-        netadr_t address = {0};
-        address.type = (netadrtype_t)addressType;
-        address.port = port;
-        if (address.type == NA_IP) {
-            memcpy(address.ip, addressBytes, sizeof(address.ip));
-        } else {
-            memcpy(address.ipx, addressBytes, sizeof(address.ipx));
-        }
-
-        if (coduomp_find_server_bot_cache(address, qfalse) != NULL) {
-            valid = qfalse;
-            break;
-        }
-        coduomp_server_bot_cache_entry_t *const entry =
-            coduomp_find_server_bot_cache(address, qtrue);
-        if (entry == NULL) {
-            valid = qfalse;
-            break;
-        }
-        entry->cachedBotCount = botCount;
-        entry->displayedBotCount = botCount;
-        entry->cachedBotCountValid = 1;
-    }
-
-    FS_FCloseFile(fileHandle);
-    if (valid == qfalse) {
-        memset(coduomp_serverBotCache, 0, sizeof(coduomp_serverBotCache));
-        Com_Printf("Ignoring invalid server bot cache\n");
-    }
-    coduomp_serverBotCacheDirty = qfalse;
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: persist only bot counts learned from complete,
- * well-formed status rosters. The stock-compatible server cache remains
- * untouched in its original file and format. */
-static void coduomp_save_server_bot_cache(void)
-{
-    if (coduomp_serverBotCacheDirty == qfalse)
-        return;
-
-    int32_t recordCount = 0;
-    for (uint32_t slot = 0;
-         slot < CODUOMP_SERVER_BOT_CACHE_CAPACITY; ++slot) {
-        const coduomp_server_bot_cache_entry_t *const entry =
-            &coduomp_serverBotCache[slot];
-        if (entry->occupied != 0 && entry->cachedBotCountValid != 0 &&
-            entry->address.port != 0 &&
-            (entry->address.type == NA_IP ||
-             entry->address.type == NA_IPX)) {
-            ++recordCount;
-        }
-    }
-
-    const int32_t fileHandle = FS_SV_FOpenFileWrite(
-        coduomp_serverBotCacheFileName);
-    if (fileHandle == 0)
-        return;
-
-    const int32_t cacheVersion = CODUOMP_SERVER_BOT_CACHE_VERSION;
-    qboolean complete = qtrue;
-    if (FS_Write(&cacheVersion, (int32_t)sizeof(cacheVersion), fileHandle) !=
-            (int32_t)sizeof(cacheVersion) ||
-        FS_Write(&recordCount, (int32_t)sizeof(recordCount), fileHandle) !=
-            (int32_t)sizeof(recordCount)) {
-        complete = qfalse;
-    }
-
-    for (uint32_t slot = 0;
-         complete != qfalse && slot < CODUOMP_SERVER_BOT_CACHE_CAPACITY;
-         ++slot) {
-        const coduomp_server_bot_cache_entry_t *const entry =
-            &coduomp_serverBotCache[slot];
-        if (entry->occupied == 0 || entry->cachedBotCountValid == 0 ||
-            entry->address.port == 0 ||
-            (entry->address.type != NA_IP &&
-             entry->address.type != NA_IPX)) {
-            continue;
-        }
-
-        const int32_t addressType = (int32_t)entry->address.type;
-        const uint16_t port = entry->address.port;
-        uint8_t addressBytes[CODUOMP_SERVER_BOT_CACHE_ADDRESS_BYTES] = {0};
-        if (entry->address.type == NA_IP) {
-            memcpy(addressBytes, entry->address.ip,
-                   sizeof(entry->address.ip));
-        } else {
-            memcpy(addressBytes, entry->address.ipx,
-                   sizeof(entry->address.ipx));
-        }
-        if (FS_Write(&addressType, (int32_t)sizeof(addressType), fileHandle) !=
-                (int32_t)sizeof(addressType) ||
-            FS_Write(&port, (int32_t)sizeof(port), fileHandle) !=
-                (int32_t)sizeof(port) ||
-            FS_Write(addressBytes, (int32_t)sizeof(addressBytes), fileHandle) !=
-                (int32_t)sizeof(addressBytes) ||
-            FS_Write(&entry->cachedBotCount,
-                     (int32_t)sizeof(entry->cachedBotCount), fileHandle) !=
-                (int32_t)sizeof(entry->cachedBotCount)) {
-            complete = qfalse;
-        }
-    }
-
-    FS_FCloseFile(fileHandle);
-    if (complete != qfalse)
-        coduomp_serverBotCacheDirty = qfalse;
-}
-
 /* Source: CoDUOMP.exe 0x00415180..0x0041537e.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00415180_0041537f.mcode and the exact
  * key strings at 0x0058e7e0/0x00593334..0x005933dc.
@@ -662,18 +394,7 @@ void CL_SetServerInfo(lan_server_info_t *server, const char *info,
         return;
 
     if (info != NULL) {
-        const uint8_t aggregateClientCount =
-            (uint8_t)coduo_crt_atoi(Info_ValueForKey(info, "clients"));
-        coduomp_server_bot_cache_entry_t *const botCache =
-            coduomp_find_server_bot_cache(server->address, qtrue);
-        uint8_t displayedBotCount = 0;
-        if (botCache != NULL && botCache->cachedBotCountValid != 0) {
-            displayedBotCount =
-                botCache->cachedBotCount < aggregateClientCount
-                    ? botCache->cachedBotCount : aggregateClientCount;
-            botCache->displayedBotCount = displayedBotCount;
-        }
-        server->clients = aggregateClientCount - displayedBotCount;
+        server->clients = (uint8_t)coduo_crt_atoi(Info_ValueForKey(info, "clients"));
 
         strncpy(server->hostName, Info_ValueForKey(info, "hostname"),
                 sizeof(server->hostName) - 1);
@@ -822,224 +543,6 @@ void CL_SetServerInfoByAddress(netadr_t address, const char *info,
     }
 }
 
-/* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): discard the automatic
- * getstatus generation whenever the UI starts a new server refresh. */
-static void coduomp_reset_server_player_queries(void)
-{
-    coduomp_serverPlayerQueryCount = 0;
-}
-
-/* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): queue a bounded getstatus
- * request for a nonempty server. The timeout follows the successful getinfo
- * round trip, with limits that prevent one silent server from stalling the
- * browser indefinitely. */
-static void coduomp_queue_server_player_query(netadr_t address,
-                                               int32_t pingMsec)
-{
-    if (coduomp_serverPlayerQueryCount >= LAN_GLOBAL_SERVER_CAPACITY)
-        return;
-
-    int32_t timeoutMsec = CODUOMP_SERVER_STATUS_MIN_TIMEOUT_MSEC;
-    if (pingMsec > 0 &&
-        pingMsec <= (CODUOMP_SERVER_STATUS_MAX_TIMEOUT_MSEC -
-                     CODUOMP_SERVER_STATUS_TIMEOUT_BIAS_MSEC) / 2) {
-        timeoutMsec = pingMsec * 2 +
-                      CODUOMP_SERVER_STATUS_TIMEOUT_BIAS_MSEC;
-        if (timeoutMsec < CODUOMP_SERVER_STATUS_MIN_TIMEOUT_MSEC)
-            timeoutMsec = CODUOMP_SERVER_STATUS_MIN_TIMEOUT_MSEC;
-    } else if (pingMsec > 0) {
-        timeoutMsec = CODUOMP_SERVER_STATUS_MAX_TIMEOUT_MSEC;
-    }
-
-    coduomp_server_player_query_t *const query =
-        &coduomp_serverPlayerQueries[coduomp_serverPlayerQueryCount++];
-    query->address = address;
-    query->requestStartTime = 0;
-    query->timeoutMsec = timeoutMsec;
-    query->state = CODUOMP_SERVER_PLAYER_QUERY_QUEUED;
-}
-
-/* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): replace the aggregate
- * getinfo count in every browser list containing this address with the
- * heuristic human count obtained from getstatus. */
-static void coduomp_apply_server_human_count(netadr_t address,
-                                              uint8_t humanCount)
-{
-    qboolean localChanged = qfalse;
-    for (int32_t index = 0; index < LAN_LOCAL_SERVER_CAPACITY; ++index) {
-        if (NET_CompareAdrSigned(
-                &address, &cls.localServers[index].address) == 0) {
-            cls.localServers[index].clients = humanCount;
-            localChanged = qtrue;
-        }
-    }
-    if (localChanged != qfalse) {
-        CL_UpdateServerRefreshCvars(
-            cls.localServers, cls.numLocalServers,
-            LAN_SERVER_SOURCE_LOCAL);
-    }
-
-    qboolean globalChanged = qfalse;
-    int32_t lower = 0;
-    int32_t upper = cls.numGlobalServers;
-    while (lower < upper) {
-        const int32_t middle = (lower + upper) / 2;
-        const int32_t comparison = NET_CompareAdrSigned(
-            &address, &cls.globalServers[middle].address);
-        if (comparison < 0) {
-            upper = middle;
-        } else if (comparison > 0) {
-            lower = middle + 1;
-        } else {
-            int32_t first = middle;
-            while (first > 0 &&
-                   NET_CompareAdrSigned(
-                       &address,
-                       &cls.globalServers[first - 1].address) == 0) {
-                --first;
-            }
-            for (int32_t index = first;
-                 index < cls.numGlobalServers; ++index) {
-                if (NET_CompareAdrSigned(
-                        &address,
-                        &cls.globalServers[index].address) != 0) {
-                    break;
-                }
-                cls.globalServers[index].clients = humanCount;
-                globalChanged = qtrue;
-            }
-            break;
-        }
-    }
-    if (globalChanged != qfalse) {
-        CL_UpdateServerRefreshCvars(
-            cls.globalServers, cls.numGlobalServers,
-            LAN_SERVER_SOURCE_GLOBAL);
-    }
-
-    qboolean favoriteChanged = qfalse;
-    for (int32_t index = 0; index < LAN_FAVORITE_SERVER_CAPACITY; ++index) {
-        if (NET_CompareAdrSigned(
-                &address, &cls.favoriteServers[index].address) == 0) {
-            cls.favoriteServers[index].clients = humanCount;
-            favoriteChanged = qtrue;
-        }
-    }
-    if (favoriteChanged != qfalse) {
-        CL_UpdateServerRefreshCvars(
-            cls.favoriteServers, cls.numFavoriteServers,
-            LAN_SERVER_SOURCE_FAVORITES);
-    }
-}
-
-/* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): count every well-formed
- * status roster entry, retaining the requested 999-ping bot heuristic by
- * server address. The caller supplies a copied message cursor so the stock
- * status-cache parser can consume the same packet independently. */
-static void coduomp_record_server_player_status(netadr_t address,
-                                                 msg_t *message)
-{
-    qboolean tracked = qfalse;
-    for (int32_t index = 0;
-         index < coduomp_serverPlayerQueryCount; ++index) {
-        const coduomp_server_player_query_t *const query =
-            &coduomp_serverPlayerQueries[index];
-        if (query->state == CODUOMP_SERVER_PLAYER_QUERY_PENDING &&
-            NET_CompareAdrSigned(&address, &query->address) == 0) {
-            tracked = qtrue;
-            break;
-        }
-    }
-    if (tracked == qfalse)
-        return;
-
-    (void)MSG_ReadStringLine(message);
-    uint8_t humanCount = 0;
-    uint8_t botCount = 0;
-    qboolean validRoster = qtrue;
-    const char *player = MSG_ReadStringLine(message);
-    while (player[0] != '\0') {
-        int32_t score;
-        int32_t ping;
-        if (sscanf(player, "%d %d", &score, &ping) != 2) {
-            validRoster = qfalse;
-        } else if (ping == CODUOMP_SERVER_BOT_PING) {
-            if (botCount < UINT8_MAX)
-                ++botCount;
-        } else if (humanCount < UINT8_MAX) {
-            ++humanCount;
-        }
-        player = MSG_ReadStringLine(message);
-    }
-
-    for (int32_t index = 0;
-         index < coduomp_serverPlayerQueryCount; ++index) {
-        coduomp_server_player_query_t *const query =
-            &coduomp_serverPlayerQueries[index];
-        if (query->state == CODUOMP_SERVER_PLAYER_QUERY_PENDING &&
-            NET_CompareAdrSigned(&address, &query->address) == 0) {
-            query->state = CODUOMP_SERVER_PLAYER_QUERY_COMPLETE;
-        }
-    }
-
-    if (validRoster == qfalse)
-        return;
-
-    coduomp_server_bot_cache_entry_t *const botCache =
-        coduomp_find_server_bot_cache(address, qtrue);
-    if (botCache != NULL) {
-        if (botCache->cachedBotCountValid == 0 ||
-            botCache->cachedBotCount != botCount) {
-            coduomp_serverBotCacheDirty = qtrue;
-        }
-        botCache->cachedBotCount = botCount;
-        botCache->displayedBotCount = botCount;
-        botCache->cachedBotCountValid = 1;
-    }
-    coduomp_apply_server_human_count(address, humanCount);
-}
-
-/* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): maintain at most the stock
- * status-cache width of concurrent automatic queries. Completed and timed-out
- * records stay inert until the next browser refresh resets the generation. */
-static qboolean coduomp_pump_server_player_queries(void)
-{
-    const int32_t now = (int32_t)Sys_Milliseconds();
-    int32_t pendingCount = 0;
-    qboolean active = qfalse;
-
-    for (int32_t index = 0;
-         index < coduomp_serverPlayerQueryCount; ++index) {
-        coduomp_server_player_query_t *const query =
-            &coduomp_serverPlayerQueries[index];
-        if (query->state != CODUOMP_SERVER_PLAYER_QUERY_PENDING)
-            continue;
-        if ((uint32_t)now - (uint32_t)query->requestStartTime >=
-            (uint32_t)query->timeoutMsec) {
-            query->state = CODUOMP_SERVER_PLAYER_QUERY_COMPLETE;
-            continue;
-        }
-        ++pendingCount;
-        active = qtrue;
-    }
-
-    for (int32_t index = 0;
-         index < coduomp_serverPlayerQueryCount &&
-         pendingCount < CL_SERVER_STATUS_SLOT_COUNT; ++index) {
-        coduomp_server_player_query_t *const query =
-            &coduomp_serverPlayerQueries[index];
-        if (query->state != CODUOMP_SERVER_PLAYER_QUERY_QUEUED)
-            continue;
-        query->requestStartTime = now;
-        query->state = CODUOMP_SERVER_PLAYER_QUERY_PENDING;
-        NET_OutOfBandPrint(NS_CLIENT, query->address, "getstatus");
-        ++pendingCount;
-        active = qtrue;
-    }
-
-    return active;
-}
-
 /* Source: CoDUOMP.exe 0x004155f0..0x00415a3f.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004155f0_00415a40.mcode.
  * Name and argument roles: exact same-module Mac symbol
@@ -1106,15 +609,6 @@ void CL_ServerInfoPacket(netadr_t address, msg_t *message,
             ping->serverInfo, "nettype", va("%d", netType));
         CL_SetServerInfoByAddress(
             address, info, ping->pingMsec);
-        /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): getinfo has only an
-         * aggregate client count. Keep displaying the persistent bot count
-         * while requesting the current roster needed to validate or replace
-         * it. */
-        const int32_t aggregateClientCount =
-            coduo_crt_atoi(Info_ValueForKey(info, "clients"));
-        if (aggregateClientCount > 0) {
-            coduomp_queue_server_player_query(address, ping->pingMsec);
-        }
         return;
     }
 
@@ -1257,8 +751,6 @@ void LAN_LoadCachedServers(void)
 {
     int32_t fileHandle;
 
-    coduomp_load_server_bot_cache();
-
     if (FS_SV_FOpenFileRead(
             lan_serverCacheFileName, &fileHandle) == 0) {
         cls.numGlobalServers = 0;
@@ -1328,7 +820,6 @@ void LAN_SaveServersToCache(void)
     (void)FS_Write(cls.favoriteServers,
                    (int32_t)sizeof(cls.favoriteServers), fileHandle);
     FS_FCloseFile(fileHandle);
-    coduomp_save_server_bot_cache();
 }
 
 /* Source: CoDUOMP.exe 0x0041aa90..0x0041aaaf.
@@ -1617,12 +1108,6 @@ qboolean CL_UpdateDirtyPings(lan_server_source_t source)
         }
     }
 
-    if (coduomp_pump_server_player_queries() != qfalse) {
-        stillUpdating = qtrue;
-    } else if (stillUpdating == qfalse) {
-        coduomp_save_server_bot_cache();
-    }
-
     return stillUpdating;
 }
 
@@ -1746,9 +1231,6 @@ qboolean CL_ServerStatus(const char *address, char *status,
  * pairs and players as number/score/ping/name. */
 void CL_ServerStatusResponse(netadr_t address, msg_t *message)
 {
-    msg_t playerCountMessage = *message;
-    coduomp_record_server_player_status(address, &playerCountMessage);
-
     cl_server_status_t *serverStatus = NULL;
     for (int32_t index = 0; index < CL_SERVER_STATUS_SLOT_COUNT; ++index) {
         if (NET_CompareAdrSigned(
@@ -2086,8 +1568,6 @@ void LAN_ResetPings(lan_server_source_t source)
         cl_pingList[pingIndex].address.port = 0;
     }
 
-    coduomp_reset_server_player_queries();
-
     for (int32_t index = 0; index < serverCount; ++index)
         servers[index].ping = -1;
 }
@@ -2246,11 +1726,6 @@ void LAN_GetServerInfo(lan_server_source_t source, int32_t serverIndex,
     Info_SetValueForKey(info, "mapname", server->mapName);
     Info_SetValueForKey(info, "clients", va("%i", server->clients));
     Info_SetValueForKey(info, "sv_maxclients", va("%i", server->maxClients));
-    const coduomp_server_bot_cache_entry_t *const botCache =
-        coduomp_find_server_bot_cache(server->address, qfalse);
-    Info_SetValueForKey(info, "bots",
-                        va("%i", botCache != NULL
-                                      ? botCache->displayedBotCount : 0));
     Info_SetValueForKey(info, "ping", va("%i", server->ping));
     Info_SetValueForKey(info, "minping", va("%i", server->minPing));
     Info_SetValueForKey(info, "maxping", va("%i", server->maxPing));

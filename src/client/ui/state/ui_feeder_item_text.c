@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <string.h>
 
 #include "../module/ui_functions.h"
 #include "client/common/client_legacy_crt.h"
@@ -123,26 +122,12 @@ const char *UI_FeederItemText(float feeder, int32_t index, int32_t column,
             return Info_ValueForKey(ui_cachedServerInfo, "mapname");
 
         case UI_SERVER_COLUMN_CLIENTS: {
-            const int32_t botCount = coduo_crt_atoi(
-                Info_ValueForKey(ui_cachedServerInfo, "bots"));
             const char *maximum =
                 Info_ValueForKey(ui_cachedServerInfo, "sv_maxclients");
             const char *clients =
                 Info_ValueForKey(ui_cachedServerInfo, "clients");
             Com_sprintf(ui_serverClientText, sizeof(ui_serverClientText),
                         "%s (%s)", clients, maximum);
-            /* NOT_FROM_ORIGINAL_SOURCE: the listbox painter receives the bot
-             * count as an adjacent string so it can color only that suffix. */
-            if (botCount > 0) {
-                const size_t prefixLength = strlen(ui_serverClientText);
-                if (prefixLength + 1 < sizeof(ui_serverClientText)) {
-                    Com_sprintf(
-                        ui_serverClientText + prefixLength + 1,
-                        sizeof(ui_serverClientText) - prefixLength - 1,
-                        " %i", botCount);
-                    *imageHandle = UI_FEEDER_TEXT_GREY_SUFFIX;
-                }
-            }
             return ui_serverClientText;
         }
 

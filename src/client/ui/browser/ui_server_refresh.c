@@ -10,38 +10,6 @@ enum {
     UI_NO_CURRENT_SERVER = -1
 };
 
-/* NOT_FROM_ORIGINAL_SOURCE: rebuild the compatibility server list without
- * resetting its listbox state. Clearing ui_currentServer during insertion also
- * prevents UI_BinaryServerInsertion from advancing the selection to the end of
- * the newly sorted list. Restore the selected server at its new display row;
- * if it disappeared, retain the prior row clamped to the shorter list. */
-static void ui_compat_rebuild_server_list_preserving_selection(void)
-{
-    int32_t savedDisplayRow = ui_currentServer;
-    int32_t savedServerIndex = UI_NO_CURRENT_SERVER;
-
-    if (savedDisplayRow >= 0 && savedDisplayRow < ui_displayServerCount) {
-        savedServerIndex = ui_displayServers[savedDisplayRow];
-    }
-
-    ui_currentServer = UI_NO_CURRENT_SERVER;
-    UI_BuildServerDisplayList(UI_SERVER_REBUILD_COUNT_CHANGED);
-
-    if (savedDisplayRow >= 0 && ui_displayServerCount > 0) {
-        for (int32_t displayRow = 0; displayRow < ui_displayServerCount;
-             ++displayRow) {
-            if (ui_displayServers[displayRow] == savedServerIndex) {
-                savedDisplayRow = displayRow;
-                break;
-            }
-        }
-        if (savedDisplayRow >= ui_displayServerCount) {
-            savedDisplayRow = ui_displayServerCount - 1;
-        }
-        UI_FeederSelection((float)UI_SERVER_LIST_FEEDER, savedDisplayRow);
-    }
-}
-
 // Source: uo_ui_mp_x86.dll 0x40011480..0x40011562
 // Evidence: cgame_mp/mcode/uo_ui_mp_x86/FUN_40011480_40011562.mcode
 void UI_DoServerRefresh(void)
@@ -85,11 +53,7 @@ void UI_DoServerRefresh(void)
     }
 
     if (!waiting) {
-        /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): automatic status
-         * queries may replace aggregate counts after their rows were first
-         * inserted. Rebuild once so display order, totals, and filters all
-         * consume the final count with 999-ping entries removed. */
-        ui_compat_rebuild_server_list_preserving_selection();
+        UI_BuildServerDisplayList(UI_SERVER_REBUILD_FINAL);
         UI_StopServerRefresh();
     }
     UI_BuildServerDisplayList(UI_SERVER_REBUILD_INCREMENTAL);
