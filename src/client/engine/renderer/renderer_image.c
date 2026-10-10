@@ -973,7 +973,8 @@ static const renderer_texture_filter_mode_t rendererTextureFilterModes[] = {
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00505d70_00505e2f.mcode.
  * Name and source boundary: exact same-module Mac symbol PickInternalFormat.
  * The Windows jump table has distinguished color-depth cases only for 15/16,
- * 24, and 32 bits; other values continue through the alpha scan. */
+ * 24, and 32 bits; other values continue through the alpha scan. Ordinary
+ * texture storage follows r_texturebits independently of framebuffer depth. */
 uint32_t PickInternalFormat(const uint8_t *pixels, uint32_t format,
                             int32_t width, int32_t height,
                             uint32_t flags, qboolean isLightmap)
@@ -1009,16 +1010,16 @@ uint32_t PickInternalFormat(const uint8_t *pixels, uint32_t format,
     }
 
     if (hasAlpha) {
-        if (glConfig.colorBits == 16)
+        if (r_texturebits->integer == 16)
             return GL_RGBA4;
-        if (glConfig.colorBits == 32)
+        if (r_texturebits->integer == 32)
             return GL_RGBA8;
         return 4;
     }
 
-    if (glConfig.colorBits == 16)
+    if (r_texturebits->integer == 16)
         return GL_RGB5;
-    if (glConfig.colorBits == 32)
+    if (r_texturebits->integer == 32)
         return GL_RGB8;
     return 3;
 }
@@ -1026,9 +1027,8 @@ uint32_t PickInternalFormat(const uint8_t *pixels, uint32_t format,
 /* Source: CoDUOMP.exe 0x005050b0..0x00505189.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_005050b0_0050518a.mcode.
  * Name and source boundary: exact same-module Mac symbol
- * GetCardMemoryAmount. These are accounting values rather than format-size
- * declarations, but the original RGBA8 two-byte result is still an erroneous
- * undercount and is deliberately preserved below. */
+ * GetCardMemoryAmount. RGBA8 uses the four-byte path at 0x00505125;
+ * RGB5 and RGBA4 use the two-byte path at 0x0050512c. */
 int32_t GetCardMemoryAmount(uint32_t internalFormat,
                             int32_t width, int32_t height)
 {
@@ -1053,8 +1053,8 @@ int32_t GetCardMemoryAmount(uint32_t internalFormat,
     case GL_RGBA4:
         return (int32_t)((uint32_t)pixelCount * 2U);
     case GL_RGBA8:
-        /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-        return (int32_t)((uint32_t)pixelCount * 2U);
+        /* Preserve the four-byte storage accounting for all RGBA8 channels. */
+        return (int32_t)((uint32_t)pixelCount * 4U);
     case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
     case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT: {
         const int32_t blockWidth =
@@ -1437,7 +1437,7 @@ uint8_t *R_MipMap(char *name, uint8_t *pixels,
     }
 
     const float centerWeight = r_weightMipMaps->value;
-    if (centerWeight <= 0.25f || centerWeight > 1.0f) {
+    if (centerWeight <= 0.0f || centerWeight > 1.0f) {
         for (int32_t outputY = 0; outputY < outputHeight; ++outputY) {
             for (int32_t outputX = 0; outputX < outputWidth; ++outputX) {
                 for (int32_t channel = 0; channel < 4; ++channel) {
