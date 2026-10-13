@@ -2255,8 +2255,11 @@ renderer_dpvs_plane_t *R_PortalClipPlanesInternal(
         relativeVertices[vertexIndex][2] =
             vertices[vertexIndex][2] - rendererDpvsViewOrigin[2];
     }
-    memcpy(relativeVertices[vertexCount], relativeVertices[0],
-           sizeof(vec3_t));
+    /* The closing vertex is consumed only by a nonempty edge loop. */
+    if (vertexCount > 0) {
+        memcpy(relativeVertices[vertexCount], relativeVertices[0],
+               sizeof(vec3_t));
+    }
 
     for (int32_t edgeIndex = 0;
          edgeIndex < vertexCount;
