@@ -89,21 +89,22 @@ qboolean CM_PositionTestSphereWithTerrainCollide(
             const float inverseNormalZ =
                 1.0f /
                 triangle->plane.components.normal[2];
+            /* Both cap coordinates accumulate Y, X, Z before the float store. */
             const float sAtCap = (float)(
-                ((long double)triangle->svec[2] *
-                     traceWork->start[2] +
-                 (long double)triangle->svec[1] *
-                     traceWork->start[1]) +
-                (long double)triangle->svec[0] *
-                    traceWork->start[0] -
+                ((long double)triangle->svec[1] *
+                     traceWork->start[1] +
+                 (long double)triangle->svec[0] *
+                     traceWork->start[0]) +
+                (long double)triangle->svec[2] *
+                    traceWork->start[2] -
                 triangle->svec[3]);
             const float tAtCap = (float)(
-                ((long double)triangle->tvec[2] *
-                     traceWork->start[2] +
-                 (long double)triangle->tvec[1] *
-                     traceWork->start[1]) +
-                (long double)triangle->tvec[0] *
-                    traceWork->start[0] -
+                ((long double)triangle->tvec[1] *
+                     traceWork->start[1] +
+                 (long double)triangle->tvec[0] *
+                     traceWork->start[0]) +
+                (long double)triangle->tvec[2] *
+                    traceWork->start[2] -
                 triangle->tvec[3]);
 
             const long double firstZOffset =
@@ -220,13 +221,18 @@ qboolean CM_PositionTestSphereWithTerrainCollide(
 
                 vec3_t edgeDelta;
                 for (int32_t axis = 0;
-                     axis < 3; ++axis) {
+                     axis < 2; ++axis) {
                     edgeDelta[axis] =
                         traceWork->start[axis] -
                         edge->origin[axis];
                 }
+                /* The axial projection consumes the live Z difference; closest
+                 * point reconstruction later reloads the stored float. */
+                const long double edgeDeltaZRaw =
+                    (long double)traceWork->start[2] - edge->origin[2];
+                edgeDelta[2] = (float)edgeDeltaZRaw;
                 const long double edgeDistanceRaw =
-                    ((long double)edgeDelta[2] *
+                    (edgeDeltaZRaw *
                          edge->unitDirection[2] +
                      (long double)edgeDelta[1] *
                          edge->unitDirection[1]) +
@@ -251,9 +257,10 @@ qboolean CM_PositionTestSphereWithTerrainCollide(
                     (long double)edgeDelta[2] -
                     (long double)edgeDistance *
                         edge->unitDirection[2];
-                if (closestX * closestX +
+                /* Accumulate Z, Y, X before comparing against radius squared. */
+                if (closestZ * closestZ +
                         closestY * closestY +
-                        closestZ * closestZ <
+                        closestX * closestX <
                     radiusSquared) {
                     return qtrue;
                 }
@@ -273,9 +280,9 @@ qboolean CM_PositionTestSphereWithTerrainCollide(
                 const long double deltaZ =
                     (long double)traceWork->start[2] -
                     vertex->position[2];
-                if (deltaX * deltaX +
+                if (deltaZ * deltaZ +
                         deltaY * deltaY +
-                        deltaZ * deltaZ <
+                        deltaX * deltaX <
                     radiusSquared) {
                     return qtrue;
                 }

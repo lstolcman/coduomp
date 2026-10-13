@@ -295,11 +295,13 @@ void CM_TraceSphereThroughTerrainCollide(
                 }
                 edge->checkcount = cm_checkcount;
 
-                vec3_t relativeStart;
+                /* Keep all three differences live through the edge projections;
+                 * the first binary32 stores are the projected coordinates. */
+                long double relativeStart[3];
                 for (int32_t axis = 0;
                      axis < 3; ++axis) {
                     relativeStart[axis] =
-                        traceWork->start[axis] -
+                        (long double)traceWork->start[axis] -
                         edge->origin[axis];
                 }
                 const float radialStart0 =
@@ -456,13 +458,18 @@ void CM_TraceSphereThroughTerrainCollide(
 
                 vec3_t relativeStart;
                 for (int32_t axis = 0;
-                     axis < 3; ++axis) {
+                     axis < 2; ++axis) {
                     relativeStart[axis] =
                         traceWork->start[axis] -
                         vertex->position[axis];
                 }
+                /* FST retains the unrounded Z difference for the first product;
+                 * the other factor and subsequent uses reload its float slot. */
+                const long double relativeStartZRaw =
+                    (long double)traceWork->start[2] - vertex->position[2];
+                relativeStart[2] = (float)relativeStartZRaw;
                 const long double vertexConstantRaw =
-                        ((long double)relativeStart[2] *
+                        (relativeStartZRaw *
                              relativeStart[2] +
                          (long double)relativeStart[1] *
                              relativeStart[1]) +
