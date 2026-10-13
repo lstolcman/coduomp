@@ -50,8 +50,8 @@ void Com_NoiseInit(void)
 
     srand(COM_NOISE_RANDOM_SEED);
     for (int32_t index = 0; index < COM_NOISE_TABLE_SIZE; ++index) {
-        noiseValues[index] =
-            (float)coduo_crt_rand() * randomScale * 2.0f - 1.0f;
+        noiseValues[index] = (float)(
+            (long double)coduo_crt_rand() * randomScale * 2.0L - 1.0L);
 
         /* This is rand * 256 / (RAND_MAX + 1), followed by the table mask.
          * The Windows and Mac compilers both reduce it to the proven
@@ -68,8 +68,11 @@ void Com_NoiseInit(void)
  * Name and source-level GetNoiseValue calls: exact same-module Mac symbols.
  * Windows proves the same eight lattice samples per t slice and the x, then y,
  * then z, then t linear-interpolation order. FastFloor reproduces the exact
- * 0x3fdfffffff000000 x87 floor bias used for all four coordinates. */
-float Com_NoiseGet4f(float x, float y, float z, float t)
+ * 0x3fdfffffff000000 x87 floor bias used for all four coordinates. The spatial
+ * interpolation stays live until each time slice is stored at 0x0050eaa7;
+ * the final time interpolation returns without a binary32 store, and both
+ * renderer consumers continue arithmetic on that retained result. */
+long double Com_NoiseGet4f(float x, float y, float z, float t)
 {
     const int32_t xBase = FastFloor(x);
     const int32_t yBase = FastFloor(y);
@@ -103,23 +106,23 @@ float Com_NoiseGet4f(float x, float y, float z, float t)
         const float noise111 =
             GetNoiseValue(xBase + 1, yBase + 1, zBase + 1, latticeT);
 
-        const float zLowerY0 =
-            noise000 * inverseX + noise100 * xFraction;
-        const float zLowerY1 =
-            noise010 * inverseX + noise110 * xFraction;
-        const float zUpperY0 =
-            noise001 * inverseX + noise101 * xFraction;
-        const float zUpperY1 =
-            noise011 * inverseX + noise111 * xFraction;
-        const float zLower =
+        const long double zLowerY0 =
+            (long double)noise000 * inverseX + (long double)noise100 * xFraction;
+        const long double zLowerY1 =
+            (long double)noise010 * inverseX + (long double)noise110 * xFraction;
+        const long double zUpperY0 =
+            (long double)noise001 * inverseX + (long double)noise101 * xFraction;
+        const long double zUpperY1 =
+            (long double)noise011 * inverseX + (long double)noise111 * xFraction;
+        const long double zLower =
             zLowerY0 * inverseY + zLowerY1 * yFraction;
-        const float zUpper =
+        const long double zUpper =
             zUpperY0 * inverseY + zUpperY1 * yFraction;
 
-        timeValues[tCorner] =
-            zLower * inverseZ + zUpper * zFraction;
+        timeValues[tCorner] = (float)(
+            zLower * inverseZ + zUpper * zFraction);
     }
 
-    return timeValues[0] * (1.0f - tFraction) +
-           timeValues[1] * tFraction;
+    return (long double)timeValues[0] * (1.0L - tFraction) +
+           (long double)timeValues[1] * tFraction;
 }

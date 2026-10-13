@@ -1350,21 +1350,21 @@ void RB_CalcAlphaFromOneMinusEntity(uint8_t colors[][4])
 void RB_CalcWaveColor(const waveForm_t *waveform,
                       uint8_t colors[][4])
 {
-    float value;
+    long double value;
 
     if (waveform->func == SHADER_WAVE_NOISE) {
         value = Com_NoiseGet4f(
                     0.0f, 0.0f, 0.0f,
-                    (tess.shaderTime + waveform->phase) * waveform->frequency) *
+                    (float)(((long double)tess.shaderTime + waveform->phase) * waveform->frequency)) *
                     waveform->amplitude +
                 waveform->base;
     } else {
         const float *waveTable = TableForFunc(waveform->func);
-        const float tableCoordinate =
-            (tess.shaderTime * waveform->frequency + waveform->phase) * 1024.0f;
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
+        const float tableCoordinate = (float)(
+            ((long double)tess.shaderTime * waveform->frequency + waveform->phase) * 1024.0L);
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
 
-        value = (waveTable[tableIndex] * waveform->amplitude +
+        value = ((long double)waveTable[tableIndex] * waveform->amplitude +
                  waveform->base) * tr.identityLight;
     }
 
@@ -1373,7 +1373,10 @@ void RB_CalcWaveColor(const waveForm_t *waveform,
     else if (value > 1.0f)
         value = 1.0f;
 
-    const uint8_t colorByte = (uint8_t)(int32_t)lrintf(value * 255.0f);
+    /* 0x00522c93..0x00522cc5 retains the value through clamping and scaling,
+     * then stores the scaled color to binary32 before the dword conversion. */
+    const float scaledColor = (float)(value * 255.0L);
+    const uint8_t colorByte = (uint8_t)RB_X87RoundFloatToInt(scaledColor);
     for (int32_t vertexIndex = 0;
          vertexIndex < tess.vertexCount; ++vertexIndex) {
         colors[vertexIndex][0] = colorByte;
@@ -1725,22 +1728,25 @@ void RB_CalcDeformVertexes(const deformStage_t *deform)
                  (double)deform->deformationWave.frequency +
              (double)deform->deformationWave.phase) *
             1024.0);
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
-        const float displacement =
-            waveTable[tableIndex] * deform->deformationWave.amplitude +
-            deform->deformationWave.base;
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
+        const float displacement = (float)(
+            (long double)waveTable[tableIndex] * deform->deformationWave.amplitude +
+            deform->deformationWave.base);
 
         for (int32_t vertexIndex = 0;
              vertexIndex < tess.vertexCount; ++vertexIndex) {
             float *position =
                 &tess.xyz[vertexIndex * tess.vertexComponentCount];
 
-            position[0] +=
-                displacement * tess.stageNormals[vertexIndex][0];
-            position[1] +=
-                displacement * tess.stageNormals[vertexIndex][1];
-            position[2] +=
-                displacement * tess.stageNormals[vertexIndex][2];
+            /* 0x0052160d stores the Z delta to binary32; the X and Y
+             * products remain live until their position additions. */
+            const float zDisplacement = (float)(
+                (long double)displacement * tess.stageNormals[vertexIndex][2]);
+            position[0] = (float)(
+                (long double)displacement * tess.stageNormals[vertexIndex][0] + position[0]);
+            position[1] = (float)(
+                (long double)displacement * tess.stageNormals[vertexIndex][1] + position[1]);
+            position[2] += zDisplacement;
         }
         return;
     }
@@ -1757,14 +1763,18 @@ void RB_CalcDeformVertexes(const deformStage_t *deform)
              (double)tess.shaderTime *
                  (double)deform->deformationWave.frequency) *
             1024.0);
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
-        const float displacement =
-            waveTable[tableIndex] * deform->deformationWave.amplitude +
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
+        const long double displacement =
+            (long double)waveTable[tableIndex] * deform->deformationWave.amplitude +
             deform->deformationWave.base;
 
-        position[0] += displacement * tess.stageNormals[vertexIndex][0];
-        position[1] += displacement * tess.stageNormals[vertexIndex][1];
-        position[2] += displacement * tess.stageNormals[vertexIndex][2];
+        /* 0x005216a1..0x005216d0 retains the wave result, then stores the
+         * Y and Z deltas to binary32 before adding them to the positions. */
+        const float yDisplacement = (float)(displacement * tess.stageNormals[vertexIndex][1]);
+        const float zDisplacement = (float)(displacement * tess.stageNormals[vertexIndex][2]);
+        position[0] = (float)(displacement * tess.stageNormals[vertexIndex][0] + position[0]);
+        position[1] += yDisplacement;
+        position[2] += zDisplacement;
     }
 }
 
@@ -1784,26 +1794,27 @@ void RB_CalcFlapVertexes(const deformStage_t *deform,
                  (double)deform->deformationWave.frequency +
              (double)deform->deformationWave.phase) *
             1024.0);
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
-        const float displacement =
-            waveTable[tableIndex] * deform->deformationWave.amplitude +
-            deform->deformationWave.base;
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
+        const float displacement = (float)(
+            (long double)waveTable[tableIndex] * deform->deformationWave.amplitude +
+            deform->deformationWave.base);
 
         for (int32_t vertexIndex = 0;
              vertexIndex < tess.vertexCount; ++vertexIndex) {
-            const float scaledDisplacement =
-                displacement *
+            /* 0x00521775 keeps the texture-coordinate product live; only
+             * the Y and Z deltas are stored before the position additions. */
+            const long double scaledDisplacement =
+                (long double)displacement *
                 tess.texCoords[R_TESS_BASE_TEXCOORD_SET]
                               [vertexIndex][textureCoordinateAxis];
             float *position =
                 &tess.xyz[vertexIndex * tess.vertexComponentCount];
 
-            position[0] +=
-                scaledDisplacement * tess.stageNormals[vertexIndex][0];
-            position[1] +=
-                scaledDisplacement * tess.stageNormals[vertexIndex][1];
-            position[2] +=
-                scaledDisplacement * tess.stageNormals[vertexIndex][2];
+            const float yDisplacement = (float)(scaledDisplacement * tess.stageNormals[vertexIndex][1]);
+            const float zDisplacement = (float)(scaledDisplacement * tess.stageNormals[vertexIndex][2]);
+            position[0] = (float)(scaledDisplacement * tess.stageNormals[vertexIndex][0] + position[0]);
+            position[1] += yDisplacement;
+            position[2] += zDisplacement;
         }
         return;
     }
@@ -1820,16 +1831,20 @@ void RB_CalcFlapVertexes(const deformStage_t *deform,
              (double)tess.shaderTime *
                  (double)deform->deformationWave.frequency) *
             1024.0);
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
-        const float displacement =
-            (waveTable[tableIndex] * deform->deformationWave.amplitude +
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
+        const long double displacement =
+            ((long double)waveTable[tableIndex] * deform->deformationWave.amplitude +
              deform->deformationWave.base) *
             tess.texCoords[R_TESS_BASE_TEXCOORD_SET]
                           [vertexIndex][textureCoordinateAxis];
 
-        position[0] += displacement * tess.stageNormals[vertexIndex][0];
-        position[1] += displacement * tess.stageNormals[vertexIndex][1];
-        position[2] += displacement * tess.stageNormals[vertexIndex][2];
+        /* 0x00521825..0x00521857 keeps the scaled wave result live and
+         * stores the Y and Z deltas before their position additions. */
+        const float yDisplacement = (float)(displacement * tess.stageNormals[vertexIndex][1]);
+        const float zDisplacement = (float)(displacement * tess.stageNormals[vertexIndex][2]);
+        position[0] = (float)(displacement * tess.stageNormals[vertexIndex][0] + position[0]);
+        position[1] += yDisplacement;
+        position[2] += zDisplacement;
     }
 }
 
@@ -1865,7 +1880,7 @@ void RB_CalcDeformSyncNormals(const deformStage_t *deform)
              (double)tess.shaderTime *
                  (double)deform->deformationWave.frequency) *
             1024.0);
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate);
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate);
         /* 0x0052191e..0x00521957 retains the table difference and complete
          * scaled slope through the three component updates. */
         const long double slope =
@@ -1915,7 +1930,7 @@ void RB_CalcDeformNormals(const deformStage_t *deform)
             deform->deformationWave.amplitude;
         (*normal)[1] +=
             Com_NoiseGet4f(
-                position[0] * positionScale + 100.0f,
+                (float)((long double)position[0] * positionScale + 100.0L),
                 position[1] * positionScale,
                 position[2] * positionScale,
                 (float)((double)tess.shaderTime *
@@ -1923,7 +1938,7 @@ void RB_CalcDeformNormals(const deformStage_t *deform)
             deform->deformationWave.amplitude;
         (*normal)[2] +=
             Com_NoiseGet4f(
-                position[0] * positionScale + 200.0f,
+                (float)((long double)position[0] * positionScale + 200.0L),
                 position[1] * positionScale,
                 position[2] * positionScale,
                 (float)((double)tess.shaderTime *
@@ -2150,8 +2165,9 @@ void RB_CalcCubeMapNegateTexCoords(vec3_t textureCoords[])
 /* Source: CoDUOMP.exe 0x005214f0..0x00521573.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_005214f0_00521574.mcode.
  * Name: exact same-module Mac symbol RB_CalcStretchTexCoords. The waveform
- * table coordinate is stored to float before the original x87 FISTP; lrintf
- * retains that current-rounding-mode conversion on portable hosts. */
+ * table coordinate is stored to float before the original signed-dword x87
+ * FISTP, which retains the active rounding mode and returns integer-indefinite
+ * when the coordinate is outside the signed 32-bit range. */
 void RB_CalcStretchTexCoords(const waveForm_t *waveform,
                              vec2_t textureCoords[])
 {
@@ -2161,7 +2177,7 @@ void RB_CalcStretchTexCoords(const waveForm_t *waveform,
     const float tableCoordinate = (float)(
         ((long double)tess.shaderTime * waveform->frequency +
          waveform->phase) * 1024.0f);
-    const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
+    const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
     const long double stretch =
         (long double)1.0f /
         ((long double)waveTable[tableIndex] * waveform->amplitude +
@@ -3216,8 +3232,9 @@ void RB_BeginSurface(shader_t *shader, int32_t vertexComponentCount)
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004ea420_004ea4d8.mcode.
  * Name: exact same-module Mac symbol RB_GetAnimatedImage. The two x87
  * products are retained until one binary32 store; FISTP then uses the active
- * floating-point rounding mode before the ten fixed-point fraction bits are
- * discarded, so lrintf preserves that conversion on native targets. */
+ * floating-point rounding mode and signed 32-bit range before the ten
+ * fixed-point fraction bits are discarded. Out-of-range results select the
+ * first image through the negative-index clamp below. */
 image_t *RB_GetAnimatedImage(textureBundle_t *bundle,
                              int32_t textureUnit)
 {
@@ -3240,7 +3257,7 @@ image_t *RB_GetAnimatedImage(textureBundle_t *bundle,
         ((long double)tess.shaderTime * bundle->imageAnimationSpeed) *
         (long double)(float)RB_ANIMATION_FRAME_SCALE);
     int32_t imageIndex =
-        (int32_t)lrintf(scaledFrame) >> RB_ANIMATION_FRAME_FRACTION_BITS;
+        RB_X87RoundFloatToInt(scaledFrame) >> RB_ANIMATION_FRAME_FRACTION_BITS;
     if (imageIndex < 0)
         imageIndex = 0;
 

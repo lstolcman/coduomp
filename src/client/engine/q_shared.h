@@ -327,7 +327,7 @@ int32_t SEH_ReadCharFromString(
 qboolean Language_IsAsian(void);
 qboolean Language_UsesSpaces(void);
 void Com_NoiseInit(void);
-float Com_NoiseGet4f(float x, float y, float z, float t);
+long double Com_NoiseGet4f(float x, float y, float z, float t);
 qboolean Sys_LowPhysicalMemory(void);
 void Sys_FreeFileList(char **list);
 #ifdef __cplusplus
