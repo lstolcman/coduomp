@@ -1361,7 +1361,7 @@ void RB_CalcWaveColor(const waveForm_t *waveform,
         const float *waveTable = TableForFunc(waveform->func);
         const float tableCoordinate =
             (tess.shaderTime * waveform->frequency + waveform->phase) * 1024.0f;
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
 
         value = (waveTable[tableIndex] * waveform->amplitude +
                  waveform->base) * tr.identityLight;
@@ -1724,7 +1724,7 @@ void RB_CalcDeformVertexes(const deformStage_t *deform)
                  (double)deform->deformationWave.frequency +
              (double)deform->deformationWave.phase) *
             1024.0);
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
         const float displacement =
             waveTable[tableIndex] * deform->deformationWave.amplitude +
             deform->deformationWave.base;
@@ -1756,7 +1756,7 @@ void RB_CalcDeformVertexes(const deformStage_t *deform)
              (double)tess.shaderTime *
                  (double)deform->deformationWave.frequency) *
             1024.0);
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
         const float displacement =
             waveTable[tableIndex] * deform->deformationWave.amplitude +
             deform->deformationWave.base;
@@ -1783,7 +1783,7 @@ void RB_CalcFlapVertexes(const deformStage_t *deform,
                  (double)deform->deformationWave.frequency +
              (double)deform->deformationWave.phase) *
             1024.0);
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
         const float displacement =
             waveTable[tableIndex] * deform->deformationWave.amplitude +
             deform->deformationWave.base;
@@ -1819,7 +1819,7 @@ void RB_CalcFlapVertexes(const deformStage_t *deform,
              (double)tess.shaderTime *
                  (double)deform->deformationWave.frequency) *
             1024.0);
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
         const float displacement =
             (waveTable[tableIndex] * deform->deformationWave.amplitude +
              deform->deformationWave.base) *
@@ -1864,7 +1864,7 @@ void RB_CalcDeformSyncNormals(const deformStage_t *deform)
              (double)tess.shaderTime *
                  (double)deform->deformationWave.frequency) *
             1024.0);
-        const int32_t tableIndex = (int32_t)lrintf(tableCoordinate);
+        const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate);
         /* 0x0052191e..0x00521957 retains the table difference and complete
          * scaled slope through the three component updates. */
         const long double slope =
@@ -3207,8 +3207,9 @@ void RB_BeginSurface(shader_t *shader, int32_t vertexComponentCount)
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004ea420_004ea4d8.mcode.
  * Name: exact same-module Mac symbol RB_GetAnimatedImage. The two x87
  * products are retained until one binary32 store; FISTP then uses the active
- * floating-point rounding mode before the ten fixed-point fraction bits are
- * discarded, so lrintf preserves that conversion on native targets. */
+ * floating-point rounding mode and signed 32-bit range before the ten
+ * fixed-point fraction bits are discarded. Out-of-range results select the
+ * first image through the negative-index clamp below. */
 image_t *RB_GetAnimatedImage(textureBundle_t *bundle,
                              int32_t textureUnit)
 {
@@ -3231,7 +3232,7 @@ image_t *RB_GetAnimatedImage(textureBundle_t *bundle,
         ((long double)tess.shaderTime * bundle->imageAnimationSpeed) *
         (long double)(float)RB_ANIMATION_FRAME_SCALE);
     int32_t imageIndex =
-        (int32_t)lrintf(scaledFrame) >> RB_ANIMATION_FRAME_FRACTION_BITS;
+        RB_X87RoundFloatToInt(scaledFrame) >> RB_ANIMATION_FRAME_FRACTION_BITS;
     if (imageIndex < 0)
         imageIndex = 0;
 
