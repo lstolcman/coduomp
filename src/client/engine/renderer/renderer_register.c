@@ -5,6 +5,7 @@
 #include "renderer_cvars.h"
 #include "renderer_gpu_profile.h"
 #include "client/common/client_color_settings.h"
+#include "client/common/client_video_settings.h"
 #include "../platform/hardware_profile.h"
 
 enum {
@@ -312,8 +313,11 @@ void R_Register(void)
     r_mode = ri.Cvar_Get("r_mode", "3", CVAR_ARCHIVE | CVAR_LATCH);
     r_fullscreen =
         ri.Cvar_Get("r_fullscreen", "1", CVAR_ARCHIVE | CVAR_LATCH);
-    /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): select the SDL display
-     * that owns windowed, exclusive-fullscreen, and borderless presentation.
+    /* NOT_FROM_ORIGINAL_SOURCE: retain the three existing window modes and
+     * add opt-in exclusive fullscreen as a fourth archived selection. */
+    AssertCvarRange(r_fullscreen, CODUOMP_WINDOW_MODE_WINDOWED, CODUOMP_WINDOW_MODE_EXCLUSIVE, qtrue);
+    /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): select the display
+     * that owns windowed, desktop fullscreen, borderless, or exclusive presentation.
      * The platform layer validates the archived index against the active
      * display count on every renderer start. */
     r_display =

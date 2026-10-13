@@ -29,6 +29,7 @@ static const ui_compat_translation_t uiCompatTranslations[] = {
     { "CODUOMP_GRAPHICS_WINDOWED", "Windowed", "En ventana" },
     { "CODUOMP_GRAPHICS_FULLSCREEN", "Fullscreen", "Pantalla completa" },
     { "CODUOMP_GRAPHICS_BORDERLESS", "Borderless", "Sin bordes" },
+    { "CODUOMP_GRAPHICS_EXCLUSIVE", "Exclusive Fullscreen", "Pantalla completa exclusiva" },
     { "CODUOMP_GRAPHICS_DISPLAY_MODE", "Display Mode", "Modo de pantalla" },
     { "CODUOMP_GRAPHICS_MONITOR", "Monitor", "Monitor" },
     { "CODUOMP_GRAPHICS_DISPLAY", "Display", "Pantalla" },

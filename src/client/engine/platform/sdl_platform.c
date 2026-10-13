@@ -8,6 +8,7 @@
 #include "../system_input.h"
 #include "../renderer/platform_gamma.h"
 #include "qcommon/q_memory.h"
+#include "client/common/client_video_settings.h"
 
 #include <SDL.h>
 #if defined(__linux__)
@@ -140,7 +141,7 @@ char *coduomp_sdl_get_clipboard_text_compat(void)
  * format, and WGL-context setup in GLW_CreateWindow/GLW_InitDriver. A legacy
  * compatibility context is required because the original renderer uses the
  * OpenGL fixed-function pipeline. The stock source uses only the original
- * boolean window-mode domain, leaving the borderless extension unreachable. */
+ * boolean window-mode domain, leaving the added window modes unreachable. */
 qboolean CoduoSDL_CreateOpenGLWindow(int32_t width, int32_t height,
                                      int32_t colorBits, int32_t depthBits,
                                      int32_t stencilBits,
@@ -148,21 +149,39 @@ qboolean CoduoSDL_CreateOpenGLWindow(int32_t width, int32_t height,
                                      int32_t displayIndex,
                                      int32_t refreshRate)
 {
-    enum {
-        CODUO_WINDOW_MODE_FULLSCREEN = 1,
-        CODUO_WINDOW_MODE_BORDERLESS = 2
-    };
     const char *windowTitle = "Call of Duty: United Offensive Multiplayer";
     uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
     qboolean allowHighDpi = qtrue;
+    SDL_DisplayMode exclusiveMode = {0};
     int32_t windowX = SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex);
     int32_t windowY = SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex);
 
     if (CoduoSDL_Init() == qfalse)
         return qfalse;
 
+    if (windowMode == CODUOMP_WINDOW_MODE_EXCLUSIVE) {
+        SDL_DisplayMode requestedMode = {0};
+
+        /* NOT_FROM_ORIGINAL_SOURCE: exclusive mode switches the selected
+         * display to the requested resolution. Reject unavailable modes
+         * instead of silently selecting a different render size or refresh. */
+        requestedMode.w = width;
+        requestedMode.h = height;
+        requestedMode.refresh_rate = refreshRate;
+        if (SDL_GetClosestDisplayMode(displayIndex, &requestedMode, &exclusiveMode) == NULL ||
+            exclusiveMode.w != width || exclusiveMode.h != height ||
+            (refreshRate > 0 && exclusiveMode.refresh_rate != refreshRate)) {
+            SDL_SetError("Exclusive fullscreen mode %dx%d at %d Hz is unavailable on display %d",
+                         width, height, refreshRate, displayIndex + 1);
+            return qfalse;
+        }
+        /* SDL mode sizes are screen coordinates; do not double the drawable
+         * on Retina after explicitly switching to the requested mode size. */
+        allowHighDpi = qfalse;
+    }
+
 #if defined(__APPLE__)
-    if (windowMode == CODUO_WINDOW_MODE_FULLSCREEN || windowMode == CODUO_WINDOW_MODE_BORDERLESS) {
+    if (windowMode == CODUOMP_WINDOW_MODE_FULLSCREEN || windowMode == CODUOMP_WINDOW_MODE_BORDERLESS) {
         SDL_Rect displayBounds;
 
         /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): desktop fullscreen
@@ -192,7 +211,6 @@ qboolean CoduoSDL_CreateOpenGLWindow(int32_t width, int32_t height,
         stencilBits = 0;
     if (depthBits < 24)
         stencilBits = 0;
-    (void)refreshRate;
 
     SDL_GL_ResetAttributes();
     (void)SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
@@ -209,12 +227,12 @@ qboolean CoduoSDL_CreateOpenGLWindow(int32_t width, int32_t height,
     (void)SDL_GL_SetAttribute(
         SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
 
-    if (windowMode == CODUO_WINDOW_MODE_FULLSCREEN) {
+    if (windowMode == CODUOMP_WINDOW_MODE_FULLSCREEN) {
         /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): SDL desktop
          * fullscreen hides desktop UI without capturing the selected display
          * or changing its mode, so the other connected displays stay active. */
         flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
-    } else if (windowMode == CODUO_WINDOW_MODE_BORDERLESS) {
+    } else if (windowMode == CODUOMP_WINDOW_MODE_BORDERLESS) {
         SDL_Rect displayBounds;
 
         /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): borderless follows
@@ -229,7 +247,7 @@ qboolean CoduoSDL_CreateOpenGLWindow(int32_t width, int32_t height,
         height = displayBounds.h;
         flags |= SDL_WINDOW_BORDERLESS;
 #if defined(__APPLE__)
-    } else {
+    } else if (windowMode == CODUOMP_WINDOW_MODE_WINDOWED) {
         /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): SDL window sizes
          * are screen coordinates on macOS, while the graphics menu expresses
          * render pixels. Convert through the active backing scale so a
@@ -244,6 +262,17 @@ qboolean CoduoSDL_CreateOpenGLWindow(int32_t width, int32_t height,
         width, height, flags);
     if (coduoSdlWindow == NULL)
         return qfalse;
+
+    /* NOT_FROM_ORIGINAL_SOURCE: establish the display mode before entering
+     * exclusive fullscreen so SDL owns restoration on focus loss, restart,
+     * shutdown, and context-creation failure. Cocoa may capture all displays
+     * when the selected monitor is the primary display. */
+    if (windowMode == CODUOMP_WINDOW_MODE_EXCLUSIVE &&
+        (SDL_SetWindowDisplayMode(coduoSdlWindow, &exclusiveMode) != 0 ||
+         SDL_SetWindowFullscreen(coduoSdlWindow, SDL_WINDOW_FULLSCREEN) != 0)) {
+        CoduoSDL_DestroyOpenGLWindow();
+        return qfalse;
+    }
 
     coduoSdlGlContext = SDL_GL_CreateContext(coduoSdlWindow);
     if (coduoSdlGlContext == NULL) {

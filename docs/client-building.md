@@ -176,6 +176,25 @@ profile. Agents must never invoke `client-run` for testing.
 For compiler-gated OpenGL GPU timing, renderer-phase attribution, and batch
 census captures, see [Renderer GPU profiling](client-renderer-gpu-profiling.md).
 
+#### Display modes
+
+Graphics options provide four **Display Mode** choices. Select a **Monitor**
+and **Resolution**, then apply the settings to restart the renderer.
+
+| Display Mode | `r_fullscreen` | Behavior |
+| --- | --- | --- |
+| Windowed | `0` | A decorated window on the selected monitor. |
+| Fullscreen | `1` | The existing desktop fullscreen mode; the desktop resolution stays unchanged. |
+| Borderless | `2` | A borderless window covering the selected monitor. |
+| Exclusive Fullscreen | `3` | Switches the selected monitor to the requested resolution, with `r_displayRefresh` selecting a refresh rate when nonzero. |
+
+The default remains Fullscreen. `r_display` selects the monitor from zero;
+for example, `set r_display 1`, `set r_fullscreen 3`, then `vid_restart` uses
+exclusive fullscreen on the second monitor. The display mode is restored
+when exclusive fullscreen exits. On macOS, standard exclusive fullscreen on
+the primary display can also capture and blank the other connected displays.
+Use Fullscreen or Borderless when the other monitors should remain visible.
+
 #### macOS Wi-Fi latency
 
 Apple Wireless Direct Link (AWDL) can cause short periodic Wi-Fi latency spikes

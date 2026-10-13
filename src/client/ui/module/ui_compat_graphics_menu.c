@@ -3,6 +3,7 @@
 #include "client/common/client_branding.h"
 #include "client/common/client_color_settings.h"
 #include "client/common/client_legacy_crt.h"
+#include "client/common/client_video_settings.h"
 #include "compat/coduo_native_x87.h"
 
 #include <string.h>
@@ -412,9 +413,10 @@ void ui_compat_extend_graphics_menu(void)
         "exec \"setfromcvar r_display ui_r_display\"; "
         "exec \"setfromcvar r_aspectMode ui_r_aspectMode\"; ";
     static const ui_compat_multi_value_t displayModes[] = {
-        { "@CODUOMP_GRAPHICS_WINDOWED", 0.0f },
-        { "@CODUOMP_GRAPHICS_FULLSCREEN", 1.0f },
-        { "@CODUOMP_GRAPHICS_BORDERLESS", 2.0f }
+        { "@CODUOMP_GRAPHICS_WINDOWED", CODUOMP_WINDOW_MODE_WINDOWED },
+        { "@CODUOMP_GRAPHICS_FULLSCREEN", CODUOMP_WINDOW_MODE_FULLSCREEN },
+        { "@CODUOMP_GRAPHICS_BORDERLESS", CODUOMP_WINDOW_MODE_BORDERLESS },
+        { "@CODUOMP_GRAPHICS_EXCLUSIVE", CODUOMP_WINDOW_MODE_EXCLUSIVE }
     };
     static const ui_compat_multi_value_t aspectModes[] = {
         { "@CODUOMP_GRAPHICS_FILL_SCREEN", 0.0f },

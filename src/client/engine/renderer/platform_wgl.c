@@ -1,9 +1,11 @@
 #include "backend.h"
 
 #include "client/common/client_legacy_crt.h"
+#include "client/common/client_video_settings.h"
 #include "gl_api.h"
 #include "gl_debug.h"
 #include "platform_gamma.h"
+#include "platform_display.h"
 #include "renderer_gpu_profile.h"
 #include "wgl_debug.h"
 #include "output_gamma_compat.h"
@@ -59,12 +61,6 @@ enum {
     R_AUTOCONFIG_VALUE_SIZE = 64
 };
 
-enum {
-    R_WINDOW_MODE_WINDOWED = 0,
-    R_WINDOW_MODE_FULLSCREEN = 1,
-    R_WINDOW_MODE_BORDERLESS = 2
-};
-
 typedef enum renderer_display_change_result_e {
     R_DISPLAY_CHANGE_BAD_PARAMETER = -5,
     R_DISPLAY_CHANGE_BAD_FLAGS = -4,
@@ -90,6 +86,76 @@ static renderer_pixel_format_descriptor_t rendererWin32PixelFormat;
 static qboolean rendererWin32WindowClassRegistered;
 static int32_t coduompRendererDisplayX;
 static int32_t coduompRendererDisplayY;
+/* NOT_FROM_ORIGINAL_SOURCE: retain the exact device and desktop mode across
+ * focus changes and renderer restarts, even if r_display is changed meanwhile. */
+static char coduompRendererExclusiveDevice[CCHDEVICENAME];
+static DEVMODEA coduompRendererExclusiveDesktopMode;
+static DEVMODEA coduompRendererExclusiveMode;
+static qboolean coduompRendererExclusiveActive;
+static qboolean coduompRendererExclusiveChanging;
+
+/* NOT_FROM_ORIGINAL_SOURCE: change only the selected Windows display and
+ * restore its captured desktop settings without writing display preferences. */
+static qboolean coduomp_glw_set_exclusive_active_compat(qboolean active)
+{
+    if (rendererWin32FullscreenModeSet == qfalse || coduompRendererExclusiveActive == active)
+        return qtrue;
+    if (coduompRendererExclusiveChanging != qfalse)
+        return qfalse;
+
+    coduompRendererExclusiveChanging = qtrue;
+    const LONG result = ChangeDisplaySettingsExA(
+        coduompRendererExclusiveDevice,
+        active != qfalse ? &coduompRendererExclusiveMode : &coduompRendererExclusiveDesktopMode,
+        NULL, active != qfalse ? CDS_FULLSCREEN : 0, NULL);
+    if (result == DISP_CHANGE_SUCCESSFUL) {
+        coduompRendererExclusiveActive = active;
+        if (active != qfalse) {
+            DEVMODEA currentMode = {0};
+
+            currentMode.dmSize = sizeof(currentMode);
+            if (EnumDisplaySettingsA(coduompRendererExclusiveDevice, ENUM_CURRENT_SETTINGS, &currentMode) != FALSE) {
+                coduompRendererDisplayX = currentMode.dmPosition.x;
+                coduompRendererDisplayY = currentMode.dmPosition.y;
+            }
+        }
+    } else {
+        ri.Printf(R_PRINT_WARNING, "WARNING: could not %s exclusive display %s: ",
+                  active != qfalse ? "activate" : "restore", coduompRendererExclusiveDevice);
+        GLW_PrintDisplayChangeError(result);
+    }
+    coduompRendererExclusiveChanging = qfalse;
+    return result == DISP_CHANGE_SUCCESSFUL ? qtrue : qfalse;
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: forget exclusive ownership only after its
+ * desktop mode has been restored successfully. */
+static qboolean coduomp_glw_restore_display_compat(void)
+{
+    if (coduomp_glw_set_exclusive_active_compat(qfalse) == qfalse)
+        return qfalse;
+    rendererWin32FullscreenModeSet = qfalse;
+    return qtrue;
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: exclusive windows relinquish the display while
+ * another application has focus, then return to the same monitor and mode. */
+void coduomp_glw_exclusive_focus_changed_compat(qboolean active)
+{
+    if (rendererWin32FullscreenModeSet == qfalse || coduompRendererExclusiveChanging != qfalse ||
+        coduompRendererExclusiveActive == active || win32MainWindow == NULL)
+        return;
+    if (coduomp_glw_set_exclusive_active_compat(active) == qfalse)
+        return;
+
+    if (active != qfalse) {
+        SetWindowPos(win32MainWindow, HWND_TOPMOST, coduompRendererDisplayX, coduompRendererDisplayY,
+                     (int32_t)coduompRendererExclusiveMode.dmPelsWidth,
+                     (int32_t)coduompRendererExclusiveMode.dmPelsHeight, SWP_NOACTIVATE);
+    } else if (IsWindowVisible(win32MainWindow) != FALSE) {
+        ShowWindow(win32MainWindow, SW_MINIMIZE);
+    }
+}
 #endif
 
 /* Source: CoDUOMP.exe 0x004f3fa0..0x004f4079.
@@ -491,14 +557,13 @@ qboolean GLW_CreateWindow(const char *driverName, int32_t width,
     int32_t windowX;
     int32_t windowY;
 
-    if (windowMode != R_WINDOW_MODE_WINDOWED) {
+    if (windowMode != CODUOMP_WINDOW_MODE_WINDOWED) {
         style = WS_POPUP | WS_VISIBLE | WS_SYSMENU;
         /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): default fullscreen
-         * is a desktop-sized non-exclusive popup, so both fullscreen modes
-         * must participate in the normal desktop z-order. Keeping the stock
-         * topmost style here hides non-activating OS overlays such as Windows
-         * screen snipping behind the game. */
-        extendedStyle = 0;
+         * is a desktop-sized non-exclusive popup. Desktop fullscreen and
+         * borderless participate in normal desktop z-order so non-activating
+         * OS overlays remain visible. Only exclusive fullscreen is topmost. */
+        extendedStyle = windowMode == CODUOMP_WINDOW_MODE_EXCLUSIVE ? WS_EX_TOPMOST : 0;
         windowX = coduompRendererDisplayX;
         windowY = coduompRendererDisplayY;
     } else {
@@ -520,7 +585,7 @@ qboolean GLW_CreateWindow(const char *driverName, int32_t width,
 
     const int32_t windowWidth = windowRect.right - windowRect.left;
     const int32_t windowHeight = windowRect.bottom - windowRect.top;
-    if (windowMode == R_WINDOW_MODE_WINDOWED &&
+    if (windowMode == CODUOMP_WINDOW_MODE_WINDOWED &&
         windowWidth < rendererWin32DesktopWidth &&
         windowHeight < rendererWin32DesktopHeight) {
         if (windowX + windowWidth >
@@ -825,6 +890,10 @@ renderer_mode_set_result_t GLW_SetMode(
     int32_t windowMode)
 {
 #if defined(_WIN32)
+    /* NOT_FROM_ORIGINAL_SOURCE: restore the previous device before querying
+     * a newly selected monitor or attempting another mode after a failure. */
+    if (coduomp_glw_restore_display_compat() == qfalse)
+        return R_MODE_SET_FULLSCREEN_UNAVAILABLE;
     const int32_t displayCount =
         coduomp_glw_get_windows_display_count_compat();
     DISPLAY_DEVICEA windowsDisplayDevice = {0};
@@ -957,13 +1026,15 @@ renderer_mode_set_result_t GLW_SetMode(
     }
 
     const char *modeKind;
-    if (windowMode == R_WINDOW_MODE_FULLSCREEN) {
+    if (windowMode == CODUOMP_WINDOW_MODE_EXCLUSIVE) {
+        modeKind = va("exclusive FS (%i Hz requested)", r_displayRefresh->integer);
+    } else if (windowMode == CODUOMP_WINDOW_MODE_FULLSCREEN) {
         if (r_displayRefresh->integer != 0) {
             modeKind = va("FS (%i Hz)", r_displayRefresh->integer);
         } else {
             modeKind = "FS";
         }
-    } else if (windowMode == R_WINDOW_MODE_BORDERLESS) {
+    } else if (windowMode == CODUOMP_WINDOW_MODE_BORDERLESS) {
         modeKind = "B";
     } else {
         modeKind = "W";
@@ -971,7 +1042,7 @@ renderer_mode_set_result_t GLW_SetMode(
     ri.Printf(R_PRINT_ALL, " %d %d %s\n",
               glConfig.vidWidth, glConfig.vidHeight, modeKind);
 
-    if (windowMode == R_WINDOW_MODE_WINDOWED) {
+    if (windowMode == CODUOMP_WINDOW_MODE_WINDOWED) {
         if (mode != R_CURRENT_DISPLAY_VIDEO_MODE) {
             while (rendererWin32DesktopWidth < glConfig.vidWidth ||
                    rendererWin32DesktopHeight < glConfig.vidHeight) {
@@ -989,7 +1060,7 @@ renderer_mode_set_result_t GLW_SetMode(
          rendererWin32DesktopColorBits ==
              R_DESKTOP_COLOR_WARNING_BITS) &&
         (colorBits == 0 ||
-         (windowMode != R_WINDOW_MODE_FULLSCREEN &&
+         (windowMode != CODUOMP_WINDOW_MODE_FULLSCREEN &&
           colorBits >= R_MIN_ACCEPTABLE_COLOR_BITS))) {
         const int32_t choice = MessageBoxA(
             NULL,
@@ -1000,23 +1071,39 @@ renderer_mode_set_result_t GLW_SetMode(
             return R_MODE_SET_INVALID;
     }
 
-    /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): fullscreen presentation
-     * must not change or capture the OS display mode. The game keeps its
-     * selected hardware-sized render surface and composites it into a popup
-     * covering the selected desktop, leaving other monitors active. */
-    if (rendererWin32FullscreenModeSet != qfalse)
-        ChangeDisplaySettingsA(NULL, 0);
-    rendererWin32FullscreenModeSet = qfalse;
+    /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): desktop fullscreen
+     * keeps its selected render surface and composites it into a popup
+     * covering the selected desktop. Exclusive fullscreen instead changes
+     * only that display and retains its desktop settings for restoration. */
+    if (windowMode == CODUOMP_WINDOW_MODE_EXCLUSIVE) {
+        memcpy(coduompRendererExclusiveDevice, windowsDisplayDevice.DeviceName,
+               sizeof(coduompRendererExclusiveDevice));
+        coduompRendererExclusiveDesktopMode = windowsDesktopMode;
+        coduompRendererExclusiveMode = windowsDesktopMode;
+        coduompRendererExclusiveMode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
+        coduompRendererExclusiveMode.dmPelsWidth = (DWORD)glConfig.vidWidth;
+        coduompRendererExclusiveMode.dmPelsHeight = (DWORD)glConfig.vidHeight;
+        if (r_displayRefresh->integer > 0) {
+            coduompRendererExclusiveMode.dmFields |= DM_DISPLAYFREQUENCY;
+            coduompRendererExclusiveMode.dmDisplayFrequency = (DWORD)r_displayRefresh->integer;
+        }
+        rendererWin32FullscreenModeSet = qtrue;
+        if (coduomp_glw_set_exclusive_active_compat(qtrue) == qfalse) {
+            rendererWin32FullscreenModeSet = qfalse;
+            return R_MODE_SET_FULLSCREEN_UNAVAILABLE;
+        }
+    }
 
     int32_t outputWindowWidth = glConfig.vidWidth;
     int32_t outputWindowHeight = glConfig.vidHeight;
-    if (windowMode != R_WINDOW_MODE_WINDOWED) {
+    if (windowMode == CODUOMP_WINDOW_MODE_FULLSCREEN || windowMode == CODUOMP_WINDOW_MODE_BORDERLESS) {
         outputWindowWidth = rendererWin32DesktopWidth;
         outputWindowHeight = rendererWin32DesktopHeight;
     }
     if (GLW_CreateWindow(
             driverName, outputWindowWidth, outputWindowHeight,
             colorBits, windowMode) == qfalse) {
+        (void)coduomp_glw_restore_display_compat();
         return R_MODE_SET_INVALID;
     }
 
@@ -1030,14 +1117,11 @@ renderer_mode_set_result_t GLW_SetMode(
     }
     coduomp_configure_output_presentation_compat(
         glConfig.vidWidth, glConfig.vidHeight,
-        windowMode != R_WINDOW_MODE_WINDOWED
-            ? rendererWin32DesktopWidth : glConfig.vidWidth,
-        windowMode != R_WINDOW_MODE_WINDOWED
-            ? rendererWin32DesktopHeight : glConfig.vidHeight,
+        outputWindowWidth, outputWindowHeight,
         currentDisplayWidth, currentDisplayHeight,
-        windowMode != R_WINDOW_MODE_WINDOWED ? qtrue : qfalse);
+        windowMode != CODUOMP_WINDOW_MODE_WINDOWED ? qtrue : qfalse);
     glConfig.isFullscreen =
-        windowMode != R_WINDOW_MODE_WINDOWED ? qtrue : qfalse;
+        windowMode != CODUOMP_WINDOW_MODE_WINDOWED ? qtrue : qfalse;
     return R_MODE_SET_SUCCESS;
 #else
     int32_t refreshRate;
@@ -1065,7 +1149,7 @@ renderer_mode_set_result_t GLW_SetMode(
         currentDisplayRefreshRate != 0) {
         refreshRate = currentDisplayRefreshRate;
     }
-    if (windowMode == R_WINDOW_MODE_WINDOWED) {
+    if (windowMode == CODUOMP_WINDOW_MODE_WINDOWED) {
         if (mode != R_CURRENT_DISPLAY_VIDEO_MODE) {
             while ((rendererWin32DesktopWidth > 0 &&
                     rendererWin32DesktopWidth < glConfig.vidWidth) ||
@@ -1085,9 +1169,9 @@ renderer_mode_set_result_t GLW_SetMode(
     ri.Printf(
         R_PRINT_ALL, " %d %d %s\n",
         glConfig.vidWidth, glConfig.vidHeight,
-        windowMode == R_WINDOW_MODE_FULLSCREEN
-            ? "FS"
-            : (windowMode == R_WINDOW_MODE_BORDERLESS ? "B" : "W"));
+        windowMode == CODUOMP_WINDOW_MODE_EXCLUSIVE ? "exclusive FS" :
+            (windowMode == CODUOMP_WINDOW_MODE_FULLSCREEN ? "FS" :
+             (windowMode == CODUOMP_WINDOW_MODE_BORDERLESS ? "B" : "W")));
     int32_t outputWindowWidth = glConfig.vidWidth;
     int32_t outputWindowHeight = glConfig.vidHeight;
     if (GLW_CreateWindow(
@@ -1109,12 +1193,12 @@ renderer_mode_set_result_t GLW_SetMode(
         glConfig.vidWidth, glConfig.vidHeight,
         outputDrawableWidth, outputDrawableHeight,
         currentDisplayWidth, currentDisplayHeight,
-        windowMode != R_WINDOW_MODE_WINDOWED ? qtrue : qfalse);
+        windowMode != CODUOMP_WINDOW_MODE_WINDOWED ? qtrue : qfalse);
     glConfig.windowAspect =
         (float)glConfig.vidWidth / (float)glConfig.vidHeight;
     glConfig.displayFrequency = refreshRate;
     glConfig.isFullscreen =
-        windowMode != R_WINDOW_MODE_WINDOWED ? qtrue : qfalse;
+        windowMode != CODUOMP_WINDOW_MODE_WINDOWED ? qtrue : qfalse;
     return R_MODE_SET_SUCCESS;
 #endif
 }
@@ -2409,8 +2493,7 @@ void GLimp_Shutdown(void)
 #if defined(_WIN32)
     if (rendererWin32FullscreenModeSet != qfalse) {
         ri.Printf(R_PRINT_ALL, "...resetting display\n");
-        ChangeDisplaySettingsA(NULL, 0);
-        rendererWin32FullscreenModeSet = qfalse;
+        (void)coduomp_glw_restore_display_compat();
     }
 #endif
 

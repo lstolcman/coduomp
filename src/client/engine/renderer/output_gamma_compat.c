@@ -9,6 +9,7 @@
 #include "wgl_debug.h"
 #include "../platform/dynamic_library_boundary.h"
 #include "../platform/sdl_platform.h"
+#include "client/common/client_video_settings.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -359,7 +360,9 @@ qboolean coduomp_output_gamma_try_xrandr_compat(
 
     if (coduompXRandrGammaActive != qfalse)
         return qtrue;
-    if (r_fullscreen == NULL || r_fullscreen->integer != 1)
+    if (r_fullscreen == NULL ||
+        (r_fullscreen->integer != CODUOMP_WINDOW_MODE_FULLSCREEN &&
+         r_fullscreen->integer != CODUOMP_WINDOW_MODE_EXCLUSIVE))
         return qfalse;
 
     sessionType = getenv("XDG_SESSION_TYPE");

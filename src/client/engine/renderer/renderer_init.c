@@ -4,6 +4,7 @@
 #include "gl_state.h"
 #include "output_gamma_compat.h"
 #include "platform_gamma.h"
+#include "client/common/client_video_settings.h"
 
 #include <string.h>
 
@@ -446,8 +447,8 @@ void GfxInfo_f(void)
     const char *const enabledNames[2] = {
         "disabled", "enabled"
     };
-    const char *const windowModeNames[3] = {
-        "windowed", "fullscreen", "borderless"
+    const char *const windowModeNames[] = {
+        "windowed", "fullscreen", "borderless", "exclusive fullscreen"
     };
     cvar_t *cpuString;
 
@@ -469,8 +470,8 @@ void GfxInfo_f(void)
               glConfig.colorBits, glConfig.depthBits, glConfig.stencilBits);
 
     int32_t windowMode = r_fullscreen->integer;
-    if (windowMode < 0 || windowMode > 2)
-        windowMode = 0;
+    if (windowMode < CODUOMP_WINDOW_MODE_WINDOWED || windowMode > CODUOMP_WINDOW_MODE_EXCLUSIVE)
+        windowMode = CODUOMP_WINDOW_MODE_WINDOWED;
 
     ri.Printf(R_PRINT_ALL, "MODE: %d, %d x %d %s hz:",
               r_mode->integer, glConfig.vidWidth, glConfig.vidHeight,

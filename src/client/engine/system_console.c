@@ -8,6 +8,8 @@
 #include "client/console.h"
 #include "platform/crt_boundary.h"
 #include "renderer/renderer_cvars.h"
+#include "renderer/platform_display.h"
+#include "client/common/client_video_settings.h"
 #include "server/server.h"
 #include "sound/sound_system.h"
 #include "qcommon/q_string.h"
@@ -1234,7 +1236,8 @@ LRESULT CALLBACK MainWndProc(HWND window, UINT message,
         registeredMouseWheelMessage =
             RegisterWindowMessageA("MSWHEEL_ROLLMSG");
 
-        if (r_fullscreen->integer == 1 &&
+        if ((r_fullscreen->integer == CODUOMP_WINDOW_MODE_FULLSCREEN ||
+             r_fullscreen->integer == CODUOMP_WINDOW_MODE_EXCLUSIVE) &&
             win_allowAltTab->integer == 0) {
             WIN_DisableAltTab();
         } else {
@@ -1245,7 +1248,8 @@ LRESULT CALLBACK MainWndProc(HWND window, UINT message,
     case WM_DESTROY:
         coduomp_win32_raw_input_window_destroyed();
         win32MainWindow = NULL;
-        if (r_fullscreen->integer == 1)
+        if (r_fullscreen->integer == CODUOMP_WINDOW_MODE_FULLSCREEN ||
+            r_fullscreen->integer == CODUOMP_WINDOW_MODE_EXCLUSIVE)
             WIN_EnableAltTab();
         break;
 
@@ -1277,6 +1281,9 @@ LRESULT CALLBACK MainWndProc(HWND window, UINT message,
         AppActivate(
             LOWORD((DWORD_PTR)wParam) != WA_INACTIVE ? qtrue : qfalse,
             (qboolean)HIWORD((DWORD_PTR)wParam));
+        /* NOT_FROM_ORIGINAL_SOURCE: preserve desktop access when switching
+         * away from the optional exclusive display mode. */
+        coduomp_glw_exclusive_focus_changed_compat(sysWindowActive);
         break;
 
     case WM_CLOSE:
