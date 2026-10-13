@@ -419,7 +419,17 @@ static float bg_compat_trajectory_delta_time(
     int32_t deltaMsec = coduo_int32_from_bits(
         (uint32_t)atTime - (uint32_t)trajectory->trTime);
 
-    return (float)deltaMsec * TRAJECTORY_MSEC_TO_SEC;
+    /* Linux game 0x20601..0x20609 rounds seconds to binary32 before gravity
+     * consumes them. Keep the signed integer exact until that store, and do
+     * not let an i386 float return carry an unrounded x87 value to its caller. */
+#if EMULATE_X87
+    return x87f_store_f32(x87f_mul(x87f_load_i32(deltaMsec),
+                                  x87f_load_f32(TRAJECTORY_MSEC_TO_SEC)));
+#else
+    volatile float deltaTime = (float)((long double)deltaMsec * (long double)TRAJECTORY_MSEC_TO_SEC);
+
+    return deltaTime;
+#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local factoring for trajectory stop-time clamp. */
