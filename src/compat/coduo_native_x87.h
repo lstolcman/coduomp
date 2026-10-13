@@ -384,7 +384,9 @@ coduo_x87_fistp_i32(long double value)
 
 /* NOT_FROM_ORIGINAL_SOURCE: binary32-load companion for original
  * `FLD m32; FISTP m32` paths. Native Intel builds retain both operand widths
- * and obey the active x87 rounding mode. */
+ * and obey the active x87 rounding mode. Portable builds preserve the signed
+ * 32-bit conversion range and integer-indefinite result independently of the
+ * host's long width. */
 static CODUO_X87_ALWAYS_INLINE int32_t
 coduo_x87_fistp_f32_i32(float value)
 {
@@ -399,7 +401,7 @@ coduo_x87_fistp_f32_i32(float value)
                          : "st");
     return result;
 #else
-    return (int32_t)lrintf(value);
+    return coduo_x87_fistp_i32((long double)value);
 #endif
 }
 

@@ -2149,8 +2149,9 @@ void RB_CalcCubeMapNegateTexCoords(vec3_t textureCoords[])
 /* Source: CoDUOMP.exe 0x005214f0..0x00521573.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_005214f0_00521574.mcode.
  * Name: exact same-module Mac symbol RB_CalcStretchTexCoords. The waveform
- * table coordinate is stored to float before the original x87 FISTP; lrintf
- * retains that current-rounding-mode conversion on portable hosts. */
+ * table coordinate is stored to float before the original signed-dword x87
+ * FISTP, which retains the active rounding mode and returns integer-indefinite
+ * when the coordinate is outside the signed 32-bit range. */
 void RB_CalcStretchTexCoords(const waveForm_t *waveform,
                              vec2_t textureCoords[])
 {
@@ -2160,7 +2161,7 @@ void RB_CalcStretchTexCoords(const waveForm_t *waveform,
     const float tableCoordinate = (float)(
         ((long double)tess.shaderTime * waveform->frequency +
          waveform->phase) * 1024.0f);
-    const int32_t tableIndex = (int32_t)lrintf(tableCoordinate) & 1023;
+    const int32_t tableIndex = RB_X87RoundFloatToInt(tableCoordinate) & 1023;
     const long double stretch =
         (long double)1.0f /
         ((long double)waveTable[tableIndex] * waveform->amplitude +
