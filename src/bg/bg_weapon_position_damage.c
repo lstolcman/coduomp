@@ -240,15 +240,20 @@ void BG_CalculateWeaponPosition_DamageKick(pm_weapon_angle_state_t *state,
 #if EMULATE_X87
         const float leanArg = x87f_store_f32(x87f_div(
             x87f_load_f32(elapsed), x87f_load_f32(fadeInTime)));
+#else
+        const float leanArg = elapsed / fadeInTime;
+#endif
+        /* The fade-in curve is stored before the separate scale multiply. */
+        const float leanPhase = GetLeanFraction(leanArg);
+#if EMULATE_X87
         bg_compat_add_view_kick_angles(
             state, angles,
             x87f_store_f32(x87f_mul(
-                bg_compat_get_lean_fraction_x87(leanArg),
+                x87f_load_f32(leanPhase),
                 x87f_load_f32(scale))));
 #else
         bg_compat_add_view_kick_angles(
-            state, angles,
-            GetLeanFraction(elapsed / fadeInTime) * scale);
+            state, angles, leanPhase * scale);
 #endif
     } else {
         float fadeOutFraction;
@@ -275,8 +280,9 @@ void BG_CalculateWeaponPosition_DamageKick(pm_weapon_angle_state_t *state,
                 x87f_load_f32(1.0f),
                 bg_compat_get_lean_fraction_x87(leanArg)));
 #else
-            fadeOutLean =
-                1.0f - GetLeanFraction(1.0f - fadeOutFraction);
+            /* Keep the live curve through subtraction on float-return ABIs. */
+            const float leanArg = 1.0f - fadeOutFraction;
+            fadeOutLean = (float)(1.0L - (2.0L - (long double)fabsf(leanArg)) * (long double)leanArg);
 #endif
             bg_compat_add_view_kick_angles(
                 state, angles, fadeOutLean * scale);
