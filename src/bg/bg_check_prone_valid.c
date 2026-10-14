@@ -250,12 +250,15 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
 
             if (trace.fraction < BG_PRONE_TRACE_FULL_FRACTION) {
                 blockedForward = qtrue;
-                frontClearance = (float)(
-                    (long double)trace.fraction *
-                        (long double)traceDistance +
-                    BG_PRONE_TRACE_RADIUS);
-                if ((long double)frontClearance <
-                    (long double)minimumForwardClearance) {
+                long double retryClearance =
+                    (long double)trace.fraction * (long double)traceDistance + BG_PRONE_TRACE_RADIUS;
+                frontClearance = (float)retryClearance;
+                /* Windows compares the live sum after storing a float copy;
+                 * Linux reloads the stored clearance before comparing. */
+#if !defined(WINDOWS_BEHAVIOR)
+                retryClearance = frontClearance;
+#endif
+                if (retryClearance < (long double)minimumForwardClearance) {
                     BG_PRONE_DEBUG_LINE(start, trace.endpos,
                                         BG_PRONE_DEBUG_RED);
                     return 0;
