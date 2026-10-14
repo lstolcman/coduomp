@@ -33,6 +33,8 @@
 #error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
 #endif
 
+#define PLAYER_LEAN_SWING_FRACTION 0.925f
+
 enum {
     CONTROL_TAG_DEBUG_YAW_POSITIVE = 4,
     CONTROL_TAG_DEBUG_ROLL = 5,
@@ -281,9 +283,9 @@ void BG_Player_DoControllersInternal(clientInfo_t *anim,
 #if EMULATE_X87
     float leanSwing = x87f_store_f32(x87f_mul(
         x87f_mul(x87f_load_f32(leanPhase), x87f_load_f32(50.0f)),
-        x87f_load_f32(0.925f)));
+        x87f_load_f32(PLAYER_LEAN_SWING_FRACTION)));
 #else
-    float leanSwing = (float)((long double)leanPhase * 50.0L * 0.925L);
+    float leanSwing = (float)((long double)leanPhase * 50.0L * (long double)PLAYER_LEAN_SWING_FRACTION);
 #endif
 #else
     float leanSwing = (float)((long double)leanPhase * 46.25L);

@@ -225,15 +225,20 @@ void BG_CalculateView_DamageKick(bg_view_angle_state_t *state,
         const float leanArg = x87f_store_f32(x87f_div(
             x87f_load_f32(elapsed),
             x87f_load_f32(VIEWKICK_FADE_IN_MS)));
+#else
+        const float leanArg = elapsed / VIEWKICK_FADE_IN_MS;
+#endif
+        /* The fade-in curve is stored before the separate scale multiply. */
+        const float leanPhase = GetLeanFraction(leanArg);
+#if EMULATE_X87
         bg_compat_add_view_kick_pitch_roll(
             state, angles,
             x87f_store_f32(x87f_mul(
-                bg_compat_view_lean_fraction_x87(leanArg),
+                x87f_load_f32(leanPhase),
                 x87f_load_f32(scale))));
 #else
         bg_compat_add_view_kick_pitch_roll(
-            state, angles,
-            GetLeanFraction(elapsed / VIEWKICK_FADE_IN_MS) * scale);
+            state, angles, leanPhase * scale);
 #endif
     } else {
         float fadeOutFraction;
@@ -261,8 +266,9 @@ void BG_CalculateView_DamageKick(bg_view_angle_state_t *state,
                 x87f_load_f32(1.0f),
                 bg_compat_view_lean_fraction_x87(leanArg)));
 #else
-            fadeOutLean =
-                1.0f - GetLeanFraction(1.0f - fadeOutFraction);
+            /* Keep the live curve through subtraction on float-return ABIs. */
+            const float leanArg = 1.0f - fadeOutFraction;
+            fadeOutLean = (float)(1.0L - (2.0L - (long double)fabsf(leanArg)) * (long double)leanArg);
 #endif
             bg_compat_add_view_kick_pitch_roll(
                 state, angles, fadeOutLean * scale);
