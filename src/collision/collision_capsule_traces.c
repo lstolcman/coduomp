@@ -36,52 +36,47 @@ void CM_TestCapsuleInCapsule(
     traceWork_t *traceWork)
 {
     vec3_t startOffsetMax;
-    vec3_t startOffsetMin;
     vec3_t boxCenter;
-    vec3_t boxMaxsFromCenter;
 
     for (int32_t axis = 0; axis < 3; ++axis) {
         startOffsetMax[axis] =
             traceWork->start[axis] +
             traceWork->sphere.offset[axis];
-        startOffsetMin[axis] =
-            traceWork->start[axis] -
-            traceWork->sphere.offset[axis];
         boxCenter[axis] =
             (cm_boxModel.mins[axis] +
              cm_boxModel.maxs[axis]) *
             0.5f;
-        boxMaxsFromCenter[axis] =
-            cm_boxModel.maxs[axis] -
-            boxCenter[axis];
     }
 
-    const float lowerZFromCenter =
-        boxMaxsFromCenter[0] >
-                boxMaxsFromCenter[2]
-            ? boxMaxsFromCenter[2]
-            : boxMaxsFromCenter[0];
-    const float verticalSpan =
-        boxMaxsFromCenter[2] -
-        lowerZFromCenter;
-    const float expandedRadius =
-        traceWork->sphere.radius +
-        lowerZFromCenter;
-    const float radiusSquared =
-        expandedRadius * expandedRadius;
+    /* The lower cap's X offset stays live through the center subtraction;
+     * its Y and Z coordinates have already been stored as floats. */
+    const long double startOffsetMinXRaw =
+        (long double)traceWork->start[0] - traceWork->sphere.offset[0];
+    const float startOffsetMinY = traceWork->start[1] - traceWork->sphere.offset[1];
+    const float startOffsetMinZ = traceWork->start[2] - traceWork->sphere.offset[2];
 
-    vec3_t tempPoint = {
-        boxCenter[0],
-        boxCenter[1],
-        boxCenter[2] + verticalSpan
-    };
+    /* Radius selection retains the X extent, and the expanded radius is
+     * squared before its first float store. */
+    const long double boxMaxXRaw = (long double)cm_boxModel.maxs[0] - boxCenter[0];
+    const float boxMaxZ = cm_boxModel.maxs[2] - boxCenter[2];
+    const long double capsuleRadiusRaw = boxMaxXRaw > boxMaxZ ? boxMaxZ : boxMaxXRaw;
+    const float verticalSpan = (float)((long double)boxMaxZ - capsuleRadiusRaw);
+    const long double expandedRadiusRaw = capsuleRadiusRaw + traceWork->sphere.radius;
+    const float radiusSquared = (float)(expandedRadiusRaw * expandedRadiusRaw);
+
+    const long double maxDeltaXRaw = (long double)boxCenter[0] - startOffsetMax[0];
+    const long double maxDeltaYRaw = (long double)boxCenter[1] - startOffsetMax[1];
+    const float minDeltaX = (float)((long double)boxCenter[0] - startOffsetMinXRaw);
+    const long double minDeltaYRaw = (long double)boxCenter[1] - startOffsetMinY;
+    float capZ = boxCenter[2] + verticalSpan;
 
     for (int32_t cap = 0; cap < 2; ++cap) {
-        const float *const startOffset =
-            cap == 0 ? startOffsetMax : startOffsetMin;
+        const long double deltaX = cap == 0 ? maxDeltaXRaw : minDeltaX;
+        const long double deltaY = cap == 0 ? maxDeltaYRaw : minDeltaYRaw;
+        const long double deltaZ =
+            (long double)capZ - (cap == 0 ? startOffsetMax[2] : startOffsetMinZ);
         const long double distanceSquared =
-            CM_DistanceSquared(
-                tempPoint, startOffset);
+            (deltaZ * deltaZ + deltaY * deltaY) + deltaX * deltaX;
         if (distanceSquared < radiusSquared) {
             traceWork->trace.allsolid = qtrue;
             traceWork->trace.startsolid = qtrue;
@@ -89,14 +84,18 @@ void CM_TestCapsuleInCapsule(
         }
     }
 
-    tempPoint[2] =
-        boxCenter[2] - verticalSpan;
+    capZ = boxCenter[2] - verticalSpan;
+    /* Against the lower stationary cap, the upper moving cap reloads its
+     * saved X/Y differences. The lower moving cap retains Y and reloads X. */
+    const float maxDeltaX = (float)maxDeltaXRaw;
+    const float maxDeltaY = (float)maxDeltaYRaw;
     for (int32_t cap = 0; cap < 2; ++cap) {
-        const float *const startOffset =
-            cap == 0 ? startOffsetMax : startOffsetMin;
+        const long double deltaX = cap == 0 ? maxDeltaX : minDeltaX;
+        const long double deltaY = cap == 0 ? maxDeltaY : minDeltaYRaw;
+        const long double deltaZ =
+            (long double)capZ - (cap == 0 ? startOffsetMax[2] : startOffsetMinZ);
         const long double distanceSquared =
-            CM_DistanceSquared(
-                tempPoint, startOffset);
+            (deltaZ * deltaZ + deltaY * deltaY) + deltaX * deltaX;
         if (distanceSquared < radiusSquared) {
             traceWork->trace.allsolid = qtrue;
             traceWork->trace.startsolid = qtrue;
@@ -104,20 +103,16 @@ void CM_TestCapsuleInCapsule(
         }
     }
 
-    const float startZDelta =
-        traceWork->start[2] - boxCenter[2];
-    const float cylinderHalfHeight =
-        verticalSpan +
+    const long double startZDelta =
+        (long double)traceWork->start[2] - boxCenter[2];
+    const long double cylinderHalfHeight =
+        (long double)verticalSpan +
         traceWork->sphere.halfheight -
         traceWork->sphere.radius;
     if (startZDelta <= cylinderHalfHeight &&
         -cylinderHalfHeight <= startZDelta) {
-        tempPoint[2] = 0.0f;
-        startOffsetMax[2] = 0.0f;
-
         const long double distanceSquared =
-            CM_DistanceSquared(
-                startOffsetMax, tempPoint);
+            maxDeltaYRaw * maxDeltaYRaw + maxDeltaXRaw * maxDeltaXRaw;
         if (distanceSquared < radiusSquared) {
             traceWork->trace.allsolid = qtrue;
             traceWork->trace.startsolid = qtrue;
@@ -135,21 +130,18 @@ void CM_TestCapsuleInCapsule(
 void CM_TestBoundingBoxInCapsule(
     traceWork_t *traceWork)
 {
-    vec3_t boxCenter;
     vec3_t boxMaxsFromCenter;
 
+    /* Recentring consumes each live center; only the resulting extents and
+     * trace endpoints are rounded to floats. */
     for (int32_t axis = 0; axis < 3; ++axis) {
-        boxCenter[axis] =
-            (cm_boxModel.mins[axis] +
+        const long double centerRaw =
+            ((long double)cm_boxModel.mins[axis] +
              cm_boxModel.maxs[axis]) *
-            0.5f;
-        boxMaxsFromCenter[axis] =
-            cm_boxModel.maxs[axis] -
-            boxCenter[axis];
-        traceWork->start[axis] -=
-            boxCenter[axis];
-        traceWork->end[axis] -=
-            boxCenter[axis];
+            0.5L;
+        boxMaxsFromCenter[axis] = (float)((long double)cm_boxModel.maxs[axis] - centerRaw);
+        traceWork->start[axis] = (float)((long double)traceWork->start[axis] - centerRaw);
+        traceWork->end[axis] = (float)((long double)traceWork->end[axis] - centerRaw);
     }
 
     traceWork->sphere.use = qtrue;
@@ -211,15 +203,12 @@ qboolean CM_TraceSphereThroughSphere(
         traceWork->trace.contents =
             cm_boxBrush->contents;
 
-        for (int32_t axis = 0; axis < 3; ++axis) {
-            delta[axis] =
-                end[axis] -
-                sphereOrigin[axis];
-        }
+        /* Endpoint differences remain wide through the allsolid test. */
+        const long double endDeltaX = (long double)end[0] - sphereOrigin[0];
+        const long double endDeltaY = (long double)end[1] - sphereOrigin[1];
+        const long double endDeltaZ = (long double)end[2] - sphereOrigin[2];
         const long double endDistanceSquaredRaw =
-            ((long double)delta[2] * delta[2] +
-             (long double)delta[1] * delta[1]) +
-            (long double)delta[0] * delta[0];
+            (endDeltaZ * endDeltaZ + endDeltaY * endDeltaY) + endDeltaX * endDeltaX;
         if (endDistanceSquaredRaw <=
             (long double)radiusSquared) {
             traceWork->trace.allsolid = qtrue;
