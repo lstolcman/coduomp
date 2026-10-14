@@ -123,7 +123,15 @@ int32_t XAnimFindShortKey(float frameFrac, const uint16_t *keys,
 void XAnimClearData(DObjAnimMat *part);
 void XAnimDisplay(XAnimTree *tree, uint32_t animIndex, int32_t depth);
 
-float XAnimGetAverageRateFrequency(uint32_t nodeIndex);
+/* The Windows average-rate quotient remains live at PC=53 through recursive
+ * blends and synchronized time updates.  Linux stores it to binary32 before
+ * returning.  Preserve each result across the host's floating return ABI. */
+#if defined(WINDOWS_BEHAVIOR)
+typedef double xanim_rate_frequency_t;
+#else
+typedef float xanim_rate_frequency_t;
+#endif
+xanim_rate_frequency_t XAnimGetAverageRateFrequency(uint32_t nodeIndex);
 qboolean XAnimUpdateInfoNoWeightClient(uint32_t nodeIndex);
 void XAnimAddClientNotify(XAnimInfo *node, XAnimEntry *entry,
                           uint16_t nameHandle, float timeFrac,
