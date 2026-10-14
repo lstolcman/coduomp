@@ -24,7 +24,7 @@
 #define PM_LEAN_RETURN_MSEC 280.0f
 #define PM_LEAN_ENTER_MSEC 350.0f
 /* Exact binary32 values also survive excess-precision literal evaluation. */
-#define PM_LEAN_RETURN_RATE 0.003571428591385483741283416748046875f
+#define PM_LEAN_RETURN_RATE 0.00357142859138548374176025390625f
 #define PM_LEAN_ENTER_RATE 0.00285714282654225826263427734375f
 
 void PM_UpdateLean(playerState_t *ps, const usercmd_t *command,
