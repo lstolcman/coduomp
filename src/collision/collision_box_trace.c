@@ -146,8 +146,38 @@ void CM_TransformedBoxTrace(trace_t *trace,
         (const float (*)[3])matrix;
     if (rotated != qfalse) {
         CreateRotationMatrix(angles, matrix);
+#if defined(WINDOWS_BEHAVIOR)
+        /* Input rotation adds X/Y before Z. Normal rotation below uses the
+         * separate RotatePoint operation order. Preserve the input lanes. */
+        const vec3_t unrotatedStart = {startLocal[0], startLocal[1], startLocal[2]};
+        const vec3_t unrotatedEnd = {endLocal[0], endLocal[1], endLocal[2]};
+        for (int32_t row = 0; row < 3; ++row) {
+#if EMULATE_X87
+            startLocal[row] = x87f_store_f32(x87f_add(
+                x87f_add(
+                    x87f_mul(x87f_load_f32(matrixReadOnly[row][0]), x87f_load_f32(unrotatedStart[0])),
+                    x87f_mul(x87f_load_f32(matrixReadOnly[row][1]), x87f_load_f32(unrotatedStart[1]))),
+                x87f_mul(x87f_load_f32(matrixReadOnly[row][2]), x87f_load_f32(unrotatedStart[2]))));
+            endLocal[row] = x87f_store_f32(x87f_add(
+                x87f_add(
+                    x87f_mul(x87f_load_f32(matrixReadOnly[row][0]), x87f_load_f32(unrotatedEnd[0])),
+                    x87f_mul(x87f_load_f32(matrixReadOnly[row][1]), x87f_load_f32(unrotatedEnd[1]))),
+                x87f_mul(x87f_load_f32(matrixReadOnly[row][2]), x87f_load_f32(unrotatedEnd[2]))));
+#else
+            startLocal[row] = (float)(
+                ((long double)matrixReadOnly[row][0] * unrotatedStart[0] +
+                 (long double)matrixReadOnly[row][1] * unrotatedStart[1]) +
+                (long double)matrixReadOnly[row][2] * unrotatedStart[2]);
+            endLocal[row] = (float)(
+                ((long double)matrixReadOnly[row][0] * unrotatedEnd[0] +
+                 (long double)matrixReadOnly[row][1] * unrotatedEnd[1]) +
+                (long double)matrixReadOnly[row][2] * unrotatedEnd[2]);
+#endif
+        }
+#else
         RotatePoint(startLocal, matrixReadOnly);
         RotatePoint(endLocal, matrixReadOnly);
+#endif
 #if EMULATE_X87
         sphere.sphere.offset[0] = x87f_store_f32(x87f_mul(
             x87f_load_f32(matrix[0][2]),
@@ -343,8 +373,38 @@ int32_t CM_TransformedBoxSightTrace(int32_t previousHit,
         const float (*const matrixReadOnly)[3] =
             (const float (*)[3])matrix;
         CreateRotationMatrix(angles, matrix);
+#if defined(WINDOWS_BEHAVIOR)
+        /* Input rotation adds X/Y before Z, retaining all unrotated lanes
+         * until both endpoints have been transformed. */
+        const vec3_t unrotatedStart = {startLocal[0], startLocal[1], startLocal[2]};
+        const vec3_t unrotatedEnd = {endLocal[0], endLocal[1], endLocal[2]};
+        for (int32_t row = 0; row < 3; ++row) {
+#if EMULATE_X87
+            startLocal[row] = x87f_store_f32(x87f_add(
+                x87f_add(
+                    x87f_mul(x87f_load_f32(matrixReadOnly[row][0]), x87f_load_f32(unrotatedStart[0])),
+                    x87f_mul(x87f_load_f32(matrixReadOnly[row][1]), x87f_load_f32(unrotatedStart[1]))),
+                x87f_mul(x87f_load_f32(matrixReadOnly[row][2]), x87f_load_f32(unrotatedStart[2]))));
+            endLocal[row] = x87f_store_f32(x87f_add(
+                x87f_add(
+                    x87f_mul(x87f_load_f32(matrixReadOnly[row][0]), x87f_load_f32(unrotatedEnd[0])),
+                    x87f_mul(x87f_load_f32(matrixReadOnly[row][1]), x87f_load_f32(unrotatedEnd[1]))),
+                x87f_mul(x87f_load_f32(matrixReadOnly[row][2]), x87f_load_f32(unrotatedEnd[2]))));
+#else
+            startLocal[row] = (float)(
+                ((long double)matrixReadOnly[row][0] * unrotatedStart[0] +
+                 (long double)matrixReadOnly[row][1] * unrotatedStart[1]) +
+                (long double)matrixReadOnly[row][2] * unrotatedStart[2]);
+            endLocal[row] = (float)(
+                ((long double)matrixReadOnly[row][0] * unrotatedEnd[0] +
+                 (long double)matrixReadOnly[row][1] * unrotatedEnd[1]) +
+                (long double)matrixReadOnly[row][2] * unrotatedEnd[2]);
+#endif
+        }
+#else
         RotatePoint(startLocal, matrixReadOnly);
         RotatePoint(endLocal, matrixReadOnly);
+#endif
 #if EMULATE_X87
         sphere.sphere.offset[0] = x87f_store_f32(x87f_mul(
             x87f_load_f32(matrix[0][2]),

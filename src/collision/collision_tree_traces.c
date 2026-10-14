@@ -75,7 +75,7 @@ void CM_PositionTest(
 /* Source: CoDUOMP.exe 0x00427bd0..0x00427eca.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00427bd0_00427ecb.mcode.
  * Name: same-family Linux symbol CM_TraceThroughTree. Recursively split a
- * moving trace at BSP planes, preserving the original z+y+x non-axial dot
+ * moving trace at BSP planes, preserving the original y+z+x non-axial dot
  * product order and the two independently clamped child fractions. */
 void CM_TraceThroughTree(
     traceWork_t *traceWork, int32_t nodeNum,
@@ -104,94 +104,85 @@ void CM_TraceThroughTree(
         const collisionNode_t *const node =
             &cm_nodes[nodeNum];
         const cplane_t *const plane = node->plane;
-        float startDistance;
+        long double startDistanceRaw;
         float endDistance;
-        float offset;
+        long double offsetRaw;
+        const float nonAxialOffset = 2048.0f;
+        const float planePadding = 1.0f;
+        const float splitEpsilon = 0.125f;
 
+        /* The start distance remains live; only the end distance is stored
+         * before the child comparisons and split calculations. */
         if (plane->type < 3) {
-            startDistance =
-                currentStart[plane->type] -
+            startDistanceRaw =
+                (long double)currentStart[plane->type] -
                 plane->dist;
-            endDistance =
-                currentEnd[plane->type] -
-                plane->dist;
-            offset = traceWork->maxs[plane->type];
+            endDistance = (float)((long double)currentEnd[plane->type] - plane->dist);
+            offsetRaw = traceWork->maxs[plane->type];
         } else {
-            startDistance =
-                ((plane->normal[2] * currentStart[2] +
-                  plane->normal[1] * currentStart[1]) +
-                 plane->normal[0] * currentStart[0]) -
+            startDistanceRaw =
+                (((long double)plane->normal[1] * currentStart[1] +
+                  (long double)plane->normal[2] * currentStart[2]) +
+                 (long double)plane->normal[0] * currentStart[0]) -
                 plane->dist;
-            endDistance =
-                ((plane->normal[2] * currentEnd[2] +
-                  plane->normal[1] * currentEnd[1]) +
-                 plane->normal[0] * currentEnd[0]) -
-                plane->dist;
-            offset =
+            endDistance = (float)(
+                (((long double)plane->normal[1] * currentEnd[1] +
+                  (long double)plane->normal[2] * currentEnd[2]) +
+                 (long double)plane->normal[0] * currentEnd[0]) -
+                plane->dist);
+            offsetRaw =
                 traceWork->isPoint == qfalse
-                    ? 2048.0f
+                    ? nonAxialOffset
                     : 0.0f;
         }
 
-        if (startDistance >= offset + 1.0f &&
-            endDistance >= offset + 1.0f) {
+        if (startDistanceRaw >= offsetRaw + planePadding &&
+            (long double)endDistance >= offsetRaw + planePadding) {
             nodeNum = node->children[0];
             continue;
         }
 
-        if (startDistance < -1.0f - offset &&
-            endDistance < -1.0f - offset) {
+        if (startDistanceRaw < -offsetRaw - planePadding &&
+            (long double)endDistance < -offsetRaw - planePadding) {
             nodeNum = node->children[1];
             continue;
         }
 
         int32_t side;
-        float firstFraction;
+        long double firstFractionRaw;
         float secondFraction;
 
-        if (startDistance < endDistance) {
-            const float inverseDistance =
-                1.0f /
-                (startDistance - endDistance);
+        /* The reciprocal and near-child fraction remain wide. The far-child
+         * fraction is rounded before the near-child call. */
+        if (startDistanceRaw < (long double)endDistance) {
+            const long double inverseDistanceRaw = 1.0L / (startDistanceRaw - endDistance);
             side = 1;
-            secondFraction =
-                (startDistance + offset + 0.125f) *
-                inverseDistance;
-            firstFraction =
-                (startDistance - offset + 0.125f) *
-                inverseDistance;
-        } else if (endDistance < startDistance) {
-            const float inverseDistance =
-                1.0f /
-                (startDistance - endDistance);
+            secondFraction = (float)((startDistanceRaw + offsetRaw + splitEpsilon) * inverseDistanceRaw);
+            firstFractionRaw = (startDistanceRaw - offsetRaw + splitEpsilon) * inverseDistanceRaw;
+        } else if ((long double)endDistance < startDistanceRaw) {
+            const long double inverseDistanceRaw = 1.0L / (startDistanceRaw - endDistance);
             side = 0;
-            secondFraction =
-                (startDistance - offset - 0.125f) *
-                inverseDistance;
-            firstFraction =
-                (startDistance + offset + 0.125f) *
-                inverseDistance;
+            secondFraction = (float)((startDistanceRaw - offsetRaw - splitEpsilon) * inverseDistanceRaw);
+            firstFractionRaw = (startDistanceRaw + offsetRaw + splitEpsilon) * inverseDistanceRaw;
         } else {
             side = 0;
-            firstFraction = 1.0f;
+            firstFractionRaw = 1.0L;
             secondFraction = 0.0f;
         }
 
-        if (firstFraction < 0.0f)
-            firstFraction = 0.0f;
-        if (firstFraction > 1.0f)
-            firstFraction = 1.0f;
+        if (firstFractionRaw < 0.0L)
+            firstFractionRaw = 0.0L;
+        if (firstFractionRaw > 1.0L)
+            firstFractionRaw = 1.0L;
 
-        const float firstMidFraction =
-            startFraction +
-            (endFraction - startFraction) *
-                firstFraction;
+        /* Both child intervals consume the same stored fraction span. */
+        const float fractionSpan = (float)((long double)endFraction - startFraction);
+        const float firstMidFraction = (float)((long double)startFraction + fractionSpan * firstFractionRaw);
         vec3_t mid;
         for (int32_t axis = 0; axis < 3; ++axis) {
-            mid[axis] =
-                currentStart[axis] +
-                (currentEnd[axis] - currentStart[axis]) *
-                    firstFraction;
+            mid[axis] = (float)(
+                (long double)currentStart[axis] +
+                ((long double)currentEnd[axis] - currentStart[axis]) * firstFractionRaw);
         }
 
         CM_TraceThroughTree(
@@ -204,15 +195,12 @@ void CM_TraceThroughTree(
         if (secondFraction > 1.0f)
             secondFraction = 1.0f;
 
-        const float secondMidFraction =
-            startFraction +
-            (endFraction - startFraction) *
-                secondFraction;
+        const float secondMidFraction = (float)(
+            (long double)startFraction + (long double)fractionSpan * secondFraction);
         for (int32_t axis = 0; axis < 3; ++axis) {
-            mid[axis] =
-                currentStart[axis] +
-                (currentEnd[axis] - currentStart[axis]) *
-                    secondFraction;
+            mid[axis] = (float)(
+                (long double)currentStart[axis] +
+                ((long double)currentEnd[axis] - currentStart[axis]) * secondFraction);
         }
 
         nodeNum = node->children[side ^ 1];
