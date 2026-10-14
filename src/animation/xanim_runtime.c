@@ -20,7 +20,7 @@ enum {
 
 /* Source: CoDUOMP.exe 0x00498220..0x00498330.
  * Name: same-module Mac symbol XAnimGetAverageRateFrequency. */
-float XAnimGetAverageRateFrequency(uint32_t nodeIndex)
+xanim_rate_frequency_t XAnimGetAverageRateFrequency(uint32_t nodeIndex)
 {
     XAnimEntry *entry =
         &xanim_currentTree->sourceTree->entries[nodeIndex];
@@ -78,8 +78,8 @@ float XAnimGetAverageRateFrequency(uint32_t nodeIndex)
 
 #if defined(WINDOWS_BEHAVIOR)
     return weightSum != 0.0f
-        ? (float)((long double)frequencySum /
-                  (long double)weightSum)
+        ? (double)((long double)frequencySum /
+                   (long double)weightSum)
         : 0.0f;
 #else
     if (weightSum == 0.0f) {
