@@ -49,41 +49,42 @@ qboolean CM_TraceWorkIntersectsBounds(const traceWork_t *traceWork,
     }
 
     vec3_t boundsSize;
-    vec3_t boundsCenterSum;
-    vec3_t traceCenterSum;
-    vec3_t centerDelta;
     vec3_t traceBoundsSize;
     for (int32_t axis = 0; axis < 3; ++axis) {
 #if EMULATE_X87
         boundsSize[axis] = x87f_store_f32(x87f_sub(
             x87f_load_f32(maxs[axis]), x87f_load_f32(mins[axis])));
-        boundsCenterSum[axis] = x87f_store_f32(x87f_add(
-            x87f_load_f32(maxs[axis]), x87f_load_f32(mins[axis])));
-        traceCenterSum[axis] = x87f_store_f32(x87f_add(
-            x87f_load_f32(traceWork->end[axis]),
-            x87f_load_f32(traceWork->start[axis])));
-        centerDelta[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(traceCenterSum[axis]),
-            x87f_load_f32(boundsCenterSum[axis])));
         traceBoundsSize[axis] = x87f_store_f32(x87f_sub(
             x87f_load_f32(traceWork->bounds[1][axis]),
             x87f_load_f32(traceWork->bounds[0][axis])));
 #else
         boundsSize[axis] = maxs[axis] - mins[axis];
-        boundsCenterSum[axis] = maxs[axis] + mins[axis];
-        traceCenterSum[axis] = traceWork->end[axis] + traceWork->start[axis];
-        centerDelta[axis] = traceCenterSum[axis] - boundsCenterSum[axis];
         traceBoundsSize[axis] =
             traceWork->bounds[1][axis] - traceWork->bounds[0][axis];
 #endif
     }
 
+    /* X subtracts two live sums; Y reloads only the trace sum. Z reloads
+     * both sums but retains their difference through the cross products. */
 #if EMULATE_X87
+    const float centerDeltaX = x87f_store_f32(x87f_sub(
+        x87f_add(x87f_load_f32(traceWork->end[0]), x87f_load_f32(traceWork->start[0])),
+        x87f_add(x87f_load_f32(maxs[0]), x87f_load_f32(mins[0]))));
+    const float traceCenterY = x87f_store_f32(x87f_add(
+        x87f_load_f32(traceWork->end[1]), x87f_load_f32(traceWork->start[1])));
+    const float centerDeltaY = x87f_store_f32(x87f_sub(
+        x87f_load_f32(traceCenterY),
+        x87f_add(x87f_load_f32(maxs[1]), x87f_load_f32(mins[1]))));
+    const float boundsCenterZ = x87f_store_f32(x87f_add(
+        x87f_load_f32(maxs[2]), x87f_load_f32(mins[2])));
+    const float traceCenterZ = x87f_store_f32(x87f_add(
+        x87f_load_f32(traceWork->end[2]), x87f_load_f32(traceWork->start[2])));
+    const x87f centerDeltaZRaw = x87f_sub(
+        x87f_load_f32(traceCenterZ), x87f_load_f32(boundsCenterZ));
     const x87f crossX = x87f_sub(
-        x87f_mul(x87f_load_f32(traceWork->delta[1]),
-                 x87f_load_f32(centerDelta[2])),
+        x87f_mul(x87f_load_f32(traceWork->delta[1]), centerDeltaZRaw),
         x87f_mul(x87f_load_f32(traceWork->delta[2]),
-                 x87f_load_f32(centerDelta[1])));
+                 x87f_load_f32(centerDeltaY)));
     const x87f projectedX = x87f_add(
         x87f_mul(x87f_load_f32(boundsSize[1]),
                  x87f_load_f32(traceBoundsSize[2])),
@@ -96,9 +97,8 @@ qboolean CM_TraceWorkIntersectsBounds(const traceWork_t *traceWork,
 
     const x87f crossY = x87f_sub(
         x87f_mul(x87f_load_f32(traceWork->delta[2]),
-                 x87f_load_f32(centerDelta[0])),
-        x87f_mul(x87f_load_f32(traceWork->delta[0]),
-                 x87f_load_f32(centerDelta[2])));
+                 x87f_load_f32(centerDeltaX)),
+        x87f_mul(x87f_load_f32(traceWork->delta[0]), centerDeltaZRaw));
     const x87f projectedY = x87f_add(
         x87f_mul(x87f_load_f32(boundsSize[0]),
                  x87f_load_f32(traceBoundsSize[2])),
@@ -111,9 +111,9 @@ qboolean CM_TraceWorkIntersectsBounds(const traceWork_t *traceWork,
 
     const x87f crossZ = x87f_sub(
         x87f_mul(x87f_load_f32(traceWork->delta[0]),
-                 x87f_load_f32(centerDelta[1])),
+                 x87f_load_f32(centerDeltaY)),
         x87f_mul(x87f_load_f32(traceWork->delta[1]),
-                 x87f_load_f32(centerDelta[0])));
+                 x87f_load_f32(centerDeltaX)));
     const x87f projectedZ = x87f_add(
         x87f_mul(x87f_load_f32(boundsSize[0]),
                  x87f_load_f32(traceBoundsSize[1])),
@@ -124,9 +124,17 @@ qboolean CM_TraceWorkIntersectsBounds(const traceWork_t *traceWork,
         return qfalse;
     }
 #else
+    const float centerDeltaX = (float)(
+        ((long double)traceWork->end[0] + traceWork->start[0]) -
+        ((long double)maxs[0] + mins[0]));
+    const float traceCenterY = (float)((long double)traceWork->end[1] + traceWork->start[1]);
+    const float centerDeltaY = (float)((long double)traceCenterY - ((long double)maxs[1] + mins[1]));
+    const float boundsCenterZ = (float)((long double)maxs[2] + mins[2]);
+    const float traceCenterZ = (float)((long double)traceWork->end[2] + traceWork->start[2]);
+    const long double centerDeltaZRaw = (long double)traceCenterZ - boundsCenterZ;
     const long double crossX =
-        (long double)traceWork->delta[1] * centerDelta[2] -
-        (long double)traceWork->delta[2] * centerDelta[1];
+        (long double)traceWork->delta[1] * centerDeltaZRaw -
+        (long double)traceWork->delta[2] * centerDeltaY;
     const long double projectedX =
         (long double)boundsSize[1] * traceBoundsSize[2] +
         (long double)boundsSize[2] * traceBoundsSize[1];
@@ -135,8 +143,8 @@ qboolean CM_TraceWorkIntersectsBounds(const traceWork_t *traceWork,
     }
 
     const long double crossY =
-        (long double)traceWork->delta[2] * centerDelta[0] -
-        (long double)traceWork->delta[0] * centerDelta[2];
+        (long double)traceWork->delta[2] * centerDeltaX -
+        (long double)traceWork->delta[0] * centerDeltaZRaw;
     const long double projectedY =
         (long double)boundsSize[0] * traceBoundsSize[2] +
         (long double)boundsSize[2] * traceBoundsSize[0];
@@ -145,8 +153,8 @@ qboolean CM_TraceWorkIntersectsBounds(const traceWork_t *traceWork,
     }
 
     const long double crossZ =
-        (long double)traceWork->delta[0] * centerDelta[1] -
-        (long double)traceWork->delta[1] * centerDelta[0];
+        (long double)traceWork->delta[0] * centerDeltaY -
+        (long double)traceWork->delta[1] * centerDeltaX;
     const long double projectedZ =
         (long double)boundsSize[0] * traceBoundsSize[1] +
         (long double)boundsSize[1] * traceBoundsSize[0];
