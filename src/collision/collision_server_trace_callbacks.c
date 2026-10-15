@@ -99,13 +99,22 @@ void SV_PointTraceToEntity(cmPointTraceWork_t *work,
         (gentity->svFlags & SVF_DOBJ_BOUNDS_MASK) != 0U) {
         vec3_t dobjMins;
         vec3_t dobjMaxs;
+        /* Keep the bounds translation across pose calculation; read the
+         * rotation after the game callback. */
+        matrix43_t entityMatrix;
 
         if ((gentity->svFlags & SVF_DOBJ_USE_MODEL_BOUNDS) != 0U) {
             if (DObjHasContents(dobj, work->contentsMask) == qfalse) {
                 return;
             }
+            entityMatrix.origin[0] = gentity->currentOrigin[0];
+            entityMatrix.origin[1] = gentity->currentOrigin[1];
+            entityMatrix.origin[2] = gentity->currentOrigin[2];
             DObjGetBounds(dobj, dobjMins, dobjMaxs);
         } else {
+            entityMatrix.origin[0] = gentity->currentOrigin[0];
+            entityMatrix.origin[1] = gentity->currentOrigin[1];
+            entityMatrix.origin[2] = gentity->currentOrigin[2];
             dobjMins[0] = sv_defaultEntityClipMins[0];
             dobjMins[1] = sv_defaultEntityClipMins[1];
             dobjMins[2] = sv_defaultEntityClipMins[2];
@@ -115,8 +124,8 @@ void SV_PointTraceToEntity(cmPointTraceWork_t *work,
         }
 
         for (int32_t axis = 0; axis < 3; ++axis) {
-            dobjMins[axis] += gentity->currentOrigin[axis];
-            dobjMaxs[axis] += gentity->currentOrigin[axis];
+            dobjMins[axis] += entityMatrix.origin[axis];
+            dobjMaxs[axis] += entityMatrix.origin[axis];
         }
 
         if (CM_TraceLineSkipsBox(work->start, work->end,
@@ -135,11 +144,7 @@ void SV_PointTraceToEntity(cmPointTraceWork_t *work,
                         (intptr_t)0, (intptr_t)0, (intptr_t)0,
                         (intptr_t)0, (intptr_t)0);
 
-        matrix43_t entityMatrix;
         AnglesToAxis(gentity->currentAngles, entityMatrix.axis);
-        entityMatrix.origin[0] = gentity->currentOrigin[0];
-        entityMatrix.origin[1] = gentity->currentOrigin[1];
-        entityMatrix.origin[2] = gentity->currentOrigin[2];
 
         vec3_t localStart;
         vec3_t localEnd;
