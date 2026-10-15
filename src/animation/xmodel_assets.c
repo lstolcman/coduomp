@@ -988,20 +988,34 @@ int32_t XModelTraceLine(const XModel *model,
 
         const DObjSkelMat *pose =
             &basePose[surface->basePoseIndex];
-        vec3_t offsetStart = {
-            start[0] - pose->origin[0],
-            start[1] - pose->origin[1],
-            start[2] - pose->origin[2],
+        /* Keep translation differences wide until the rotated coordinates are
+         * stored. Rounding before rotation can move an endpoint onto a plane. */
+        const long double offsetStart[3] = {
+            (long double)start[0] - pose->origin[0],
+            (long double)start[1] - pose->origin[1],
+            (long double)start[2] - pose->origin[2],
         };
-        vec3_t offsetEnd = {
-            end[0] - pose->origin[0],
-            end[1] - pose->origin[1],
-            end[2] - pose->origin[2],
+        const long double offsetEnd[3] = {
+            (long double)end[0] - pose->origin[0],
+            (long double)end[1] - pose->origin[1],
+            (long double)end[2] - pose->origin[2],
         };
-        vec3_t localStart;
-        vec3_t localEnd;
-        XSurfaceTransformVectorRows43(offsetStart, pose, localStart);
-        XSurfaceTransformVectorRows43(offsetEnd, pose, localEnd);
+        vec3_t localStart = {
+            (float)((offsetStart[0] * pose->axis[0][0] + offsetStart[2] * pose->axis[0][2]) +
+                    offsetStart[1] * pose->axis[0][1]),
+            (float)((offsetStart[2] * pose->axis[1][2] + offsetStart[1] * pose->axis[1][1]) +
+                    offsetStart[0] * pose->axis[1][0]),
+            (float)((offsetStart[0] * pose->axis[2][0] + offsetStart[2] * pose->axis[2][2]) +
+                    offsetStart[1] * pose->axis[2][1]),
+        };
+        vec3_t localEnd = {
+            (float)((offsetEnd[0] * pose->axis[0][0] + offsetEnd[2] * pose->axis[0][2]) +
+                    offsetEnd[1] * pose->axis[0][1]),
+            (float)((offsetEnd[2] * pose->axis[1][2] + offsetEnd[1] * pose->axis[1][1]) +
+                    offsetEnd[0] * pose->axis[1][0]),
+            (float)((offsetEnd[0] * pose->axis[2][0] + offsetEnd[2] * pose->axis[2][2]) +
+                    offsetEnd[1] * pose->axis[2][1]),
+        };
 
         if (CM_TraceLineSkipsBox(
                 localStart, localEnd, surface->expandedMins,
@@ -1131,9 +1145,14 @@ int32_t XModelTraceLine(const XModel *model,
     if (hitPart < 0) {
         return XMODEL_TRACE_NO_HIT;
     }
+    const DObjSkelMat *hitPose = &basePose[hitPart];
     vec3_t worldNormal;
-    XSurfaceTransformNormal43(
-        trace->normal, &basePose[hitPart], worldNormal);
+    for (int32_t axis = 0; axis < 3; ++axis) {
+        worldNormal[axis] = (float)(
+            ((long double)trace->normal[2] * hitPose->axis[2][axis] +
+             (long double)trace->normal[1] * hitPose->axis[1][axis]) +
+            (long double)trace->normal[0] * hitPose->axis[0][axis]);
+    }
     trace->normal[0] = worldNormal[0];
     trace->normal[1] = worldNormal[1];
     trace->normal[2] = worldNormal[2];
