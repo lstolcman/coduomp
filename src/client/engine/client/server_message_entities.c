@@ -968,6 +968,10 @@ void CL_SystemInfoChanged(void)
         referencedPakChecksums, referencedPakNames);
 
     if (sv_running->integer == 0 && systemInfo != NULL) {
+        /* NOT_FROM_ORIGINAL_SOURCE: remote cvars may select a session mod;
+         * local-server systeminfo leaves the manually selected mod owned by
+         * the frontend. */
+        coduomp_client_mark_server_mod();
         const char *cursor = systemInfo;
         char key[CL_SYSTEMINFO_PAIR_CAPACITY];
         char value[CL_SYSTEMINFO_PAIR_CAPACITY];

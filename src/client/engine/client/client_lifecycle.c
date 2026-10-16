@@ -143,6 +143,10 @@ static qboolean cl_shutdownInProgress;
  * independently of optional per-server cache isolation. */
 static char coduomp_clientStartupGame[FS_PACK_NAME_SIZE];
 static qboolean coduomp_clientStartupGameCaptured;
+/* NOT_FROM_ORIGINAL_SOURCE: only remote systeminfo and explicit demo mod
+ * selection arm the reset. Keep this outside clc so disconnected downloads
+ * retain it until their final disconnect, including download failures. */
+static qboolean coduomp_serverModResetArmed;
 /* NOT_FROM_ORIGINAL_SOURCE: frontend startup waits until the command-buffer
  * pass containing the server-mod teardown has finished. */
 static qboolean coduomp_serverModTeardownRestartPending;
@@ -285,7 +289,15 @@ void CL_ClearStaticDownload(void)
     cls.staticDownload.originalDownloadName[0] = '\0';
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: restore the process-start mod at the client
+/* NOT_FROM_ORIGINAL_SOURCE: record session ownership before remote systeminfo
+ * or demo setup can change fs_game. A UI-selected mod and its local listen
+ * server must survive the disconnect used by local map startup. */
+void coduomp_client_mark_server_mod(void)
+{
+    coduomp_serverModResetArmed = qtrue;
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: restore a session-owned mod to the process-start mod at the client
  * boundary shared by manual disconnects, connection errors, demo transitions,
  * and direct server switches. Optional server-cache teardown happens at the
  * same safe filesystem boundary but does not control whether mod reset runs. */
@@ -294,14 +306,18 @@ static void coduomp_client_teardown_server_mod(void)
     const qboolean namespaceActive =
         coduomp_server_namespace_is_active();
     const qboolean serverModActive =
+        coduomp_serverModResetArmed != qfalse &&
         coduomp_clientStartupGameCaptured != qfalse &&
         Q_stricmp(fs_game->string, coduomp_clientStartupGame) != 0
             ? qtrue
             : qfalse;
 
-    if ((namespaceActive == qfalse && serverModActive == qfalse) ||
-        cls.wwwDownloadDisconnected != 0 ||
+    if (cls.wwwDownloadDisconnected != 0 ||
         cl_shutdownInProgress != qfalse) {
+        return;
+    }
+    if (namespaceActive == qfalse && serverModActive == qfalse) {
+        coduomp_serverModResetArmed = qfalse;
         return;
     }
 
@@ -315,6 +331,7 @@ static void coduomp_client_teardown_server_mod(void)
     }
     if (coduomp_clientStartupGameCaptured != qfalse)
         Cvar_Set("fs_game", coduomp_clientStartupGame);
+    coduomp_serverModResetArmed = qfalse;
 
     FS_PureServerSetLoadedPaks("", "");
     FS_PureServerSetReferencedPaks("", "");

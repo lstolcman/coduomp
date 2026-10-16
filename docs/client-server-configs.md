@@ -67,6 +67,9 @@ isolated server namespace and hides cached server mods from the Mods list;
 existing cache files remain on disk. This setting does not control server-mod
 reset: after a server changes `fs_game`, the client independently restores the
 `fs_game` selected during process startup before returning to the main menu.
+Mods selected manually from the Mods menu remain loaded when starting,
+changing maps on, or leaving a local listen server. Remote-session mod reset
+and demo-specific mod selection still restore the process-start game.
 
 These paths and commands are an improved CoDUOMP compatibility feature. They
 are not available in the stock source line.

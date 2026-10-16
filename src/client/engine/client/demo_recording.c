@@ -1672,6 +1672,7 @@ static qboolean coduomp_demo_build_playback_path(
 static void coduomp_demo_activate_cached_mod(
     const char *serverName, const char *modName)
 {
+    coduomp_client_mark_server_mod();
     CL_ShutdownAll();
     Hunk_ClearToStart();
     if (coduomp_server_namespace_activate_cached(serverName) == qfalse) {
@@ -1746,6 +1747,7 @@ static qboolean coduomp_demo_resolve_ordinary_mod(
  * playback. Demo completion restores the process-start fs_game as usual. */
 static void coduomp_demo_activate_ordinary_mod(const char *modPath)
 {
+    coduomp_client_mark_server_mod();
     CL_ShutdownAll();
     Hunk_ClearToStart();
     Cvar_Set("fs_game", modPath);

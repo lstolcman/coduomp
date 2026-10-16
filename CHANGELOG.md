@@ -46,7 +46,7 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Connecting no longer fails with the common `MAX_GAMESTATE_CHARS exceeded` error: the client's retained configstring pool grows from 20,480 to 32,768 bytes, enough for any gamestate a protocol-22 server can physically deliver (a gamestate must fit one 32,768-byte network message, which spends more bytes per configstring than the pool does). The same enlarged pool bounds configstring updates during play, and a server that composes an oversized gamestate logs a clear console warning while behaving exactly as before.
 - Downloads are enabled by default unless the user has explicitly disabled them.
 - Server Cache isolates each remote server's settings and downloaded content so servers cannot overwrite one another's same-named PK3s.
-- Server mod reset independently restores the process-start `fs_game` after disconnecting, including when Server Cache is disabled.
+- Server mod reset independently restores the process-start `fs_game` after disconnecting from a remote session, including when Server Cache is disabled. Manually selected mods remain loaded while starting, changing maps on, or leaving a local listen server.
 - Cached server mods appear in the Mods list, and checksum-matching PK3s from ordinary game roots or other server caches are reused instead of downloaded again. Cache matches may have different filenames or mod directories; the source server's configuration and unrelated content remain isolated.
 - Server Cache can be disabled under **Options -> System -> Advanced**.
 - `promoteserverconfig` saves the current isolated server profile as the global configuration.
