@@ -51,7 +51,7 @@ int32_t server_compat_generate_checksum_feed(void)
     uint32_t checksumHigh;
     uint32_t checksumLow;
 
-    srand(seed);
+    coduo_server_srand(seed);
     checksumTime = (uint32_t)Sys_Milliseconds();
     checksumHigh = (uint32_t)coduo_server_rand() << 16;
     checksumLow = (uint32_t)coduo_server_rand();

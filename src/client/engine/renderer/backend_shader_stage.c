@@ -1120,7 +1120,7 @@ void RB_ChooseSurfaceCountColor(int32_t indexCount, uint8_t color[4])
             ((uint32_t)tess.vertexCount + (uint32_t)indexCount) * 31337u;
         vec3_t randomColor;
 
-        srand(surfaceSeed);
+        coduo_crt_srand(surfaceSeed);
         randomColor[0] = (float)coduo_crt_rand() *
                          0.000030517578125f; /* exact 1/32768 */
         randomColor[1] = (float)coduo_crt_rand() *
@@ -1135,7 +1135,7 @@ void RB_ChooseSurfaceCountColor(int32_t indexCount, uint8_t color[4])
                 (double)scaledComponent +
                 0.00000000093132257461547852); /* exact 2^-30 */
         }
-        srand((uint32_t)savedRandomValue);
+        coduo_crt_srand((uint32_t)savedRandomValue);
     } else if (indexCount <= 30) {
         color[0] = identityLightByte;
         color[1] = identityLightByte;

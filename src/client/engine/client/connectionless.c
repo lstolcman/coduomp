@@ -38,7 +38,7 @@ void CL_CheckAutoUpdate(void)
     if (cls_autoupdateServerResolved != qfalse)
         return;
 
-    srand(Com_Milliseconds());
+    coduo_crt_srand(Com_Milliseconds());
 
     const char *resolvedServerNames[CL_AUTOUPDATE_SERVER_COUNT];
     int32_t resolvedServerCount = 0;

@@ -442,7 +442,7 @@ void G_InitGame(int levelTimeIn, int randomSeed, int restart,
     G_Printf("gamename: %s\n", GAME_LOG_DISPLAY_NAME);
     G_Printf("gamedate: %s\n", GAME_LOG_DISPLAY_DATE);
 
-    srand((uint32_t)randomSeed);
+    coduo_server_srand((uint32_t)randomSeed);
     Rand_Init(trap_Milliseconds());
 
     Scr_ParseGameTypeList();
