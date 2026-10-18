@@ -16,6 +16,7 @@
 
 #if defined(_WIN32)
 #include <winsock2.h>
+#include <wsipx.h>
 typedef SOCKET net_socket_handle_t;
 #define NET_INVALID_SOCKET_HANDLE INVALID_SOCKET
 #define NET_CLOSED_SOCKET_HANDLE ((net_socket_handle_t)0)
@@ -118,15 +119,19 @@ static uint8_t sysLocalIpAddresses[
                                                 /* original 0x009cf318 */
 static int32_t sysLocalIpAddressCount;           /* original 0x009cf358 */
 
-/* Winsock's 16-byte SOCKADDR_IPX layout. The modern Unix targets do not
- * expose AF_IPX, but retaining the typed record keeps the recovered Windows
- * conversion honest and lets unsupported IPX addresses remain inert there. */
+/* Winsock owns the 14-byte SOCKADDR_IPX layout. The modern Unix targets do
+ * not expose AF_IPX, but retaining the typed record keeps address conversion
+ * consistent and lets unsupported IPX addresses remain inert there. */
+#if defined(_WIN32)
+typedef SOCKADDR_IPX net_sockaddr_ipx_t;
+#else
 typedef struct net_sockaddr_ipx_s {
-    int16_t family;
-    uint8_t network[4];
-    uint8_t node[6];
-    uint16_t socket;
+    int16_t sa_family;
+    char sa_netnum[4];
+    char sa_nodenum[6];
+    uint16_t sa_socket;
 } net_sockaddr_ipx_t;
+#endif
 
 typedef union net_socket_address_u {
     struct sockaddr generic;
@@ -137,17 +142,17 @@ typedef union net_socket_address_u {
 #if UINTPTR_MAX == UINT32_MAX
 _Static_assert(_Alignof(net_sockaddr_ipx_t) == 2,
                "i386 Winsock IPX address alignment changed");
-_Static_assert(offsetof(net_sockaddr_ipx_t, family) == 0x00,
+_Static_assert(offsetof(net_sockaddr_ipx_t, sa_family) == 0x00,
                "i386 Winsock IPX family moved");
-_Static_assert(offsetof(net_sockaddr_ipx_t, network) == 0x02,
+_Static_assert(offsetof(net_sockaddr_ipx_t, sa_netnum) == 0x02,
                "i386 Winsock IPX network moved");
-_Static_assert(sizeof(((net_sockaddr_ipx_t *)0)->network) == 0x04,
+_Static_assert(sizeof(((net_sockaddr_ipx_t *)0)->sa_netnum) == 0x04,
                "i386 Winsock IPX network extent changed");
-_Static_assert(offsetof(net_sockaddr_ipx_t, node) == 0x06,
+_Static_assert(offsetof(net_sockaddr_ipx_t, sa_nodenum) == 0x06,
                "i386 Winsock IPX node moved");
-_Static_assert(sizeof(((net_sockaddr_ipx_t *)0)->node) == 0x06,
+_Static_assert(sizeof(((net_sockaddr_ipx_t *)0)->sa_nodenum) == 0x06,
                "i386 Winsock IPX node extent changed");
-_Static_assert(offsetof(net_sockaddr_ipx_t, socket) == 0x0c,
+_Static_assert(offsetof(net_sockaddr_ipx_t, sa_socket) == 0x0c,
                "i386 Winsock IPX socket moved");
 _Static_assert(sizeof(net_sockaddr_ipx_t) == 0x0e,
                "i386 Winsock IPX address size changed");
@@ -251,19 +256,19 @@ static void NetadrToSockadr(const netadr_t *address,
         socketAddress->ipv4.sin_port = address->port;
         break;
     case NA_IPX:
-        socketAddress->ipx.family = NET_PLATFORM_AF_IPX;
-        memcpy(socketAddress->ipx.network, address->ipx,
-               sizeof(socketAddress->ipx.network));
-        memcpy(socketAddress->ipx.node,
-               &address->ipx[sizeof(socketAddress->ipx.network)],
-               sizeof(socketAddress->ipx.node));
-        socketAddress->ipx.socket = address->port;
+        socketAddress->ipx.sa_family = NET_PLATFORM_AF_IPX;
+        memcpy(socketAddress->ipx.sa_netnum, address->ipx,
+               sizeof(socketAddress->ipx.sa_netnum));
+        memcpy(socketAddress->ipx.sa_nodenum,
+               &address->ipx[sizeof(socketAddress->ipx.sa_netnum)],
+               sizeof(socketAddress->ipx.sa_nodenum));
+        socketAddress->ipx.sa_socket = address->port;
         break;
     case NA_BROADCAST_IPX:
-        socketAddress->ipx.family = NET_PLATFORM_AF_IPX;
-        memset(socketAddress->ipx.node, UINT8_MAX,
-               sizeof(socketAddress->ipx.node));
-        socketAddress->ipx.socket = address->port;
+        socketAddress->ipx.sa_family = NET_PLATFORM_AF_IPX;
+        memset(socketAddress->ipx.sa_nodenum, UINT8_MAX,
+               sizeof(socketAddress->ipx.sa_nodenum));
+        socketAddress->ipx.sa_socket = address->port;
         break;
     default:
         break;
@@ -283,11 +288,11 @@ static void SockadrToNetadr(const net_socket_address_t *socketAddress,
         memcpy(address->ip, &socketAddress->ipv4.sin_addr,
                sizeof(address->ip));
         address->port = socketAddress->ipv4.sin_port;
-    } else if (socketAddress->ipx.family == NET_PLATFORM_AF_IPX) {
+    } else if (socketAddress->ipx.sa_family == NET_PLATFORM_AF_IPX) {
         address->type = NA_IPX;
-        memcpy(address->ipx, socketAddress->ipx.network,
+        memcpy(address->ipx, socketAddress->ipx.sa_netnum,
                sizeof(address->ipx));
-        address->port = socketAddress->ipx.socket;
+        address->port = socketAddress->ipx.sa_socket;
     }
 }
 
@@ -310,12 +315,12 @@ static qboolean Sys_StringToSockaddr(
     memset(socketAddress, 0, sizeof(*socketAddress));
 
     if (strlen(text) == NET_IPX_TEXT_LENGTH && text[8] == '.') {
-        socketAddress->ipx.family = NET_PLATFORM_AF_IPX;
-        socketAddress->ipx.socket = 0;
+        socketAddress->ipx.sa_family = NET_PLATFORM_AF_IPX;
+        socketAddress->ipx.sa_socket = 0;
 
         /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
         for (size_t index = 0;
-             index < sizeof(socketAddress->ipx.network); ++index) {
+             index < sizeof(socketAddress->ipx.sa_netnum); ++index) {
             char pair[3] = {
                 text[index * 2],
                 text[index * 2 + 1],
@@ -325,11 +330,11 @@ static qboolean Sys_StringToSockaddr(
             if (sscanf(pair, hexadecimalFormat, &value) != 1) {
                 return qfalse;
             }
-            socketAddress->ipx.network[index] = (uint8_t)value;
+            socketAddress->ipx.sa_netnum[index] = (uint8_t)value;
         }
 
         for (size_t index = 0;
-             index < sizeof(socketAddress->ipx.node); ++index) {
+             index < sizeof(socketAddress->ipx.sa_nodenum); ++index) {
             const size_t textOffset =
                 NET_IPX_NODE_TEXT_OFFSET + index * 2;
             char pair[3] = {
@@ -341,7 +346,7 @@ static qboolean Sys_StringToSockaddr(
             if (sscanf(pair, hexadecimalFormat, &value) != 1) {
                 return qfalse;
             }
-            socketAddress->ipx.node[index] = (uint8_t)value;
+            socketAddress->ipx.sa_nodenum[index] = (uint8_t)value;
         }
         return qtrue;
     }
@@ -1239,8 +1244,8 @@ static net_socket_handle_t Sys_OpenIPXSocket(int32_t port)
 
     net_sockaddr_ipx_t address;
     memset(&address, 0, sizeof(address));
-    address.family = NET_PLATFORM_AF_IPX;
-    address.socket =
+    address.sa_family = NET_PLATFORM_AF_IPX;
+    address.sa_socket =
         port == NET_SOCKET_NO_PORT ? 0 : htons((uint16_t)port);
 
     if (bind(
