@@ -83,6 +83,13 @@ make
 The executable is written to `.workbench/build/client/native/CoDUOMP`, and its
 modules are staged under `.workbench/build/client/native/uo/`.
 
+Linux source builds support classic Minizip and Minizip-ng's compatibility
+API. Install the matching development package that provides `minizip.pc`;
+the build uses its installed headers and links its library through
+`pkg-config`. Linux packages do not bundle Minizip. Keep the runtime library
+matched to the implementation used to build the executable: the two providers
+can use the same shared-library name with different public record layouts.
+
 ### macOS application bundle
 
 On Apple Silicon macOS, build a Finder-launchable application and a ZIP for
