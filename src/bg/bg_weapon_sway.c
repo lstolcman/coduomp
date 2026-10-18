@@ -308,7 +308,8 @@ void BG_CalculateWeaponPosition_Sway(const playerState_t *ps,
 #else
     target = yawDelta * horizontalScale;
     error = target - outPosition[1];
-    step = dt * error * lerpSpeed;
+    /* Both products stay wide until the completed smoothing step is stored. */
+    step = (float)((long double)dt * error * lerpSpeed);
     if (fabs((double)error) > BG_SWAY_SNAP_EPSILON &&
         !(fabs((double)step) > fabs((double)error))) {
         outPosition[1] += step;
@@ -318,7 +319,7 @@ void BG_CalculateWeaponPosition_Sway(const playerState_t *ps,
 
     target = pitchDelta * verticalScale;
     error = target - outPosition[2];
-    step = dt * error * lerpSpeed;
+    step = (float)((long double)dt * error * lerpSpeed);
     if (fabs((double)error) > BG_SWAY_SNAP_EPSILON &&
         !(fabs((double)step) > fabs((double)error))) {
         outPosition[2] += step;
@@ -379,11 +380,11 @@ void BG_CalculateWeaponPosition_Sway(const playerState_t *ps,
     }
 #else
     target = pitchDelta * pitchScale;
-    while (target - outAngles[0] > BG_SWAY_HALF_TURN) {
+    while ((long double)target - outAngles[0] > BG_SWAY_HALF_TURN) {
         target -= BG_SWAY_FULL_TURN;
     }
     error = target - outAngles[0];
-    step = dt * error * lerpSpeed;
+    step = (float)((long double)dt * error * lerpSpeed);
     if (fabs((double)error) > BG_SWAY_SNAP_EPSILON &&
         !(fabs((double)step) > fabs((double)error))) {
         outAngles[0] += step;
@@ -392,11 +393,11 @@ void BG_CalculateWeaponPosition_Sway(const playerState_t *ps,
     }
 
     target = yawDelta * yawScale;
-    while (target - outAngles[1] > BG_SWAY_HALF_TURN) {
+    while ((long double)target - outAngles[1] > BG_SWAY_HALF_TURN) {
         target -= BG_SWAY_FULL_TURN;
     }
     error = target - outAngles[1];
-    step = dt * error * lerpSpeed;
+    step = (float)((long double)dt * error * lerpSpeed);
     if (fabs((double)error) > BG_SWAY_SNAP_EPSILON &&
         !(fabs((double)step) > fabs((double)error))) {
         outAngles[1] += step;
