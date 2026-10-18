@@ -41,17 +41,20 @@ void RENDERER_GL_API_CALL GL_LogBegin(uint32_t mode)
 }
 
 /* Source: CoDUOMP.exe 0x004c9bd0..0x004c9c67.
- * Evidence: coduomp/mcode/CoDUOMP/FUN_004c9bd0_004c9c67.mcode. The load from
- * original tr.images at 0x04889b20 proves that image_t begins with the name
- * string passed to fprintf. Texture zero and unregistered texture numbers use
- * va("%u") exactly as the original wrapper does. */
+ * Evidence: coduomp/mcode/CoDUOMP/FUN_004c9bd0_004c9c67.mcode. The indexed
+ * load uses 0x04888b20, 1024 pointer entries before tr.images at 0x04889b20,
+ * to translate the texture ID into an image index. image_t begins with the
+ * name passed to fprintf; the original numeric fallback uses va("%u"). */
 void RENDERER_GL_API_CALL GL_LogBindTexture(uint32_t target,
                                             uint32_t texture)
 {
     const char *textureName;
+    const uint32_t imageIndex = texture - R_IMAGE_FIRST_TEXTURE_ID;
 
-    if (texture != 0 && tr.images[texture] != NULL)
-        textureName = tr.images[texture]->imgName;
+    /* NOT_FROM_ORIGINAL_SOURCE: texture IDs outside the renderer image range
+     * use the numeric fallback without indexing the image table. */
+    if (imageIndex < R_MAX_IMAGES && tr.images[imageIndex] != NULL)
+        textureName = tr.images[imageIndex]->imgName;
     else
         textureName = va("%u", texture);
 
