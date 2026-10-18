@@ -16,11 +16,11 @@ void AUDIO_CALLBACK AIL_set_file_callbacks(
     audio_file_close_callback_t closeCallback,
     audio_file_seek_callback_t seekCallback,
     audio_file_read_callback_t readCallback);
-void AUDIO_CALLBACK AIL_set_redist_directory(const char *directory);
+char * AUDIO_CALLBACK AIL_set_redist_directory(const char *directory);
 int32_t AUDIO_CALLBACK AIL_startup(void);
 void AUDIO_CALLBACK AIL_shutdown(void);
 void AUDIO_CALLBACK AIL_close_3D_provider(audio_provider_t provider);
-void AUDIO_CALLBACK AIL_set_DirectSound_HWND(audio_driver_t driver, audio_window_handle_t windowHandle);
+int32_t AUDIO_CALLBACK AIL_set_DirectSound_HWND(audio_driver_t driver, audio_window_handle_t windowHandle);
 int32_t AUDIO_CALLBACK AIL_WAV_info(const void *fileData, audio_sound_info_t *soundInfo);
 uint32_t AUDIO_CALLBACK AIL_size_processed_digital_audio(
     uint32_t sampleRate, audio_sample_type_t sampleType,
@@ -81,7 +81,7 @@ int32_t AUDIO_CALLBACK AIL_minimum_sample_buffer_size(audio_driver_t driver, int
 uint32_t AUDIO_CALLBACK AIL_sample_position(audio_sample_handle_t sample);
 int32_t AUDIO_CALLBACK AIL_sample_buffer_ready(audio_sample_handle_t sample);
 void AUDIO_CALLBACK AIL_load_sample_buffer(audio_sample_handle_t sample, int32_t bufferIndex, const void *data, int32_t byteCount);
-void AUDIO_CALLBACK AIL_set_3D_sample_info(audio_3d_sample_handle_t sample, const snd_alias_sound_file_t *soundFile);
+int32_t AUDIO_CALLBACK AIL_set_3D_sample_info(audio_3d_sample_handle_t sample, const snd_alias_sound_file_t *soundFile);
 void AUDIO_CALLBACK AIL_set_3D_sample_volume(audio_3d_sample_handle_t sample, float volume);
 void AUDIO_CALLBACK AIL_set_3D_sample_distances(audio_3d_sample_handle_t sample, float maximumDistance, float minimumDistance);
 int32_t AUDIO_CALLBACK AIL_3D_sample_playback_rate(audio_3d_sample_handle_t sample);

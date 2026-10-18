@@ -4,6 +4,7 @@
 
 #include "q_shared.h"
 
+#include "platform/dynamic_library_boundary.h"
 #include "system_localization.h"
 #include "system_process_lock.h"
 
@@ -273,14 +274,13 @@ int32_t Sys_GetPhysicalMemoryMB(void)
     uint64_t totalPhysicalBytes;
 
 #if defined(_WIN32)
-    typedef BOOL (WINAPI *global_memory_status_ex_t)(LPMEMORYSTATUSEX);
+    typedef __typeof__(&GlobalMemoryStatusEx) global_memory_status_ex_t;
     HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
     global_memory_status_ex_t getMemoryStatusEx = NULL;
     uint64_t availableVirtualBytes;
 
     if (kernel32 != NULL) {
-        getMemoryStatusEx = (global_memory_status_ex_t)(uintptr_t)
-            GetProcAddress(kernel32, "GlobalMemoryStatusEx");
+        coduomp_library_symbol(kernel32, "GlobalMemoryStatusEx", &getMemoryStatusEx, sizeof(getMemoryStatusEx));
     }
 
     if (getMemoryStatusEx != NULL) {
