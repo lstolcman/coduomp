@@ -45,13 +45,16 @@ float R_GetLodDist(const trRefEntity_t *entity)
     delta[0] = tr.viewParms.orientation.origin[0] - entity->e.origin[0];
     delta[1] = tr.viewParms.orientation.origin[1] - entity->e.origin[1];
     delta[2] = tr.viewParms.orientation.origin[2] - entity->e.origin[2];
-    /* The PE accumulates Z, then Y, then X on the x87 stack. Keep that
-     * association explicit so host builds do not silently change rounding. */
-    lodDistance = sqrtf((delta[2] * delta[2] +
-                         delta[1] * delta[1]) +
-                        delta[0] * delta[0]);
-    lodDistance = lodDistance * tr.viewParms.lodScale +
-                  tr.viewParms.lodBias;
+    /* The PE accumulates Z, then Y, then X on the x87 stack without a
+     * binary32 spill before the square root. It rounds the distance before
+     * applying scale/bias, then rounds again before the optional division. */
+    lodDistance = (float)sqrtl(
+        ((long double)delta[2] * delta[2] +
+         (long double)delta[1] * delta[1]) +
+        (long double)delta[0] * delta[0]);
+    lodDistance = (float)(
+        (long double)lodDistance * tr.viewParms.lodScale +
+        (long double)tr.viewParms.lodBias);
     if (entity->e.nonNormalizedAxes != 0.0f)
         lodDistance /= entity->e.nonNormalizedAxes;
     return lodDistance;
