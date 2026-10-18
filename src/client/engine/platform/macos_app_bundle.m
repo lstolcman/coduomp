@@ -2,9 +2,12 @@
 
 #include "macos_app_bundle.h"
 
+#include <stdio.h>
 #include <string.h>
+#include <sys/resource.h>
 
 enum {
+    CODUOMP_MACOS_OPEN_FILE_TARGET = 4096,
     CODUOMP_MACOS_PATH_CAPACITY = 4096,
     CODUOMP_MACOS_STEAM_SEARCH_DEPTH = 5
 };
@@ -16,6 +19,30 @@ static char coduompMacOSResourcesPath[CODUOMP_MACOS_PATH_CAPACITY];
 static char coduompMacOSFrameworksPath[CODUOMP_MACOS_PATH_CAPACITY];
 static int coduompMacOSBundlePathsInitialized;
 static int coduompMacOSIsApplicationBundle;
+
+/* NOT_FROM_ORIGINAL_SOURCE: macOS can inherit a 256-descriptor soft limit.
+ * Keep room for archive handles and filesystem restarts before opening game
+ * data, without lowering an existing limit or changing the hard limit. */
+static void coduomp_macos_raise_open_file_limit(void)
+{
+    struct rlimit limits;
+    rlim_t target = CODUOMP_MACOS_OPEN_FILE_TARGET;
+
+    if (getrlimit(RLIMIT_NOFILE, &limits) != 0) {
+        perror("CoDUOMP: cannot read open-file limit");
+        return;
+    }
+    if (limits.rlim_cur >= target)
+        return;
+    if (limits.rlim_max < target)
+        target = limits.rlim_max;
+    if (limits.rlim_cur >= target)
+        return;
+
+    limits.rlim_cur = target;
+    if (setrlimit(RLIMIT_NOFILE, &limits) != 0)
+        perror("CoDUOMP: cannot raise open-file limit");
+}
 
 /* NOT_FROM_ORIGINAL_SOURCE: copy a Foundation filesystem representation into
  * the engine's stable C-string storage without publishing a partial path. */
@@ -377,10 +404,13 @@ static int coduomp_macos_has_command_line_cd_path(int argc,
     return 0;
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: resolve and persist the user-owned retail data
- * root before the recovered engine initializes its filesystem cvars. */
+/* NOT_FROM_ORIGINAL_SOURCE: prepare the process file limit, then resolve and
+ * persist the user-owned retail data root before the recovered engine
+ * initializes its filesystem cvars. */
 int coduomp_macos_prepare_launch(int argc, char *const argv[])
 {
+    coduomp_macos_raise_open_file_limit();
+
     @autoreleasepool {
         NSUserDefaults *defaults;
         NSString *savedPath;
