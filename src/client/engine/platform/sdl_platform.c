@@ -164,7 +164,7 @@ qboolean CoduoSDL_CreateOpenGLWindow(int32_t width, int32_t height,
 
         /* NOT_FROM_ORIGINAL_SOURCE: exclusive mode switches the selected
          * display to the requested resolution. Reject unavailable modes
-         * instead of silently selecting a different render size or refresh. */
+         * instead of silently selecting a different output size or refresh. */
         requestedMode.w = width;
         requestedMode.h = height;
         requestedMode.refresh_rate = refreshRate;

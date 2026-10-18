@@ -193,7 +193,7 @@ and **Resolution**, then apply the settings to restart the renderer.
 | Windowed | `0` | A decorated window on the selected monitor. |
 | Fullscreen | `1` | The existing desktop fullscreen mode; the desktop resolution stays unchanged. |
 | Borderless | `2` | A borderless window covering the selected monitor. |
-| Exclusive Fullscreen | `3` | Switches the selected monitor to the requested resolution, with `r_displayRefresh` selecting a refresh rate when nonzero. |
+| Exclusive Fullscreen | `3` | Switches the selected monitor to the requested resolution (native display resolution with Fit Screen), with `r_displayRefresh` selecting a refresh rate when nonzero. |
 
 The default remains Fullscreen. `r_display` selects the monitor from zero;
 for example, `set r_display 1`, `set r_fullscreen 3`, then `vid_restart` uses
@@ -211,7 +211,11 @@ The **Gameplay View** selector also applies on a renderer restart:
 | Fit Screen | `2` | Uses the full screen and the original stretched HUD/menu canvas, including when the selected resolution has a different aspect ratio from the display. |
 
 Fit Screen uses the original horizontal FOV default without widescreen
-widening. Its selection persists when switching mods.
+widening. In Exclusive Fullscreen, the game still renders at the selected
+resolution and stretches that image into the display's native resolution;
+this also prevents the display itself from adding bars around a 4:3 mode.
+If the native resolution cannot be queried, the desktop resolution is used.
+Its selection persists when switching mods.
 
 #### macOS Wi-Fi latency
 

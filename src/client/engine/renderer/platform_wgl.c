@@ -987,6 +987,13 @@ renderer_mode_set_result_t GLW_SetMode(
         coduomp_glw_get_native_display_mode_compat(
             &currentDisplayWidth, &currentDisplayHeight,
             &currentDisplayAspect, &currentDisplayRefreshRate);
+    /* NOT_FROM_ORIGINAL_SOURCE: a non-native exclusive display mode can add
+     * hardware scaling bars outside the OpenGL drawable. Fit Screen keeps
+     * the selected render resolution but stretches it into a native-sized
+     * exclusive output. Use the desktop size if the native mode is unknown. */
+    const qboolean stretchExclusiveOutput =
+        windowMode == CODUOMP_WINDOW_MODE_EXCLUSIVE &&
+        r_aspectMode != NULL && r_aspectMode->integer == CODUOMP_ASPECT_MODE_FIT_SCREEN;
 
     /* NOT_FROM_ORIGINAL_SOURCE: publish the automatic mode's dimensions so
      * the separately linked UI can derive its effective staged aspect. */
@@ -1071,6 +1078,16 @@ renderer_mode_set_result_t GLW_SetMode(
             return R_MODE_SET_INVALID;
     }
 
+    int32_t outputWindowWidth = glConfig.vidWidth;
+    int32_t outputWindowHeight = glConfig.vidHeight;
+    if (windowMode == CODUOMP_WINDOW_MODE_FULLSCREEN || windowMode == CODUOMP_WINDOW_MODE_BORDERLESS) {
+        outputWindowWidth = rendererWin32DesktopWidth;
+        outputWindowHeight = rendererWin32DesktopHeight;
+    } else if (stretchExclusiveOutput != qfalse) {
+        outputWindowWidth = currentDisplayModeAvailable != qfalse ? currentDisplayWidth : rendererWin32DesktopWidth;
+        outputWindowHeight = currentDisplayModeAvailable != qfalse ? currentDisplayHeight : rendererWin32DesktopHeight;
+    }
+
     /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): desktop fullscreen
      * keeps its selected render surface and composites it into a popup
      * covering the selected desktop. Exclusive fullscreen instead changes
@@ -1081,8 +1098,8 @@ renderer_mode_set_result_t GLW_SetMode(
         coduompRendererExclusiveDesktopMode = windowsDesktopMode;
         coduompRendererExclusiveMode = windowsDesktopMode;
         coduompRendererExclusiveMode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
-        coduompRendererExclusiveMode.dmPelsWidth = (DWORD)glConfig.vidWidth;
-        coduompRendererExclusiveMode.dmPelsHeight = (DWORD)glConfig.vidHeight;
+        coduompRendererExclusiveMode.dmPelsWidth = (DWORD)outputWindowWidth;
+        coduompRendererExclusiveMode.dmPelsHeight = (DWORD)outputWindowHeight;
         if (r_displayRefresh->integer > 0) {
             coduompRendererExclusiveMode.dmFields |= DM_DISPLAYFREQUENCY;
             coduompRendererExclusiveMode.dmDisplayFrequency = (DWORD)r_displayRefresh->integer;
@@ -1094,12 +1111,6 @@ renderer_mode_set_result_t GLW_SetMode(
         }
     }
 
-    int32_t outputWindowWidth = glConfig.vidWidth;
-    int32_t outputWindowHeight = glConfig.vidHeight;
-    if (windowMode == CODUOMP_WINDOW_MODE_FULLSCREEN || windowMode == CODUOMP_WINDOW_MODE_BORDERLESS) {
-        outputWindowWidth = rendererWin32DesktopWidth;
-        outputWindowHeight = rendererWin32DesktopHeight;
-    }
     if (GLW_CreateWindow(
             driverName, outputWindowWidth, outputWindowHeight,
             colorBits, windowMode) == qfalse) {
@@ -1174,6 +1185,10 @@ renderer_mode_set_result_t GLW_SetMode(
              (windowMode == CODUOMP_WINDOW_MODE_BORDERLESS ? "B" : "W")));
     int32_t outputWindowWidth = glConfig.vidWidth;
     int32_t outputWindowHeight = glConfig.vidHeight;
+    if (stretchExclusiveOutput != qfalse) {
+        outputWindowWidth = currentDisplayModeAvailable != qfalse ? currentDisplayWidth : rendererWin32DesktopWidth;
+        outputWindowHeight = currentDisplayModeAvailable != qfalse ? currentDisplayHeight : rendererWin32DesktopHeight;
+    }
     if (GLW_CreateWindow(
             driverName, outputWindowWidth, outputWindowHeight,
             colorBits, windowMode) == qfalse) {
