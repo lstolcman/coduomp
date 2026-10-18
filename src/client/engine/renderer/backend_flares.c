@@ -43,15 +43,11 @@ static renderer_flare_t *rendererActiveFlares;
 static renderer_flare_t *rendererFreeFlares;
 static float rendererSunFlareVisibility;
 
-typedef void (RENDERER_GL_API_CALL *coduomp_gl_gen_queries_t)(
-    int32_t count, uint32_t *queries);
-typedef void (RENDERER_GL_API_CALL *coduomp_gl_delete_queries_t)(
-    int32_t count, const uint32_t *queries);
-typedef void (RENDERER_GL_API_CALL *coduomp_gl_begin_query_t)(
-    uint32_t target, uint32_t query);
-typedef void (RENDERER_GL_API_CALL *coduomp_gl_end_query_t)(uint32_t target);
-typedef void (RENDERER_GL_API_CALL *coduomp_gl_get_query_object_t)(
-    uint32_t query, uint32_t parameter, uint32_t *value);
+typedef __typeof__(&glGenQueries) coduomp_gl_gen_queries_t;
+typedef __typeof__(&glDeleteQueries) coduomp_gl_delete_queries_t;
+typedef __typeof__(&glBeginQuery) coduomp_gl_begin_query_t;
+typedef __typeof__(&glEndQuery) coduomp_gl_end_query_t;
+typedef __typeof__(&glGetQueryObjectuiv) coduomp_gl_get_query_object_t;
 
 typedef struct coduomp_flare_query_state_s {
     uint32_t query[2];
@@ -89,38 +85,22 @@ static qboolean coduomp_flare_query_load_api(void)
     }
 
     coduompFlareQueryApiChecked = qtrue;
-    coduompGlGenQueries =
-        (coduomp_gl_gen_queries_t)qwglGetProcAddress("glGenQueries");
-    coduompGlDeleteQueries =
-        (coduomp_gl_delete_queries_t)qwglGetProcAddress("glDeleteQueries");
-    coduompGlBeginQuery =
-        (coduomp_gl_begin_query_t)qwglGetProcAddress("glBeginQuery");
-    coduompGlEndQuery =
-        (coduomp_gl_end_query_t)qwglGetProcAddress("glEndQuery");
-    coduompGlGetQueryObject =
-        (coduomp_gl_get_query_object_t)
-            qwglGetProcAddress("glGetQueryObjectuiv");
+    CODUOMP_WGL_LOAD_SYMBOL(coduompGlGenQueries, "glGenQueries");
+    CODUOMP_WGL_LOAD_SYMBOL(coduompGlDeleteQueries, "glDeleteQueries");
+    CODUOMP_WGL_LOAD_SYMBOL(coduompGlBeginQuery, "glBeginQuery");
+    CODUOMP_WGL_LOAD_SYMBOL(coduompGlEndQuery, "glEndQuery");
+    CODUOMP_WGL_LOAD_SYMBOL(coduompGlGetQueryObject, "glGetQueryObjectuiv");
 
     if (coduompGlGenQueries == NULL ||
         coduompGlDeleteQueries == NULL ||
         coduompGlBeginQuery == NULL ||
         coduompGlEndQuery == NULL ||
         coduompGlGetQueryObject == NULL) {
-        coduompGlGenQueries =
-            (coduomp_gl_gen_queries_t)
-                qwglGetProcAddress("glGenQueriesARB");
-        coduompGlDeleteQueries =
-            (coduomp_gl_delete_queries_t)
-                qwglGetProcAddress("glDeleteQueriesARB");
-        coduompGlBeginQuery =
-            (coduomp_gl_begin_query_t)
-                qwglGetProcAddress("glBeginQueryARB");
-        coduompGlEndQuery =
-            (coduomp_gl_end_query_t)
-                qwglGetProcAddress("glEndQueryARB");
-        coduompGlGetQueryObject =
-            (coduomp_gl_get_query_object_t)
-                qwglGetProcAddress("glGetQueryObjectuivARB");
+        CODUOMP_WGL_LOAD_SYMBOL(coduompGlGenQueries, "glGenQueriesARB");
+        CODUOMP_WGL_LOAD_SYMBOL(coduompGlDeleteQueries, "glDeleteQueriesARB");
+        CODUOMP_WGL_LOAD_SYMBOL(coduompGlBeginQuery, "glBeginQueryARB");
+        CODUOMP_WGL_LOAD_SYMBOL(coduompGlEndQuery, "glEndQueryARB");
+        CODUOMP_WGL_LOAD_SYMBOL(coduompGlGetQueryObject, "glGetQueryObjectuivARB");
     }
 
     if (coduompGlGenQueries == NULL ||

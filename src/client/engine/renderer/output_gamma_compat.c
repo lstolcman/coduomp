@@ -21,7 +21,6 @@
 #endif
 
 enum {
-    CODUOMP_GL_ALL_ATTRIB_BITS = 0x000fffff,
     CODUOMP_OUTPUT_GAMMA_ENTRY_COUNT = 256,
     CODUOMP_OUTPUT_GAMMA_COMPONENT_COUNT = 4
 };
@@ -53,8 +52,7 @@ static qboolean coduompOutputGammaLutIdentity = qtrue;
 static qboolean coduomp_output_gamma_load_program_functions_compat(void)
 {
 #define CODUOMP_LOAD_ARB_PROGRAM_ENTRY(type_, name_) \
-    rendererGl##name_##Driver = \
-        (type_)qwglGetProcAddress("gl" #name_); \
+    CODUOMP_WGL_LOAD_SYMBOL(rendererGl##name_##Driver, "gl" #name_); \
     qgl##name_ = rendererGl##name_##Driver
 
     if (qwglGetProcAddress == NULL)
@@ -193,7 +191,7 @@ void coduomp_output_gamma_set_lut_compat(
         }
     }
 
-    qglPushAttrib(CODUOMP_GL_ALL_ATTRIB_BITS);
+    qglPushAttrib(GL_ALL_ATTRIB_BITS);
     qglActiveTextureARB(GL_TEXTURE0_ARB + 1);
     if (coduompOutputGammaLutTexture == 0)
         coduompOutputGammaLutTexture = CODUOMP_OUTPUT_GAMMA_LUT_TEXTURE_ID;
@@ -588,7 +586,7 @@ void coduomp_output_gamma_present_compat(void)
         (float)glConfig.vidHeight / (float)textureHeight;
 
     RB_EndMultitexture();
-    qglPushAttrib(CODUOMP_GL_ALL_ATTRIB_BITS);
+    qglPushAttrib(GL_ALL_ATTRIB_BITS);
     qglReadBuffer(GL_BACK);
     if (coduompOutputPresentationTexture == 0)
         coduompOutputPresentationTexture = CODUOMP_OUTPUT_PRESENTATION_TEXTURE_ID;
@@ -742,7 +740,7 @@ qboolean coduomp_capture_presented_frame_compat(
 
     int32_t previousPackAlignment = 4;
     qglGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
-    qglPushAttrib(CODUOMP_GL_ALL_ATTRIB_BITS);
+    qglPushAttrib(GL_ALL_ATTRIB_BITS);
     if (qglActiveTextureARB != NULL)
         qglActiveTextureARB(GL_TEXTURE0_ARB);
     qglBindTexture(GL_TEXTURE_2D, coduompOutputPresentationTexture);
