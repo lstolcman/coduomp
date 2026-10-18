@@ -18,9 +18,11 @@
 #include "system_process_lock.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 enum {
+    SYS_WINDOWS_STDIO_STREAM_TARGET = 2048,
     SYS_COMMAND_LINE_CAPACITY = 1024,
     SYS_CONSOLE_HIDDEN = 0,
     SYS_IDLE_SLEEP_MSEC = 5,
@@ -30,6 +32,17 @@ enum {
 /* Original 0x009cedb0..0x009cf1af. Only WinMain and Com_Init consume this
  * retained copy of the process command line. */
 static char sysCommandLine[SYS_COMMAND_LINE_CAPACITY];
+
+/* NOT_FROM_ORIGINAL_SOURCE: reserve CRT streams for archives and filesystem
+ * restarts before opening game data. MSVCRT supports at most 2048 streams;
+ * preserve a higher limit if a different runtime already provides one. */
+static void coduomp_windows_raise_open_file_limit(void)
+{
+    if (_getmaxstdio() < SYS_WINDOWS_STDIO_STREAM_TARGET &&
+        _setmaxstdio(SYS_WINDOWS_STDIO_STREAM_TARGET) < 0) {
+        perror("CoDUOMP: cannot raise open-file stream limit");
+    }
+}
 
 /* Source: CoDUOMP.exe 0x0046c5c0..0x0046c8d4.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0046c5c0_0046c8d5.mcode and the
@@ -52,6 +65,7 @@ int WINAPI WinMain(HINSTANCE applicationInstance,
      * See coduomp_sys_enable_dpi_awareness. */
     coduomp_sys_enable_dpi_awareness();
     coduomp_restore_retail_x87_precision();
+    coduomp_windows_raise_open_file_limit();
     (void)Sys_InitLocalization();
 
     if (coduo_crt_strnicmp(
@@ -140,11 +154,43 @@ int WINAPI WinMain(HINSTANCE applicationInstance,
 
 #if defined(__APPLE__)
 #include "platform/macos_app_bundle.h"
+#elif defined(__linux__)
+#include <sys/resource.h>
 #endif
 
 enum {
     SYS_NATIVE_COMMAND_LINE_CAPACITY = 8192
 };
+
+#if defined(__linux__)
+enum {
+    SYS_LINUX_OPEN_FILE_TARGET = 4096
+};
+
+/* NOT_FROM_ORIGINAL_SOURCE: Linux sessions can inherit a low descriptor soft
+ * limit. Keep room for archives and filesystem restarts without lowering an
+ * existing limit or changing the inherited hard limit. */
+static void coduomp_linux_raise_open_file_limit(void)
+{
+    struct rlimit limits;
+    rlim_t target = SYS_LINUX_OPEN_FILE_TARGET;
+
+    if (getrlimit(RLIMIT_NOFILE, &limits) != 0) {
+        perror("CoDUOMP: cannot read open-file limit");
+        return;
+    }
+    if (limits.rlim_cur >= target)
+        return;
+    if (limits.rlim_max < target)
+        target = limits.rlim_max;
+    if (limits.rlim_cur >= target)
+        return;
+
+    limits.rlim_cur = target;
+    if (setrlimit(RLIMIT_NOFILE, &limits) != 0)
+        perror("CoDUOMP: cannot raise open-file limit");
+}
+#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: constructs the mutable command string consumed by
  * Com_ParseCommandLine from the native argc/argv process interface. Quoting is
@@ -192,6 +238,8 @@ int main(int argc, char **argv)
 #if defined(__APPLE__)
     if (coduomp_macos_prepare_launch(argc, argv) == 0)
         return EXIT_SUCCESS;
+#elif defined(__linux__)
+    coduomp_linux_raise_open_file_limit();
 #endif
 
     if (Sys_BuildNativeCommandLine(
