@@ -142,71 +142,72 @@ static void RB_BindOptimizedXModelStage(shaderStage_t *stage)
 /* Source: CoDUOMP.exe 0x0051f6f0..0x0051f789.
  * The Windows optimizer uses EAX/ECX/EDI/ESI plus one stack argument.  This
  * portable signature names the same matrix, normal, position, and outputs.
- * The component-specific association below follows the x87 stack exactly. */
+ * The component-specific association below follows the x87 stack exactly;
+ * each coordinate stays wide until its final binary32 output store. */
 static void RB_TransformRigidVertex(
     const DObjSkelMat *matrix,
     const XSurfaceRigidVert *vertex,
     vec3_t outPosition, vec3_t outNormal)
 {
-    outPosition[0] =
-        ((vertex->position[1] * matrix->axis[1][0] +
-          vertex->position[0] * matrix->axis[0][0]) +
-         vertex->position[2] * matrix->axis[2][0]) +
-        matrix->origin[0];
+    outPosition[0] = (float)(
+        (((long double)vertex->position[1] * matrix->axis[1][0] +
+          (long double)vertex->position[0] * matrix->axis[0][0]) +
+         (long double)vertex->position[2] * matrix->axis[2][0]) +
+        matrix->origin[0]);
 #if defined(__APPLE__) && defined(__aarch64__)
     /* NOT_FROM_ORIGINAL_SOURCE: Apple ARM64 evaluates the machine-code-proven
-     * Y/Z operation graphs in parallel. Explicit multiply and add intrinsics
-     * retain the original non-contracted association in each lane. */
-    float32x2_t positionYZ = vmul_n_f32(
-        vld1_f32(&matrix->axis[1][1]), vertex->position[1]);
-    positionYZ = vadd_f32(
+     * Y/Z operation graphs in parallel. Wide multiply and add intrinsics keep
+     * each lane unrounded to binary32 until its final output store. */
+    float64x2_t positionYZ = vmulq_n_f64(
+        vcvt_f64_f32(vld1_f32(&matrix->axis[1][1])), vertex->position[1]);
+    positionYZ = vaddq_f64(
         positionYZ,
-        vmul_n_f32(vld1_f32(&matrix->axis[2][1]),
-                   vertex->position[2]));
-    positionYZ = vadd_f32(
+        vmulq_n_f64(vcvt_f64_f32(vld1_f32(&matrix->axis[2][1])),
+                    vertex->position[2]));
+    positionYZ = vaddq_f64(
         positionYZ,
-        vmul_n_f32(vld1_f32(&matrix->axis[0][1]),
-                   vertex->position[0]));
-    positionYZ = vadd_f32(positionYZ, vld1_f32(&matrix->origin[1]));
-    vst1_f32(&outPosition[1], positionYZ);
+        vmulq_n_f64(vcvt_f64_f32(vld1_f32(&matrix->axis[0][1])),
+                    vertex->position[0]));
+    positionYZ = vaddq_f64(positionYZ, vcvt_f64_f32(vld1_f32(&matrix->origin[1])));
+    vst1_f32(&outPosition[1], vcvt_f32_f64(positionYZ));
 #else
-    outPosition[1] =
-        ((vertex->position[1] * matrix->axis[1][1] +
-          vertex->position[2] * matrix->axis[2][1]) +
-         vertex->position[0] * matrix->axis[0][1]) +
-        matrix->origin[1];
-    outPosition[2] =
-        ((vertex->position[1] * matrix->axis[1][2] +
-          vertex->position[2] * matrix->axis[2][2]) +
-         vertex->position[0] * matrix->axis[0][2]) +
-        matrix->origin[2];
+    outPosition[1] = (float)(
+        (((long double)vertex->position[1] * matrix->axis[1][1] +
+          (long double)vertex->position[2] * matrix->axis[2][1]) +
+         (long double)vertex->position[0] * matrix->axis[0][1]) +
+        matrix->origin[1]);
+    outPosition[2] = (float)(
+        (((long double)vertex->position[1] * matrix->axis[1][2] +
+          (long double)vertex->position[2] * matrix->axis[2][2]) +
+         (long double)vertex->position[0] * matrix->axis[0][2]) +
+        matrix->origin[2]);
 #endif
 
-    outNormal[0] =
-        (vertex->normal[1] * matrix->axis[1][0] +
-         vertex->normal[0] * matrix->axis[0][0]) +
-        vertex->normal[2] * matrix->axis[2][0];
+    outNormal[0] = (float)(
+        ((long double)vertex->normal[1] * matrix->axis[1][0] +
+         (long double)vertex->normal[0] * matrix->axis[0][0]) +
+        (long double)vertex->normal[2] * matrix->axis[2][0]);
 #if defined(__APPLE__) && defined(__aarch64__)
-    float32x2_t normalYZ = vmul_n_f32(
-        vld1_f32(&matrix->axis[0][1]), vertex->normal[0]);
-    normalYZ = vadd_f32(
+    float64x2_t normalYZ = vmulq_n_f64(
+        vcvt_f64_f32(vld1_f32(&matrix->axis[0][1])), vertex->normal[0]);
+    normalYZ = vaddq_f64(
         normalYZ,
-        vmul_n_f32(vld1_f32(&matrix->axis[2][1]),
-                   vertex->normal[2]));
-    normalYZ = vadd_f32(
+        vmulq_n_f64(vcvt_f64_f32(vld1_f32(&matrix->axis[2][1])),
+                    vertex->normal[2]));
+    normalYZ = vaddq_f64(
         normalYZ,
-        vmul_n_f32(vld1_f32(&matrix->axis[1][1]),
-                   vertex->normal[1]));
-    vst1_f32(&outNormal[1], normalYZ);
+        vmulq_n_f64(vcvt_f64_f32(vld1_f32(&matrix->axis[1][1])),
+                    vertex->normal[1]));
+    vst1_f32(&outNormal[1], vcvt_f32_f64(normalYZ));
 #else
-    outNormal[1] =
-        (vertex->normal[0] * matrix->axis[0][1] +
-         vertex->normal[2] * matrix->axis[2][1]) +
-        vertex->normal[1] * matrix->axis[1][1];
-    outNormal[2] =
-        (vertex->normal[0] * matrix->axis[0][2] +
-         vertex->normal[2] * matrix->axis[2][2]) +
-        vertex->normal[1] * matrix->axis[1][2];
+    outNormal[1] = (float)(
+        ((long double)vertex->normal[0] * matrix->axis[0][1] +
+         (long double)vertex->normal[2] * matrix->axis[2][1]) +
+        (long double)vertex->normal[1] * matrix->axis[1][1]);
+    outNormal[2] = (float)(
+        ((long double)vertex->normal[0] * matrix->axis[0][2] +
+         (long double)vertex->normal[2] * matrix->axis[2][2]) +
+        (long double)vertex->normal[1] * matrix->axis[1][2]);
 #endif
 }
 
