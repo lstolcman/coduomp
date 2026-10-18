@@ -1536,7 +1536,7 @@ void CL_SetCGameTime(void)
     }
 
     if (sv_paused->integer != 0 && cl_paused->integer != 0 &&
-        sv_running->integer == 0) {
+        sv_running->integer != 0) {
         return;
     }
 
