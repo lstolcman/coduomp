@@ -11,6 +11,8 @@
 //
 // Original i386 ABI: packed flags/weapon override in EAX; four caller-cleaned
 // stack arguments (cent, model, event, muzzleTagIndex).
+// NOT_FROM_ORIGINAL_SOURCE: presentEffects extends the source call boundary to
+// suppress duplicate audiovisual effects while always processing firing recoil.
 
 #include "../client_recovered.h"
 #include "../globals.h"
@@ -30,7 +32,7 @@ enum {
 
 void CG_FireWeapon(uint32_t packedWeapon, centity_t *cent,
                    entityState_t *model, int32_t event,
-                   int32_t muzzleTagIndex)
+                   int32_t muzzleTagIndex, qboolean presentEffects)
 {
     int32_t weaponIndex = (int32_t)(packedWeapon & ~(uint32_t)CG_FIRE_DRAW_TAG_MODEL);
     qboolean drawTagModel =
@@ -83,13 +85,23 @@ void CG_FireWeapon(uint32_t packedWeapon, centity_t *cent,
         return;
     }
 
-    cent->weaponEffectActive = qtrue;
+    /* NOT_FROM_ORIGINAL_SOURCE: a replay must not re-arm the muzzle-flash latch. */
+    if (presentEffects != qfalse) {
+        cent->weaponEffectActive = qtrue;
+    }
 
     /* Local first-person fire applies random weapon view kick/recoil. */
     if ((cg_snap->ps.playerStateFlags & PSF_PLAYER_ENTITY_MASK) != 0 &&
         (int32_t)model->numberBits == cg_snap->ps.psClientNum) {
         BG_WeaponFireRecoil(&cg_predictedPlayerState, cg_weaponRecoilAngles,
                             cg_viewKickVel);
+    }
+
+    /* NOT_FROM_ORIGINAL_SOURCE: recoil feeds the engine's next usercmd angles.
+     * Keep it outside the audiovisual replay gate; only muzzle, sound, and brass
+     * work remains below this point. */
+    if (presentEffects == qfalse) {
+        return;
     }
 
     /* 0x30047e08..0x30047f0d: choose the DObj context and muzzle tag. Turrets use

@@ -3824,7 +3824,9 @@ void CG_PlaySpinningViewEffect(int effectId);
  * callee ends in a plain RET so the caller cleans that one slot. Provisional
  * caller-observed declaration; superseded by its own .mcode reconstruction.
  */
-void CG_EntityEvent(centity_t *self, int32_t event, int32_t predicted);
+/* NOT_FROM_ORIGINAL_SOURCE: the presentation flag suppresses duplicate weapon
+ * audiovisual effects while preserving firing recoil and other state changes. */
+void CG_EntityEvent(centity_t *self, int32_t event, int32_t predicted, qboolean presentWeaponEffects);
 void CG_Obituary(centity_t *self);
 
 /*
@@ -3861,8 +3863,9 @@ void CG_EntityPreEvent(centity_t *cent, int32_t event, int32_t eventParm);
  * Register/stack ABI (0x30023796/0x300237a2/...): a flags word (carrying bit 0x80) in
  * EAX, and (cent, model, event, mode) as four caller-cleaned stack args pushed
  * cent,model,event,mode right-to-left (so mode is pushed first). Provisional role name. */
+/* NOT_FROM_ORIGINAL_SOURCE: presentEffects gates audiovisual work after recoil. */
 void CG_FireWeapon(uint32_t flags, centity_t *cent,
-                   entityState_t *model, int32_t event, int32_t mode);
+                   entityState_t *model, int32_t event, int32_t mode, qboolean presentEffects);
 void CG_PlayFxOnWeaponTag(qboolean selectViewDObj, int32_t weaponIndex,
                           int32_t model, const vec3_t effectOrigin,
                           const char *tagName, int32_t drawTagModel);

@@ -98,7 +98,7 @@ void CG_EntityPreEvent(centity_t *cent, int32_t event, int32_t eventParm)
     case EV_FIRE_WEAPONC:
     case EV_FIRE_WEAPON_LASTSHOT:
         CG_FireWeapon((uint32_t)eventParm, cent, model, event,
-                                  MODEL_WEAPON_EFFECT_MODE_0);
+                                  MODEL_WEAPON_EFFECT_MODE_0, qtrue);
         return;
 
     /* target[1] (0x30023829): id 167. Play the held weapon's model sound on this
@@ -126,20 +126,20 @@ void CG_EntityPreEvent(centity_t *cent, int32_t event, int32_t eventParm)
         CG_AddCameraShake(cent->lerpOrigin, MODEL_SHAKE_AMPLITUDE,
                           MODEL_SHAKE_DURATION, MODEL_SHAKE_RADIUS);
         CG_FireWeapon(MODEL_WEAPON_EFFECT_FLAG_ALT, cent, model, event,
-                                  MODEL_WEAPON_EFFECT_MODE_0);
+                                  MODEL_WEAPON_EFFECT_MODE_0, qtrue);
         return;
 
     /* target[4] (0x30023796): id 174. Weapon effect run twice, modes 0 then 1, with
      * a zero flags word. */
     case EV_FIRE_QUADBARREL_1:
-        CG_FireWeapon(0u, cent, model, event, MODEL_WEAPON_EFFECT_MODE_0);
-        CG_FireWeapon(0u, cent, model, event, MODEL_WEAPON_EFFECT_MODE_1);
+        CG_FireWeapon(0u, cent, model, event, MODEL_WEAPON_EFFECT_MODE_0, qtrue);
+        CG_FireWeapon(0u, cent, model, event, MODEL_WEAPON_EFFECT_MODE_1, qtrue);
         return;
 
     /* target[5] (0x300237b9): id 175. Weapon effect run twice, modes 2 then 3. */
     case EV_FIRE_QUADBARREL_2:
-        CG_FireWeapon(0u, cent, model, event, MODEL_WEAPON_EFFECT_MODE_2);
-        CG_FireWeapon(0u, cent, model, event, MODEL_WEAPON_EFFECT_MODE_3);
+        CG_FireWeapon(0u, cent, model, event, MODEL_WEAPON_EFFECT_MODE_2, qtrue);
+        CG_FireWeapon(0u, cent, model, event, MODEL_WEAPON_EFFECT_MODE_3, qtrue);
         return;
 
     /* target[6] (0x30023704): id 178. Spawn a bullet/tracer trail between two

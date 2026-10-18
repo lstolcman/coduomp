@@ -29,7 +29,7 @@ void CG_CheckChangedPredictableEvents(playerState_t *ps)
         cg_predictedEventEntity.currentState.eventParm = ps->eventParms[psSlot];
         /* NOT_FROM_ORIGINAL_SOURCE: validate this recovered client-module boundary input and state before use. */
         CG_EntityEvent(&cg_predictedEventEntity,
-                       event, qtrue);
+                       event, qtrue, qtrue);
         int32_t showMiss = cg_showmiss_vmCvar.integer;
         cg_predictedEvents[predictedSlot] = event;
         if (showMiss != 0) {

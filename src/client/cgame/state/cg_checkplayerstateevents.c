@@ -100,7 +100,8 @@ void coduomp_predicted_events_record_command(int32_t commandNumber, int32_t comm
     }
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: suppress only repeated local weapon-FX dispatches; mixed/stateful handlers pass through. */
+/* NOT_FROM_ORIGINAL_SOURCE: identify repeated local weapon audiovisual effects.
+ * The dispatcher still runs firing recoil and every other gameplay state change. */
 static qboolean coduomp_predicted_weapon_fx_should_present(const playerState_t *ps, int32_t sequence)
 {
     unsigned int slot = (uint32_t)sequence & (MAX_PS_EVENTS - 1u);
@@ -201,11 +202,10 @@ void CG_CheckPlayerstateEvents(playerState_t *ps, playerState_t *ops)
         // BEFORE dispatch; 0x30034f0d..0x30034f1c call CG_EntityEvent(self=ECX, event=EAX,
         // predicted=1 on the stack).
         cg_predictedEventEntity.currentState.eventParm = ps->eventParms[ring];
-        /* NOT_FROM_ORIGINAL_SOURCE: skip already presented weapon FX while retaining prediction bookkeeping. */
-        if (coduomp_predicted_weapon_fx_should_present(ps, i)) {
-            /* NOT_FROM_ORIGINAL_SOURCE: validate this recovered client-module boundary input and state before use. */
-            CG_EntityEvent(&cg_predictedEventEntity, event, 1);
-        }
+        /* NOT_FROM_ORIGINAL_SOURCE: suppress already presented audiovisual effects without skipping the event handler. */
+        qboolean presentWeaponEffects = coduomp_predicted_weapon_fx_should_present(ps, i);
+        /* NOT_FROM_ORIGINAL_SOURCE: validate this recovered client-module boundary input and state before use. */
+        CG_EntityEvent(&cg_predictedEventEntity, event, qtrue, presentWeaponEffects);
 
         // 0x30034f23/0x30034f26 cg_predictedEvents[i & 0xf] = event;
         cg_predictedEvents[(int32_t)((uint32_t)i & (MAX_PREDICTED_EVENTS - 1u))] = event;

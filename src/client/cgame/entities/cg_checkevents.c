@@ -48,7 +48,7 @@ void CG_CheckEvents(centity_t *cent)
         CG_CalcEntityLerpPositions(cent);
         // 0x30023907 EAX = eType; 0x3002390f SUB EAX,0x10 -> event = eType - ET_EVENTS;
         // 0x30023914 CALL CG_EntityEvent(cent, event, predicted=0).
-        CG_EntityEvent(cent, cent->currentState.eType - ET_EVENTS, 0);
+        CG_EntityEvent(cent, cent->currentState.eType - ET_EVENTS, 0, qtrue);
         return;
     }
 
@@ -104,7 +104,7 @@ void CG_CheckEvents(centity_t *cent)
             // 0x300239a3 currentState.eventParm = eventParms[ring] for the dispatcher.
             cent->currentState.eventParm = cent->currentState.eventParms[ring];
             // 0x300239a9..0x300239ad CG_EntityEvent(cent, events[ring], predicted=0).
-            CG_EntityEvent(cent, coduo_int32_from_bits(event), 0);
+            CG_EntityEvent(cent, coduo_int32_from_bits(event), 0, qtrue);
             // 0x300239b2 EAX = eventSequence (reloaded); 0x300239bb INC EDI;
             // 0x300239bc CMP EDI,EAX / 0x300239be JNZ loop.
             eventSequenceBits = (uint32_t)cent->currentState.eventSequence;

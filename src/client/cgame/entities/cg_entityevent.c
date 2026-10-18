@@ -158,7 +158,7 @@ static const char *(*const cg_projectileExplosionSurfaceSoundBanks
     [PROJECTILE_EXPLOSION_B17] = &cg_eventSurfaceSounds,
 };
 
-void CG_EntityEvent(centity_t *self, int event, int predicted)
+void CG_EntityEvent(centity_t *self, int event, int predicted, qboolean presentWeaponEffects)
 {
     int eventParm;
     int clientNum;
@@ -192,6 +192,22 @@ void CG_EntityEvent(centity_t *self, int event, int predicted)
         if (cg_debugevents_vmCvar.integer) {
             const char *eventName = cg_eventNames[event];
             Com_PrintMessage("CG_EntityEvent:%s\n", eventName);
+        }
+    }
+
+    /* NOT_FROM_ORIGINAL_SOURCE: only these handlers are entirely audiovisual.
+     * Fire events must reach CG_FireWeapon because their recoil feeds usercmd aim. */
+    if (presentWeaponEffects == qfalse) {
+        switch (event) {
+        case EV_RELOAD:
+        case EV_RELOAD_FROM_EMPTY:
+        case EV_RELOAD_START:
+        case EV_RELOAD_END:
+        case EV_RECHAMBER_WEAPON:
+        case EV_EJECT_BRASS:
+            return;
+        default:
+            break;
         }
     }
 
@@ -602,7 +618,7 @@ void CG_EntityEvent(centity_t *self, int event, int predicted)
             return;
         }
         CG_FireWeapon((uint32_t)self->currentState.eventParm, self,
-                      (entityState_t *)self, event, 0); /* EAX=eventParm */
+                      (entityState_t *)self, event, 0, presentWeaponEffects); /* EAX=eventParm */
         return;
 
     /* 0xae (0x30022fec): if predicted, play weapon foley sets 0 and 1. */
@@ -610,8 +626,8 @@ void CG_EntityEvent(centity_t *self, int event, int predicted)
         if (predicted == 0) {
             return;
         }
-        CG_FireWeapon(0, self, (entityState_t *)self, event, 0);
-        CG_FireWeapon(0, self, (entityState_t *)self, event, 1);
+        CG_FireWeapon(0, self, (entityState_t *)self, event, 0, presentWeaponEffects);
+        CG_FireWeapon(0, self, (entityState_t *)self, event, 1, presentWeaponEffects);
         return;
 
     /* 0xaf (0x3002301b): if predicted, play weapon foley sets 2 and 3. */
@@ -619,8 +635,8 @@ void CG_EntityEvent(centity_t *self, int event, int predicted)
         if (predicted == 0) {
             return;
         }
-        CG_FireWeapon(0, self, (entityState_t *)self, event, 2);
-        CG_FireWeapon(0, self, (entityState_t *)self, event, 3);
+        CG_FireWeapon(0, self, (entityState_t *)self, event, 2, presentWeaponEffects);
+        CG_FireWeapon(0, self, (entityState_t *)self, event, 3, presentWeaponEffects);
         return;
 
     /* 0xa7 (0x3002309d): only when predicted ([ESP+0x2c] gate at 0x300230a1),
