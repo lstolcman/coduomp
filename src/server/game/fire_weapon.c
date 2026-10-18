@@ -15,6 +15,7 @@
 #include "level_locals.h"
 #include "g_syscalls.h"
 #include "game_functions.h"
+#include "compat/coduo_native_x87.h"
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #define MAX_BULLET_RECURSION 13
@@ -23,6 +24,10 @@
 #define WEAPON_SPREAD_PI 3.141592653589793  /* original double64 0x400921fb54442d18 */
 #define WEAPON_SPREAD_DEGREES 180.0         /* original double64 0x4066800000000000 */
 #define DAMAGE_FLAG_RICOCHET 0x20
+#define MUZZLE_ADS_FORWARD_DISTANCE 19.0f
+#define MUZZLE_MIN_VIEW_HEIGHT 8.0f
+#define MUZZLE_BOB_CYCLE_DIVISOR 255.0f
+#define MUZZLE_BOB_PHASE_TWO_PI 6.2831855f
 
 /* NOT_FROM_ORIGINAL_SOURCE: local vector helper factored from recovered fire-weapon bodies. */
 static void game_compat_fire_weapon_vector_copy(const float *src, float *dst)
@@ -703,23 +708,58 @@ void CalcMuzzlePoint(gentity_t *ent, float *muzzlePoint)
             trace_t trace;
 
             AngleVectors(angles, forward, NULL, NULL);
-            game_compat_fire_weapon_vector_ma(muzzlePoint, 19.0f, forward, end);
+            /* Keep the forward offset wide until each endpoint store. */
+#if EMULATE_X87
+            game_compat_fire_weapon_vector_ma(muzzlePoint, MUZZLE_ADS_FORWARD_DISTANCE, forward, end);
+#else
+            for (int i = 0; i < 3; i++) {
+                end[i] = (float)((long double)forward[i] * MUZZLE_ADS_FORWARD_DISTANCE + muzzlePoint[i]);
+            }
+#endif
             trap_Trace(&trace, muzzlePoint, traceMins, traceMaxs, end, ent->s.number,
                        MASK_GRENADE_TRACE);
-            if (trace.startsolid == 0) {
+            /* A trace that exits solid still supplies a usable endpoint. */
+            if (trace.allsolid == 0) {
                 game_compat_fire_weapon_vector_copy(trace.endpos, muzzlePoint);
             }
         }
 
+#if defined(WINDOWS_BEHAVIOR)
+        /* This caller inlines division by 255 before scaling the phase;
+         * the out-of-line BG_GetBobCycle uses a rounded reciprocal instead. */
+        bobCycle = (float)(((long double)(uint8_t)client->ps.bobCycle / MUZZLE_BOB_CYCLE_DIVISOR) * MUZZLE_BOB_PHASE_TWO_PI + MUZZLE_BOB_PHASE_TWO_PI);
+#else
         bobCycle = BG_GetBobCycle(&client->ps);
+#endif
         speed = BG_GetSpeed(&client->ps, level.time);
 
-        muzzlePoint[2] += BG_GetVerticalBobFactor(&client->ps, bobCycle, speed,
-                                                  bg_bobMax.value);
+        /* Both original callers store the vertical bob as binary32 before
+         * adding it to the muzzle height. */
+        float verticalBob = (float)BG_GetVerticalBobFactor(&client->ps, bobCycle, speed, bg_bobMax.value);
+        muzzlePoint[2] += verticalBob;
         {
             vec3_t right;
+#if defined(WINDOWS_BEHAVIOR)
+            /* The inlined Windows path rounds both the scaled amplitude and
+             * sine before multiplying them, unlike the out-of-line helper. */
+            float stanceScale;
+            if (client->ps.viewHeightTarget == client->ps.proneViewHeight) {
+                stanceScale = bg_bobAmplitudeProne.value;
+            } else if (client->ps.viewHeightTarget == client->ps.crouchViewHeight) {
+                stanceScale = bg_bobAmplitudeDucked.value;
+            } else {
+                stanceScale = bg_bobAmplitudeStanding.value;
+            }
+            float amplitude = stanceScale * speed;
+            if (amplitude > bg_bobMax.value) {
+                amplitude = bg_bobMax.value;
+            }
+            float sine = (float)coduo_x87_sinl((long double)bobCycle);
+            float bob = sine * amplitude;
+#else
             float bob = BG_GetHorizontalBobFactor(&client->ps, bobCycle, speed,
                                                   bg_bobMax.value);
+#endif
 
             AngleVectors(client->ps.viewAngles, NULL, right, NULL);
 #if EMULATE_X87
@@ -729,26 +769,33 @@ void CalcMuzzlePoint(gentity_t *ent, float *muzzlePoint)
                     x87f_mul(x87f_load_f32(right[i]), x87f_load_f32(bob))));
             }
 #else
-            muzzlePoint[0] += right[0] * bob;
-            muzzlePoint[1] += right[1] * bob;
-            muzzlePoint[2] += right[2] * bob;
+            muzzlePoint[0] = (float)((long double)right[0] * bob + muzzlePoint[0]);
+            muzzlePoint[1] = (float)((long double)right[1] * bob + muzzlePoint[1]);
+            muzzlePoint[2] = (float)((long double)right[2] * bob + muzzlePoint[2]);
 #endif
         }
 
         G_AddLean(ent, muzzlePoint);
 
-        /* Full-width compare (0x4a3b4 stock: fld TBYTE 8.0; faddp; fcomip, no
-         * float spill) — the psOrigin[2]+8.0 add stays 80-bit, so emulate it.
-         * The store body is a single add stored to float (native-identical). */
+        /* Windows stores origin.z + 8 as binary32 before comparing it.
+         * Linux keeps the sum wide through the comparison and only narrows
+         * the replacement height. */
+#if defined(WINDOWS_BEHAVIOR)
+        float minimumViewZ = client->ps.psOrigin[2] + MUZZLE_MIN_VIEW_HEIGHT;
+        if (muzzlePoint[2] < minimumViewZ) {
+            muzzlePoint[2] = minimumViewZ;
+        }
+#else
 #if EMULATE_X87
         if (x87f_lt(x87f_load_f32(muzzlePoint[2]),
                     x87f_add(x87f_load_f32(client->ps.psOrigin[2]),
-                             x87f_load_f32(8.0f)))) {
+                             x87f_load_f32(MUZZLE_MIN_VIEW_HEIGHT)))) {
 #else
-        if (muzzlePoint[2] < client->ps.psOrigin[2] + 8.0f) {
+        if ((long double)muzzlePoint[2] < (long double)client->ps.psOrigin[2] + MUZZLE_MIN_VIEW_HEIGHT) {
 #endif
-            muzzlePoint[2] = client->ps.psOrigin[2] + 8.0f;
+            muzzlePoint[2] = client->ps.psOrigin[2] + MUZZLE_MIN_VIEW_HEIGHT;
         }
+#endif
     }
 }
 
