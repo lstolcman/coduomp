@@ -3,6 +3,7 @@
 #include "gl_api.h"
 #include "gl_state.h"
 #include "renderer_gpu_profile.h"
+#include "client/common/client_video_settings.h"
 
 #include "../client/debug_lines.h"
 #if defined(__APPLE__) && defined(__aarch64__)
@@ -129,8 +130,9 @@ const void *RB_DrawBuffer(const drawBufferCommand_t *command)
         qglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
-    if ((r_aspectMode != NULL && r_aspectMode->integer != 0) ||
-        (r_uifullscreen != NULL && r_uifullscreen->integer != 0)) {
+    if ((r_aspectMode == NULL || r_aspectMode->integer != CODUOMP_ASPECT_MODE_FIT_SCREEN) &&
+        ((r_aspectMode != NULL && r_aspectMode->integer == CODUOMP_ASPECT_MODE_LETTERBOX) ||
+         (r_uifullscreen != NULL && r_uifullscreen->integer != 0))) {
         /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): erase the complete
          * drawable before classic 4:3 presentation or fullscreen 2D menus
          * restrict their viewport. Native gameplay leaves its full-width 3D

@@ -3,6 +3,7 @@
 
 #include "renderer_api.h"
 #include "../client/widescreen_2d_compat.h"
+#include "client/common/client_video_settings.h"
 
 #include <string.h>
 
@@ -36,7 +37,7 @@ static qboolean coduomp_uses_widescreen_cgame_2d(void)
 {
     if (coduomp_cgame_rendering_compat_active == qfalse ||
         coduomp_cgame_hud_stretch_active != qfalse ||
-        r_aspectMode == NULL || r_aspectMode->integer != 0 ||
+        r_aspectMode == NULL || r_aspectMode->integer != CODUOMP_ASPECT_MODE_WIDESCREEN ||
         glConfig.vidWidth <= 0 || glConfig.vidHeight <= 0) {
         return qfalse;
     }

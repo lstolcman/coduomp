@@ -325,11 +325,13 @@ void R_Register(void)
     AssertCvarRange(r_display, 0.0f, 31.0f, qtrue);
     /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): zero uses the native
      * display aspect; one presents the complete renderer in a fitted 4:3
-     * viewport with black bars. Keep the cgame and renderer presentation
-     * transition atomic by applying it only during a vid_restart. */
+     * viewport with black bars; two stretches the stock canvas to fill the
+     * screen. Keep the cgame and renderer presentation transition atomic by
+     * applying it only during a vid_restart. */
     r_aspectMode =
         ri.Cvar_Get(
             "r_aspectMode", "0", CVAR_ARCHIVE | CVAR_LATCH);
+    AssertCvarRange(r_aspectMode, CODUOMP_ASPECT_MODE_WIDESCREEN, CODUOMP_ASPECT_MODE_FIT_SCREEN, qtrue);
     /* NOT_FROM_ORIGINAL_SOURCE: platform-discovered renderer-mode bits for
      * the separately linked compatibility UI. */
     (void)ri.Cvar_Get("r_availableModes", "0", CVAR_ROM);

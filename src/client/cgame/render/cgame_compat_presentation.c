@@ -1,4 +1,5 @@
 #include "../client_recovered.h"
+#include "client/common/client_video_settings.h"
 #include "compat/coduo_native_x87.h"
 #include "../globals.h"
 
@@ -115,17 +116,21 @@ qboolean cgame_compat_uses_simple_fps_display(void)
                : qfalse;
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: shared policy gate for view-rectangle and FOV
- * compatibility paths. */
+/* NOT_FROM_ORIGINAL_SOURCE: policy gate for the fitted 4:3 view rectangle.
+ * Fit Screen uses the complete drawable without adding presentation bars. */
 qboolean cgame_compat_uses_classic_aspect(void)
 {
-    return cgameCompatAspectMode.integer != 0 ? qtrue : qfalse;
+    return cgameCompatAspectMode.integer == CODUOMP_ASPECT_MODE_LETTERBOX ? qtrue : qfalse;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: resolve the ordinary-2D presentation from the
- * cg_modHudPresentation policy and the HUD menu authorship verdict. */
+ * cg_modHudPresentation policy and the HUD menu authorship verdict. Fit
+ * Screen always uses the stock full-width stretch, including stock menus. */
 static cgameCompatHudPresentation_t cgame_compat_resolved_hud_presentation(void)
 {
+    if (cgameCompatAspectMode.integer == CODUOMP_ASPECT_MODE_FIT_SCREEN)
+        return CGAME_COMPAT_HUD_PRESENTATION_STRETCHED;
+
     switch (cgameCompatModHudPresentation.integer) {
     case CG_COMPAT_MOD_HUD_STRETCH:
         return CGAME_COMPAT_HUD_PRESENTATION_STRETCHED;
@@ -650,7 +655,8 @@ void cgame_compat_draw_physical_quad_pic(
  * current view. The recovered crosshair spread converts degrees to virtual
  * pixels with 640/fov_x, an expression authored against the 640-wide 4:3
  * canvas; convert the direct horizontal view angle so the reticle cross stays
- * square. Narrow and classic presentations return the live angle unchanged. */
+ * square. Narrow, classic, and Fit Screen presentations return the live angle
+ * unchanged. */
 long double cgame_compat_spread_fov_x(void)
 {
     const long double classicAspect = 4.0L / 3.0L;
@@ -658,7 +664,7 @@ long double cgame_compat_spread_fov_x(void)
     long double halfAngle;
     long double tangent;
 
-    if (cgame_compat_uses_classic_aspect() != qfalse ||
+    if (cgameCompatAspectMode.integer != CODUOMP_ASPECT_MODE_WIDESCREEN ||
         cg_refdef.width <= 0 || cg_refdef.height <= 0) {
         return cg_refdef.fov_x;
     }

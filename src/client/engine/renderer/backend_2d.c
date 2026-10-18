@@ -2,6 +2,7 @@
 
 #include "gl_api.h"
 #include "gl_state.h"
+#include "client/common/client_video_settings.h"
 #include "compat/coduo_native_x87.h"
 
 #include <math.h>
@@ -14,7 +15,8 @@ enum {
 /* NOT_FROM_ORIGINAL_SOURCE: computes the aspect-correct physical output
  * region for the stock 640x480 2D coordinate system. Native presentation
  * uses this safe area for fullscreen menus; classic presentation uses it
- * for the complete renderer. The stock source line omits this interface. */
+ * for the complete renderer. Fit Screen keeps the full drawable. The stock
+ * source line omits this interface. */
 void coduomp_get_presentation_viewport(int32_t *x, int32_t *y,
                                        int32_t *width, int32_t *height)
 {
@@ -23,7 +25,8 @@ void coduomp_get_presentation_viewport(int32_t *x, int32_t *y,
     *width = glConfig.vidWidth;
     *height = glConfig.vidHeight;
 
-    if (*width <= 0 || *height <= 0) {
+    if (*width <= 0 || *height <= 0 ||
+        (r_aspectMode != NULL && r_aspectMode->integer == CODUOMP_ASPECT_MODE_FIT_SCREEN)) {
         return;
     }
 
@@ -170,9 +173,11 @@ qboolean coduomp_get_output_presentation_compat(
     }
 
     /* Explicit classic presentation has final precedence: its 4:3 inner
-     * composition must never be distorted by a differently shaped output. */
-    if (coduompOutputPresentation.preserveSelectedAspect != qfalse ||
-        (r_aspectMode != NULL && r_aspectMode->integer != 0)) {
+     * composition must never be distorted by a differently shaped output.
+     * Fit Screen instead stretches any selected resolution over the output. */
+    if ((r_aspectMode == NULL || r_aspectMode->integer != CODUOMP_ASPECT_MODE_FIT_SCREEN) &&
+        (coduompOutputPresentation.preserveSelectedAspect != qfalse ||
+         (r_aspectMode != NULL && r_aspectMode->integer == CODUOMP_ASPECT_MODE_LETTERBOX))) {
         if ((int64_t)*outputWidth * renderHeight >
             (int64_t)*outputHeight * renderWidth) {
             *viewportWidth = (int32_t)(
@@ -215,12 +220,14 @@ qboolean coduomp_backend_ui_2d_stretch_active;
 
 /* NOT_FROM_ORIGINAL_SOURCE: select a viewport for the composition currently
  * executing in the backend. Native-aspect cgame owns the complete drawable;
- * classic cgame and fullscreen UI share one fitted 4:3 viewport. The console
- * is an explicit native-width overlay in either gameplay aspect policy. */
+ * classic cgame and fullscreen UI share one fitted 4:3 viewport. Fit Screen
+ * keeps every composition full-width. The console is an explicit native-width
+ * overlay in every gameplay aspect policy. */
 void coduomp_apply_2d_presentation_viewport(void)
 {
     if (coduomp_backend_console_2d_compat_active == qfalse &&
-        ((r_aspectMode != NULL && r_aspectMode->integer != 0) ||
+        (r_aspectMode == NULL || r_aspectMode->integer != CODUOMP_ASPECT_MODE_FIT_SCREEN) &&
+        ((r_aspectMode != NULL && r_aspectMode->integer == CODUOMP_ASPECT_MODE_LETTERBOX) ||
          (coduomp_backend_ui_2d_compat_active != qfalse &&
           coduomp_backend_ui_2d_stretch_active == qfalse) ||
          (coduomp_backend_cgame_2d_compat_active == qfalse &&

@@ -227,12 +227,13 @@ static qboolean ui_compat_staged_resolution_dimensions(
     return *width > 0 && *height > 0 ? qtrue : qfalse;
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: resolves the effective aspect that the staged
- * resolution and presentation mode will produce after Apply. */
+/* NOT_FROM_ORIGINAL_SOURCE: resolves the aspect used for the staged FOV
+ * default. Letterbox and Fit Screen retain the stock 4:3 horizontal angle;
+ * widescreen derives its wider default from the selected resolution. */
 static qboolean ui_compat_staged_graphics_aspect(
     const glconfig_t *config, ui_compat_aspect_t *aspect)
 {
-    if (trap_Cvar_VariableValue("ui_r_aspectMode") != 0.0f) {
+    if (trap_Cvar_VariableValue("ui_r_aspectMode") != CODUOMP_ASPECT_MODE_WIDESCREEN) {
         aspect->width = 4;
         aspect->height = 3;
         aspect->pixelAspect = 1.0L;
@@ -419,8 +420,9 @@ void ui_compat_extend_graphics_menu(void)
         { "@CODUOMP_GRAPHICS_EXCLUSIVE", CODUOMP_WINDOW_MODE_EXCLUSIVE }
     };
     static const ui_compat_multi_value_t aspectModes[] = {
-        { "@CODUOMP_GRAPHICS_FILL_SCREEN", 0.0f },
-        { "@CODUOMP_GRAPHICS_LETTERBOX", 1.0f }
+        { "@CODUOMP_GRAPHICS_FILL_SCREEN", CODUOMP_ASPECT_MODE_WIDESCREEN },
+        { "@CODUOMP_GRAPHICS_LETTERBOX", CODUOMP_ASPECT_MODE_LETTERBOX },
+        { "@CODUOMP_GRAPHICS_FIT_SCREEN", CODUOMP_ASPECT_MODE_FIT_SCREEN }
     };
     menuDef_t *const menu = Menus_FindByName("options_graphics");
     menuDef_t *const restartMenu = Menus_FindByName("vid_restart_popmenu");

@@ -6,6 +6,7 @@
 #include "qcommon/q_string.h"
 
 #if defined(WINDOWS_BEHAVIOR)
+#include "client/common/client_video_settings.h"
 #include <stdlib.h>
 #endif
 #include <string.h>
@@ -40,9 +41,13 @@ static int32_t filesystem_compat_saved_aspect_mode(void)
 
     if (aspectMode == NULL)
         return FILESYSTEM_COMPAT_ASPECT_MODE_UNAVAILABLE;
-    if (aspectMode->latchedString != NULL)
-        return atoi(aspectMode->latchedString) != 0 ? 1 : 0;
-    return aspectMode->integer != 0 ? 1 : 0;
+
+    const int32_t selectedMode = aspectMode->latchedString != NULL
+        ? atoi(aspectMode->latchedString) : aspectMode->integer;
+
+    if (selectedMode == CODUOMP_ASPECT_MODE_WIDESCREEN || selectedMode == CODUOMP_ASPECT_MODE_FIT_SCREEN)
+        return selectedMode;
+    return CODUOMP_ASPECT_MODE_LETTERBOX;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: run immediately after the destination mod's
@@ -51,12 +56,13 @@ static int32_t filesystem_compat_saved_aspect_mode(void)
  * apply it. The normal archived-config writer then heals the stale mod copy. */
 static void filesystem_compat_queue_saved_aspect_mode(int32_t aspectMode)
 {
+    char command[64];
+
     if (aspectMode == FILESYSTEM_COMPAT_ASPECT_MODE_UNAVAILABLE)
         return;
 
-    Cbuf_AddText(aspectMode != 0
-                     ? "set r_aspectMode 1\n"
-                     : "set r_aspectMode 0\n");
+    Com_sprintf(command, sizeof(command), "set r_aspectMode %d\n", aspectMode);
+    Cbuf_AddText(command);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: common implementation for the original restart

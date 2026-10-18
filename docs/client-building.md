@@ -195,6 +195,17 @@ when exclusive fullscreen exits. On macOS, standard exclusive fullscreen on
 the primary display can also capture and blank the other connected displays.
 Use Fullscreen or Borderless when the other monitors should remain visible.
 
+The **Gameplay View** selector also applies on a renderer restart:
+
+| Gameplay View | `r_aspectMode` | Behavior |
+| --- | --- | --- |
+| Fill Screen (Wider FOV) | `0` | The default native-aspect world view with proportional HUD scaling. |
+| Classic 4:3 (Letterboxed) | `1` | Fits the world and menus into a 4:3 area with black bars. |
+| Fit Screen | `2` | Uses the full screen and the original stretched HUD/menu canvas, including when the selected resolution has a different aspect ratio from the display. |
+
+Fit Screen uses the original horizontal FOV default without widescreen
+widening. Its selection persists when switching mods.
+
 #### macOS Wi-Fi latency
 
 Apple Wireless Direct Link (AWDL) can cause short periodic Wi-Fi latency spikes

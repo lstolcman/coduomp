@@ -3,6 +3,7 @@
 
 #include "cgame.h"
 #include "console_display_compat.h"
+#include "client/common/client_video_settings.h"
 
 /* NOT_FROM_ORIGINAL_SOURCE_STORAGE_FILE: true only while the recovered
  * client is accepting renderer commands from the cgame VM.  The renderer
@@ -67,7 +68,7 @@ int32_t coduomp_left_hud_virtual_x_compat(int32_t x)
         cls.rendererConfig.vidHeight <= 0 ||
         (int64_t)cls.rendererConfig.vidWidth * 3 <=
             (int64_t)cls.rendererConfig.vidHeight * 4 ||
-        (aspectMode != NULL && aspectMode->integer != 0) ||
+        (aspectMode != NULL && aspectMode->integer != CODUOMP_ASPECT_MODE_WIDESCREEN) ||
         coduomp_cgame_hud_stretch_requested() != qfalse) {
         return x;
     }
@@ -105,7 +106,7 @@ void coduomp_scr_adjust_from_640_compat(float *x, float *y,
         cls.rendererConfig.vidHeight > 0 &&
         (int64_t)cls.rendererConfig.vidWidth * 3 >
             (int64_t)cls.rendererConfig.vidHeight * 4 &&
-        (aspectMode == NULL || aspectMode->integer == 0) &&
+        (aspectMode == NULL || aspectMode->integer == CODUOMP_ASPECT_MODE_WIDESCREEN) &&
         ((coduomp_cgame_rendering_compat_active != qfalse &&
           coduomp_cgame_hud_stretch_active == qfalse) ||
          (coduomp_backend_cgame_2d_compat_active != qfalse &&

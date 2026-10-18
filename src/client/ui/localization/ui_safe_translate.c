@@ -35,6 +35,7 @@ static const ui_compat_translation_t uiCompatTranslations[] = {
     { "CODUOMP_GRAPHICS_DISPLAY", "Display", "Pantalla" },
     { "CODUOMP_GRAPHICS_FILL_SCREEN", "Fill Screen (Wider FOV)", "Llenar pantalla (FOV m\341s amplio)" },
     { "CODUOMP_GRAPHICS_LETTERBOX", "Classic 4:3 (Letterboxed)", "4:3 cl\341sico (con barras)" },
+    { "CODUOMP_GRAPHICS_FIT_SCREEN", "Fit Screen", "Ajustar a pantalla" },
     { "CODUOMP_GRAPHICS_GAMEPLAY_VIEW", "Gameplay View", "Vista de juego" },
     { "CODUOMP_GRAPHICS_FIELD_OF_VIEW", "Field of View", "Campo de visi\363n" },
     { "CODUOMP_GRAPHICS_CONTRAST", "Contrast", "Contraste" },
