@@ -1,5 +1,6 @@
 #include "globals.h"
 #include "client_recovered.h"
+#include "compat/crt/random_compat.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -119,7 +120,7 @@ void cgame_compat_reset_module_load_state(void)
     com_parseSessions[0].savedLine = 1;
     com_parseSession = &com_parseSessions[0];
 
-    srand(1);
+    coduo_crt_srand(CODUO_CRT_RAND_INITIAL_SEED);
 }
 
 /*

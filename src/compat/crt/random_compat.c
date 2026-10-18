@@ -4,8 +4,16 @@
 
 enum {
     CODUO_CRT_RAND_MASK = 32767,
-    CODUO_CRT_RAND_CARDINALITY = 32768
+    CODUO_CRT_RAND_CARDINALITY = 32768,
+    CODUO_CRT_RAND_MULTIPLIER = 214013,
+    CODUO_CRT_RAND_INCREMENT = 2531011,
+    CODUO_CRT_RAND_SHIFT = 16
 };
+
+/* NOT_FROM_ORIGINAL_SOURCE: compiler TLS carries the random word owned by
+ * each image's statically linked Windows CRT. It must not share the host
+ * libc generator with another image or another calling thread. */
+static __thread uint32_t coduo_crt_random_state = CODUO_CRT_RAND_INITIAL_SEED;
 
 #if RAND_MAX % 32768 != 32767
 #error "Host rand domain must contain a whole number of 15-bit domains"
@@ -28,11 +36,19 @@ static int32_t coduo_random_map_range(int32_t sample, int32_t minimum,
     return (int32_t)result;
 }
 
+/* NOT_FROM_ORIGINAL_SOURCE: seed the same image-local thread state consumed
+ * by the Windows-domain provider. */
+void coduo_crt_srand(uint32_t seed)
+{
+    coduo_crt_random_state = seed;
+}
+
 /* NOT_FROM_ORIGINAL_SOURCE: the five Windows-CRT-domain provider functions
- * below preserve the original 15-bit result domain. */
+ * below preserve the original modulo-2^32 recurrence and 15-bit results. */
 int32_t coduo_crt_rand(void)
 {
-    return rand() % CODUO_CRT_RAND_CARDINALITY;
+    coduo_crt_random_state = coduo_crt_random_state * (uint32_t)CODUO_CRT_RAND_MULTIPLIER + CODUO_CRT_RAND_INCREMENT;
+    return (int32_t)((coduo_crt_random_state >> CODUO_CRT_RAND_SHIFT) & CODUO_CRT_RAND_MASK);
 }
 
 float coduo_crt_randf(void)
@@ -53,6 +69,12 @@ double coduo_crt_rand_signed_unit(void)
 int32_t coduo_crt_randrange(int32_t minimum, int32_t maximum)
 {
     return coduo_random_map_range(coduo_crt_rand(), minimum, maximum);
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: retain host libc seed ownership for Linux behavior. */
+void coduo_glibc_srand(uint32_t seed)
+{
+    srand(seed);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: the four glibc-domain provider functions below

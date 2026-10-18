@@ -48,7 +48,7 @@ void Com_NoiseInit(void)
 {
     const float randomScale = 3.0518509447574615e-05f;
 
-    srand(COM_NOISE_RANDOM_SEED);
+    coduo_crt_srand(COM_NOISE_RANDOM_SEED);
     for (int32_t index = 0; index < COM_NOISE_TABLE_SIZE; ++index) {
         noiseValues[index] = (float)(
             (long double)coduo_crt_rand() * randomScale * 2.0L - 1.0L);
