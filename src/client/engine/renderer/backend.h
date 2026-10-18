@@ -4559,7 +4559,7 @@ qboolean R_LightCacheTrace(const vec3_t start, const vec3_t end);
 float R_MaxLightIntensity(const vec3_t point,
                           const renderer_light_t *light);
 void R_MergeLights(const vec3_t point, trRefEntity_t *entity,
-                   float *contributions,
+                   float *intensities,
                    const int32_t *sortedIndices);
 int32_t R_GetStaticLightContributions(
     const vec3_t point, float *contributions,
