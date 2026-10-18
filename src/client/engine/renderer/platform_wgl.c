@@ -1,3 +1,8 @@
+/* Select the Windows API level before renderer headers include the SDK. */
+#if defined(_WIN32) && !defined(_WIN32_WINNT)
+#define _WIN32_WINNT 0x0601
+#endif
+
 #include "backend.h"
 
 #include "client/common/client_legacy_crt.h"
@@ -23,9 +28,6 @@
 #include "../system_localization.h"
 #include "../system_platform.h"
 
-#if !defined(_WIN32_WINNT)
-#define _WIN32_WINNT 0x0601
-#endif
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -169,21 +171,21 @@ void GLW_BuildPFD(renderer_pixel_format_descriptor_t *descriptor,
 {
     renderer_pixel_format_descriptor_t preferred = {0};
 
-    preferred.size = sizeof(preferred);
-    preferred.version = 1;
-    preferred.flags = R_PFD_DRAW_TO_WINDOW |
+    preferred.nSize = sizeof(preferred);
+    preferred.nVersion = 1;
+    preferred.dwFlags = R_PFD_DRAW_TO_WINDOW |
                       R_PFD_SUPPORT_OPENGL |
                       R_PFD_DOUBLEBUFFER;
-    preferred.pixelType = R_PFD_TYPE_RGBA;
-    preferred.colorBits = (uint8_t)colorBits;
-    preferred.depthBits = (uint8_t)depthBits;
-    preferred.stencilBits = (uint8_t)stencilBits;
-    preferred.layerType = R_PFD_MAIN_PLANE;
+    preferred.iPixelType = R_PFD_TYPE_RGBA;
+    preferred.cColorBits = (uint8_t)colorBits;
+    preferred.cDepthBits = (uint8_t)depthBits;
+    preferred.cStencilBits = (uint8_t)stencilBits;
+    preferred.iLayerType = R_PFD_MAIN_PLANE;
 
     if (stereo != qfalse) {
         ri.Printf(R_PRINT_ALL, "...attempting to use stereo\n");
         glConfig.stereoEnabled = qtrue;
-        preferred.flags |= R_PFD_STEREO;
+        preferred.dwFlags |= R_PFD_STEREO;
     } else {
         glConfig.stereoEnabled = qfalse;
     }
@@ -205,12 +207,12 @@ int32_t GLW_ChoosePFD(
     int32_t selected = 0;
 
     ri.Printf(R_PRINT_ALL, "...GLW_ChoosePFD( %d, %d, %d )\n",
-              preferred->colorBits, preferred->depthBits,
-              preferred->stencilBits);
+              preferred->cColorBits, preferred->cDepthBits,
+              preferred->cStencilBits);
 
     int32_t formatCount = DescribePixelFormat(
         (HDC)deviceContext, 1, sizeof(formats[0]),
-        (PIXELFORMATDESCRIPTOR *)&formats[0]);
+        &formats[0]);
     if (formatCount > R_MAX_PIXEL_FORMATS) {
         ri.Printf(R_PRINT_WARNING,
                   "...numPFDs > MAX_PFDS (%d > %d)\n",
@@ -223,9 +225,9 @@ int32_t GLW_ChoosePFD(
         renderer_pixel_format_descriptor_t *candidate = &formats[index];
         DescribePixelFormat(
             (HDC)deviceContext, index, sizeof(*candidate),
-            (PIXELFORMATDESCRIPTOR *)candidate);
+            candidate);
 
-        if ((candidate->flags & R_PFD_GENERIC_FORMAT) != 0 &&
+        if ((candidate->dwFlags & R_PFD_GENERIC_FORMAT) != 0 &&
             r_allowSoftwareGL->integer == 0) {
             if (r_logFile->integer != 0) {
                 ri.Printf(R_PRINT_ALL,
@@ -238,39 +240,39 @@ int32_t GLW_ChoosePFD(
         if (r_logFile->integer != 0) {
             ri.Printf(R_PRINT_ALL,
                       "ChoosePFD: format %i: %i color %i depth %i stencil\n",
-                      index, candidate->colorBits, candidate->depthBits,
-                      candidate->stencilBits);
+                      index, candidate->cColorBits, candidate->cDepthBits,
+                      candidate->cStencilBits);
         }
 
-        if (candidate->pixelType != R_PFD_TYPE_RGBA) {
+        if (candidate->iPixelType != R_PFD_TYPE_RGBA) {
             if (r_logFile->integer != 0)
                 ri.Printf(R_PRINT_ALL,
                           "...PFD %d rejected, not RGBA\n", index);
             continue;
         }
-        if ((candidate->flags & preferred->flags) != preferred->flags) {
+        if ((candidate->dwFlags & preferred->dwFlags) != preferred->dwFlags) {
             if (r_logFile->integer != 0) {
                 ri.Printf(R_PRINT_ALL,
                           "...PFD %d rejected, improper flags (%x instead of %x)\n",
-                          index, candidate->flags, preferred->flags);
+                          index, (unsigned int)candidate->dwFlags, (unsigned int)preferred->dwFlags);
             }
             continue;
         }
-        if (candidate->depthBits < R_MIN_DEPTH_BITS) {
+        if (candidate->cDepthBits < R_MIN_DEPTH_BITS) {
             if (r_logFile->integer != 0) {
                 ri.Printf(R_PRINT_ALL,
                           "...PFD %d rejected, insufficient depth bits (%d instead of %d)\n",
-                          index, candidate->depthBits, preferred->depthBits);
+                          index, candidate->cDepthBits, preferred->cDepthBits);
             }
             continue;
         }
-        if (candidate->stencilBits < R_MIN_STENCIL_BITS &&
-            preferred->stencilBits > 0) {
+        if (candidate->cStencilBits < R_MIN_STENCIL_BITS &&
+            preferred->cStencilBits > 0) {
             if (r_logFile->integer != 0) {
                 ri.Printf(R_PRINT_ALL,
                           "...PFD %d rejected, insufficient stencil bits (%d instead of %d)\n",
-                          index, candidate->stencilBits,
-                          preferred->stencilBits);
+                          index, candidate->cStencilBits,
+                          preferred->cStencilBits);
             }
             continue;
         }
@@ -282,27 +284,27 @@ int32_t GLW_ChoosePFD(
 
         const renderer_pixel_format_descriptor_t *best = &formats[selected];
         /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-        if (((candidate->flags ^ best->flags) & R_PFD_STEREO) != 0 &&
-            (preferred->flags & R_PFD_STEREO) != 0) {
+        if (((candidate->dwFlags ^ best->dwFlags) & R_PFD_STEREO) != 0 &&
+            (preferred->dwFlags & R_PFD_STEREO) != 0) {
             selected = index;
             continue;
         }
-        if (best->colorBits != preferred->colorBits &&
-            (candidate->colorBits == preferred->colorBits ||
-             candidate->colorBits > best->colorBits)) {
+        if (best->cColorBits != preferred->cColorBits &&
+            (candidate->cColorBits == preferred->cColorBits ||
+             candidate->cColorBits > best->cColorBits)) {
             selected = index;
             continue;
         }
-        if (best->depthBits != preferred->depthBits &&
-            (candidate->depthBits == preferred->depthBits ||
-             candidate->depthBits > best->depthBits)) {
+        if (best->cDepthBits != preferred->cDepthBits &&
+            (candidate->cDepthBits == preferred->cDepthBits ||
+             candidate->cDepthBits > best->cDepthBits)) {
             selected = index;
             continue;
         }
-        if (best->stencilBits != preferred->stencilBits &&
-            (candidate->stencilBits == preferred->stencilBits ||
-             (candidate->stencilBits > best->stencilBits &&
-              preferred->stencilBits > 0))) {
+        if (best->cStencilBits != preferred->cStencilBits &&
+            (candidate->cStencilBits == preferred->cStencilBits ||
+             (candidate->cStencilBits > best->cStencilBits &&
+              preferred->cStencilBits > 0))) {
             selected = index;
         }
     }
@@ -311,14 +313,14 @@ int32_t GLW_ChoosePFD(
         return 0;
 
     const renderer_pixel_format_descriptor_t *best = &formats[selected];
-    if ((best->flags & R_PFD_GENERIC_FORMAT) != 0) {
+    if ((best->dwFlags & R_PFD_GENERIC_FORMAT) != 0) {
         if (r_allowSoftwareGL->integer == 0) {
             ri.Printf(R_PRINT_ALL,
                       "...no hardware acceleration found\n");
             return 0;
         }
         ri.Printf(R_PRINT_ALL, "...using software emulation\n");
-    } else if ((best->flags & R_PFD_GENERIC_ACCELERATED) != 0) {
+    } else if ((best->dwFlags & R_PFD_GENERIC_ACCELERATED) != 0) {
         ri.Printf(R_PRINT_ALL, "...MCD acceleration found\n");
     } else {
         ri.Printf(R_PRINT_ALL, "...hardware acceleration found\n");
@@ -355,10 +357,10 @@ renderer_wgl_setup_result_t GLW_SetPFD(
         ri.Printf(R_PRINT_ALL, "...PIXELFORMAT %d selected\n", pixelFormat);
         DescribePixelFormat(
             (HDC)rendererWin32DeviceContext, pixelFormat,
-            sizeof(*descriptor), (PIXELFORMATDESCRIPTOR *)descriptor);
+            sizeof(*descriptor), descriptor);
         if (SetPixelFormat(
                 (HDC)rendererWin32DeviceContext, pixelFormat,
-                (PIXELFORMATDESCRIPTOR *)descriptor) == FALSE) {
+                descriptor) == FALSE) {
             ri.Printf(R_PRINT_ALL, "...SetPixelFormat failed\n",
                       rendererWin32DeviceContext);
             return R_WGL_SETUP_PIXEL_FORMAT_FAILED;
@@ -472,9 +474,9 @@ qboolean GLW_InitDriver(int32_t colorBits)
     qglGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximumTextureSize);
     if (glConfig.vidWidth <= maximumTextureSize &&
         glConfig.vidHeight <= maximumTextureSize) {
-        glConfig.colorBits = rendererWin32PixelFormat.colorBits;
-        glConfig.depthBits = rendererWin32PixelFormat.depthBits;
-        glConfig.stencilBits = rendererWin32PixelFormat.stencilBits;
+        glConfig.colorBits = rendererWin32PixelFormat.cColorBits;
+        glConfig.depthBits = rendererWin32PixelFormat.cDepthBits;
+        glConfig.stencilBits = rendererWin32PixelFormat.cStencilBits;
         return qtrue;
     }
 
@@ -535,7 +537,7 @@ qboolean GLW_CreateWindow(const char *driverName, int32_t width,
     if (rendererWin32WindowClassRegistered == qfalse) {
         WNDCLASSA windowClass = {0};
         windowClass.lpfnWndProc =
-            (WNDPROC)rendererWin32WindowProcedure;
+            rendererWin32WindowProcedure;
         windowClass.hInstance = (HINSTANCE)sysApplicationInstance;
         windowClass.hIcon = LoadIconA(
             (HINSTANCE)sysApplicationInstance,
@@ -1344,13 +1346,11 @@ void GLimp_Extensions(void)
     /* The two stores following every GetProcAddress call target the typed
      * driver slot and its public dispatch peer. */
 #define GLIMP_LOAD_GL(type_, name_, symbol_) do { \
-    rendererGl##name_##Driver = \
-        (type_)qwglGetProcAddress((symbol_)); \
+    CODUOMP_WGL_LOAD_SYMBOL(rendererGl##name_##Driver, (symbol_)); \
     qgl##name_ = rendererGl##name_##Driver; \
 } while (0)
 #define GLIMP_LOAD_WGL(type_, name_, symbol_) do { \
-    rendererWgl##name_##Driver = \
-        (type_)qwglGetProcAddress((symbol_)); \
+    CODUOMP_WGL_LOAD_SYMBOL(rendererWgl##name_##Driver, (symbol_)); \
     qwgl##name_ = rendererWgl##name_##Driver; \
 } while (0)
 
@@ -2381,9 +2381,7 @@ void GLimp_Init(void)
         (const char *)qglGetString(GL_EXTENSIONS);
 
 #if defined(_WIN32)
-    rendererWglGetExtensionsStringEXTDriver =
-        (renderer_wgl_get_extensions_string_ext_func_t)
-            qwglGetProcAddress("wglGetExtensionsStringEXT");
+    CODUOMP_WGL_LOAD_SYMBOL(rendererWglGetExtensionsStringEXTDriver, "wglGetExtensionsStringEXT");
     qwglGetExtensionsStringEXT =
         rendererWglGetExtensionsStringEXTDriver;
     if (qwglGetExtensionsStringEXT != NULL)

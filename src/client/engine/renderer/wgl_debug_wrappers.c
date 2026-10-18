@@ -83,8 +83,8 @@ int32_t RENDERER_GL_API_CALL WGL_LogShareLists(
 }
 
 int32_t RENDERER_GL_API_CALL WGL_LogUseFontBitmaps(
-    renderer_wgl_device_context_t deviceContext, uint32_t firstGlyph,
-    uint32_t glyphCount, uint32_t listBase)
+    renderer_wgl_device_context_t deviceContext, renderer_wgl_dword_t firstGlyph,
+    renderer_wgl_dword_t glyphCount, renderer_wgl_dword_t listBase)
 {
     fprintf(rendererGlLogFile, "wglUseFontBitmaps\n");
     fflush(rendererGlLogFile);
@@ -93,8 +93,8 @@ int32_t RENDERER_GL_API_CALL WGL_LogUseFontBitmaps(
 }
 
 int32_t RENDERER_GL_API_CALL WGL_LogUseFontOutlines(
-    renderer_wgl_device_context_t deviceContext, uint32_t firstGlyph,
-    uint32_t glyphCount, uint32_t listBase, float deviation, float extrusion,
+    renderer_wgl_device_context_t deviceContext, renderer_wgl_dword_t firstGlyph,
+    renderer_wgl_dword_t glyphCount, renderer_wgl_dword_t listBase, float deviation, float extrusion,
     int32_t format, renderer_wgl_glyph_metrics_float_t *metrics)
 {
     fprintf(rendererGlLogFile, "wglUseFontOutlines\n");
@@ -117,7 +117,7 @@ int32_t RENDERER_GL_API_CALL WGL_LogDescribeLayerPlane(
 
 int32_t RENDERER_GL_API_CALL WGL_LogSetLayerPaletteEntries(
     renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
-    int32_t firstEntry, int32_t entryCount, const uint32_t *colors)
+    int32_t firstEntry, int32_t entryCount, const renderer_wgl_color_t *colors)
 {
     fprintf(rendererGlLogFile, "wglSetLayerPaletteEntries\n");
     fflush(rendererGlLogFile);
@@ -127,7 +127,7 @@ int32_t RENDERER_GL_API_CALL WGL_LogSetLayerPaletteEntries(
 
 int32_t RENDERER_GL_API_CALL WGL_LogGetLayerPaletteEntries(
     renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
-    int32_t firstEntry, int32_t entryCount, uint32_t *colors)
+    int32_t firstEntry, int32_t entryCount, renderer_wgl_color_t *colors)
 {
     fprintf(rendererGlLogFile, "wglGetLayerPaletteEntries\n");
     fflush(rendererGlLogFile);
@@ -374,8 +374,8 @@ int32_t RENDERER_GL_API_CALL WGL_CheckedShareLists(
 }
 
 int32_t RENDERER_GL_API_CALL WGL_CheckedUseFontBitmaps(
-    renderer_wgl_device_context_t deviceContext, uint32_t firstGlyph,
-    uint32_t glyphCount, uint32_t listBase)
+    renderer_wgl_device_context_t deviceContext, renderer_wgl_dword_t firstGlyph,
+    renderer_wgl_dword_t glyphCount, renderer_wgl_dword_t listBase)
 {
     int32_t result = rendererWglUseFontBitmapsDriver(
         deviceContext, firstGlyph, glyphCount, listBase);
@@ -386,8 +386,8 @@ int32_t RENDERER_GL_API_CALL WGL_CheckedUseFontBitmaps(
 }
 
 int32_t RENDERER_GL_API_CALL WGL_CheckedUseFontOutlines(
-    renderer_wgl_device_context_t deviceContext, uint32_t firstGlyph,
-    uint32_t glyphCount, uint32_t listBase, float deviation, float extrusion,
+    renderer_wgl_device_context_t deviceContext, renderer_wgl_dword_t firstGlyph,
+    renderer_wgl_dword_t glyphCount, renderer_wgl_dword_t listBase, float deviation, float extrusion,
     int32_t format, renderer_wgl_glyph_metrics_float_t *metrics)
 {
     int32_t result = rendererWglUseFontOutlinesDriver(
@@ -415,7 +415,7 @@ int32_t RENDERER_GL_API_CALL WGL_CheckedDescribeLayerPlane(
 
 int32_t RENDERER_GL_API_CALL WGL_CheckedSetLayerPaletteEntries(
     renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
-    int32_t firstEntry, int32_t entryCount, const uint32_t *colors)
+    int32_t firstEntry, int32_t entryCount, const renderer_wgl_color_t *colors)
 {
     int32_t result = rendererWglSetLayerPaletteEntriesDriver(
         deviceContext, layerPlane, firstEntry, entryCount, colors);
@@ -428,7 +428,7 @@ int32_t RENDERER_GL_API_CALL WGL_CheckedSetLayerPaletteEntries(
 
 int32_t RENDERER_GL_API_CALL WGL_CheckedGetLayerPaletteEntries(
     renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
-    int32_t firstEntry, int32_t entryCount, uint32_t *colors)
+    int32_t firstEntry, int32_t entryCount, renderer_wgl_color_t *colors)
 {
     int32_t result = rendererWglGetLayerPaletteEntriesDriver(
         deviceContext, layerPlane, firstEntry, entryCount, colors);

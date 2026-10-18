@@ -50,8 +50,7 @@ static renderer_wgl_proc_t QGL_SDLGetProcAddress(const char *name)
 void QGL_LoadARBVertexProgramFunctions(void)
 {
 #define QGL_ARB_VERTEX_PROGRAM_ENTRY(type_, name_) \
-    rendererGl##name_##Driver = \
-        (type_)qwglGetProcAddress("gl" #name_); \
+    CODUOMP_WGL_LOAD_SYMBOL(rendererGl##name_##Driver, "gl" #name_); \
     qgl##name_ = rendererGl##name_##Driver;
 #include "qgl_arb_vertex_program_entries.h"
 #undef QGL_ARB_VERTEX_PROGRAM_ENTRY

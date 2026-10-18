@@ -110,7 +110,7 @@ void RENDERER_GL_API_CALL GL_LogBindBufferARB(uint32_t target,
  * i386 format uses %u for its 32-bit GLsizeiptrARB. GLsizeiptrARB is signed
  * pointer-width on native hosts; converting only for `%zu` preserves the
  * original unsigned rendering of its bits without changing the API type. */
-void RENDERER_GL_API_CALL GL_LogBufferDataARB(uint32_t target, intptr_t size,
+void RENDERER_GL_API_CALL GL_LogBufferDataARB(uint32_t target, GLsizeiptrARB size,
                                               const void *data,
                                               uint32_t usage)
 {
@@ -711,7 +711,7 @@ uint8_t RENDERER_GL_API_CALL GL_LogIsBufferARB(uint32_t buffer)
  * offset/size arguments are native pointer-width API scalars; ATI object-buffer
  * sizes remain GLsizei (signed 32-bit) on every host. */
 void RENDERER_GL_API_CALL GL_LogBufferSubDataARB(
-    uint32_t target, intptr_t offset, intptr_t size, const void *data)
+    uint32_t target, GLintptrARB offset, GLsizeiptrARB size, const void *data)
 {
     fprintf(rendererGlLogFile, "glBufferSubDataARB\n");
     fflush(rendererGlLogFile);
@@ -719,7 +719,7 @@ void RENDERER_GL_API_CALL GL_LogBufferSubDataARB(
 }
 
 void RENDERER_GL_API_CALL GL_LogGetBufferSubDataARB(
-    uint32_t target, intptr_t offset, intptr_t size, void *data)
+    uint32_t target, GLintptrARB offset, GLsizeiptrARB size, void *data)
 {
     fprintf(rendererGlLogFile, "glGetBufferSubDataARB\n");
     fflush(rendererGlLogFile);
