@@ -123,9 +123,11 @@ qboolean CG_CalcViewValues(void)
             (long double)cg_errordecay_vmCvar.value);
 
         if (decay > 0.0f && decay < 1.0f) {
-            cg_refdef.vieworg[0] += cg_predictedError[0] * decay;
-            cg_refdef.vieworg[1] += cg_predictedError[1] * decay;
-            cg_refdef.vieworg[2] += cg_predictedError[2] * decay;
+            /* Each scaled error stays wide until it has been added to the
+             * origin; only the resulting coordinate is rounded to float. */
+            cg_refdef.vieworg[0] = (float)((long double)cg_predictedError[0] * decay + cg_refdef.vieworg[0]);
+            cg_refdef.vieworg[1] = (float)((long double)cg_predictedError[1] * decay + cg_refdef.vieworg[1]);
+            cg_refdef.vieworg[2] = (float)((long double)cg_predictedError[2] * decay + cg_refdef.vieworg[2]);
         } else {
             cg_predictedErrorTime = 0;
         }
@@ -147,8 +149,9 @@ qboolean CG_CalcViewValues(void)
     qboolean cameraClipped = qfalse;
 
     /* Noclip bypasses the vertical view-origin collision adjustment. Otherwise
-     * the marks/content probe at vieworg-8 gates an 8-unit box test 200 units
-     * above the view. A hit (fraction < 1) replaces vieworg with trace.endpos. */
+     * the content probe at vieworg-8 gates an 8-unit box trace from vieworg+200
+     * down to that lower point. A hit (fraction < 1) replaces vieworg with
+     * trace.endpos. */
     if (cg_predictedPlayerState.pmType != PM_TYPE_NOCLIP) {
         vec3_t lowerPoint;
         lowerPoint[0] = cg_refdef.vieworg[0];
@@ -166,7 +169,7 @@ qboolean CG_CalcViewValues(void)
             upperPoint[2] = cg_refdef.vieworg[2] + CG_VIEW_COLLISION_UP;
 
             /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-            CG_Trace(CG_VIEW_COLLISION_HANDLE, upperPoint,
+            CG_Trace(CG_VIEW_COLLISION_HANDLE, lowerPoint,
                      cg_viewCollisionMaxs,
                      &trace,
                      upperPoint,
