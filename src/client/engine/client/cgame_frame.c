@@ -565,11 +565,14 @@ void CL_FinishMove(usercmd_t *command)
     command->commandTime = commandTime;
 
     for (int32_t axis = 0; axis < 3; ++axis) {
+        /* Keep the combined aim and scale product wide until the integer
+         * conversion; rounding either intermediate to float changes the
+         * encoded angle at a command-angle boundary. */
         command->angles[axis] =
-            (int32_t)(
-                (cl.inputState.userCmdAimValues[axis] +
-                 cl.inputState.viewAngles[axis]) *
-                CL_ANGLE_TO_SHORT_SCALE) &
+            coduo_fp_to_i32_extended(
+                ((long double)cl.inputState.userCmdAimValues[axis] +
+                 (long double)cl.inputState.viewAngles[axis]) *
+                (long double)CL_ANGLE_TO_SHORT_SCALE) &
             (int32_t)UINT16_MAX;
     }
 }
