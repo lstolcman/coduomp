@@ -186,11 +186,12 @@ void CG_AddPlayerWeapon(refEntity_t *parent, playerState_t *ps,
              *   origin[i] += forward * viewaxis[0][i]                (0x30487a9c..)
              *   origin[i] += viewaxis[1][i] (0x30487aa8..) * cg_gunY.value (0x30421ae8)
              *   origin[i] += viewaxis[2][i] (0x30487ab4..) * cg_gunZ.value (0x30450268)
-             * Kept as three += statements to preserve the rounding order. */
+             * Each product stays wide through its origin addition; the three
+             * coordinate stores preserve the rounding between axis terms. */
             for (i = 0; i < 3; ++i) {
-                weaponEntity.origin[i] += forward * cg_refdef.viewaxis[0][i];
-                weaponEntity.origin[i] += cg_refdef.viewaxis[1][i] * cg_gunY_vmCvar.value;
-                weaponEntity.origin[i] += cg_refdef.viewaxis[2][i] * cg_gunZ_vmCvar.value;
+                weaponEntity.origin[i] = (float)((long double)forward * cg_refdef.viewaxis[0][i] + weaponEntity.origin[i]);
+                weaponEntity.origin[i] = (float)((long double)cg_refdef.viewaxis[1][i] * cg_gunY_vmCvar.value + weaponEntity.origin[i]);
+                weaponEntity.origin[i] = (float)((long double)cg_refdef.viewaxis[2][i] * cg_gunZ_vmCvar.value + weaponEntity.origin[i]);
             }
         }
 

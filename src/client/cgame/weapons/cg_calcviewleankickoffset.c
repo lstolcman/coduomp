@@ -110,10 +110,10 @@ void CG_CalcViewLeanKickOffset(vec3_t out /* EAX -> EDI: in/out view offset vec3
     if (leanFraction != 0.0f && ads < 1.0f) {
         /* 0x30045284: smooth odd envelope over the lean fraction, peaking at +/-1
          * for lean == +/-1 and vanishing at 0 and +/-2. */
-        const float envelope = (2.0f - fabsf(leanFraction)) * leanFraction;
+        const float envelope = (float)((2.0L - (long double)fabsf(leanFraction)) * leanFraction);
 
         /* 0x300452b2: sway push magnitude, faded out by ADS zoom. */
-        const float push = (1.0f - ads) * envelope * 1.6f;
+        const float push = (float)((1.0L - (long double)ads) * envelope * (long double)1.6f);
 
         /* Three FSINCOS angles (radians). Each block loads its phase from the
          * SAME stack slot base+0x1c (`FLD [esp+0x24]` after the two register
@@ -170,11 +170,11 @@ void CG_CalcViewLeanKickOffset(vec3_t out /* EAX -> EDI: in/out view offset vec3
 
     if (elapsed < 150) {
         /* 0x3004540c: recoil rise — linear ramp up over the first 150 ms. */
-        out[2] += (float)elapsed * kick * 0.25f / 150.0f;
+        out[2] = (float)((long double)(float)elapsed * kick * 0.25L / 150.0L + out[2]);
     } else if (elapsed < 450) {
         /* 0x30045443: recoil decay — linear ramp down over the next 300 ms. */
-        out[2] += (float)coduo_int32_from_bits(450u - (uint32_t)elapsed) *
-                  kick * 0.25f / 300.0f;
+        out[2] = (float)((long double)(float)coduo_int32_from_bits(450u - (uint32_t)elapsed) *
+                         kick * 0.25L / 300.0L + out[2]);
     }
     /* elapsed >= 450: recoil has fully settled, no Z bump. */
 

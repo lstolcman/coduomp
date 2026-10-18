@@ -90,13 +90,13 @@ void CG_WeaponSway_ApplyShellShock(void)
          *   FMUL ST1 (* x) ; FMUL ST1 (* x). 3.0f from .rdata 0x3007be5c. s is also
          * kept in st0 (no store), so it is long double: the ONLY rounding in the
          * whole else-branch is the FSTP DWORD [ESP+0x8] of `scale` at 0x30044c80. */
-        long double s = x * x * (3.0f - (x + x));
+        long double s = ((3.0L - (x + x)) * x) * x;
 
         /* scale = 1 + s * (swayShellShockScale - 1) (0x30044c6c..0x30044c7a):
          *   FLD [weapon+0x2fc] ; FSUB 1.0f ; FMULP (* s) ; FADD 1.0f ; FSTP DWORD.
          * The store to `float scale` is that single rounding (0x30044c80).
          * 1.0f from .rdata 0x3007bce0. */
-        scale = 1.0f + s * (weapon->swayShellShockScale - 1.0f);
+        scale = (float)(s * ((long double)weapon->swayShellShockScale - 1.0L) + 1.0L);
     }
 
     /* CALL 0x30015ca0 (0x30044c90..0x30044cb0). Stack args pushed right-to-left:
