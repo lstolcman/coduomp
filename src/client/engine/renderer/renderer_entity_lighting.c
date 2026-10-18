@@ -96,13 +96,13 @@ float R_MaxLightIntensity(const vec3_t point,
 /* Source: CoDUOMP.exe 0x004c6480..0x004c6835.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004c6480_004c6836.mcode.
  * Name and parameter roles: same-module Mac symbol R_MergeLights. Windows
- * proves the contribution cutoff walk, all eight entity-light slots, weighted
+ * proves the intensity cutoff walk, all eight entity-light slots, weighted
  * direction merge, ambient/diffuse split, generated-light fields, and final
  * replacement entry. The test of mergedLight->type in the diffuse gate is
  * also present in the Mac build; it is preserved even though testing the
  * current source light there would look more conventional. */
 void R_MergeLights(const vec3_t point, trRefEntity_t *entity,
-                   float *contributions,
+                   float *intensities,
                    const int32_t *sortedIndices)
 {
     renderer_light_t *mergedLight;
@@ -116,19 +116,19 @@ void R_MergeLights(const vec3_t point, trRefEntity_t *entity,
         return;
 
     retainedSentinelLights =
-        contributions[sortedIndices[0]] ==
+        intensities[sortedIndices[0]] ==
                 R_LIGHT_PRIORITY_SENTINEL
             ? 1
             : 0;
     mergeIndex = retainedSentinelLights + 1;
     cutoffContribution =
-        contributions[sortedIndices[retainedSentinelLights]] *
+        intensities[sortedIndices[retainedSentinelLights]] *
         r_entLightCutoff->value;
 
     while (mergeIndex < tr.maxEntityLights - 1) {
         /* A NaN continues the original x87 scan rather than satisfying the
          * less-than-or-equal break condition. */
-        if (contributions[sortedIndices[mergeIndex]] <=
+        if (intensities[sortedIndices[mergeIndex]] <=
             cutoffContribution) {
             break;
         }
@@ -149,7 +149,7 @@ void R_MergeLights(const vec3_t point, trRefEntity_t *entity,
 
             if (light->type == R_LIGHT_TYPE_SUN ||
                 light->type == R_LIGHT_TYPE_DIFFUSE_SUN) {
-                contributions[sortedIndices[lightIndex]] -=
+                intensities[sortedIndices[lightIndex]] -=
                     (float)(1 << tr.overbrightBits) *
                     tr.world->entitySunLightIntensity *
                     entity->diffuseSunContribution;
@@ -161,7 +161,7 @@ void R_MergeLights(const vec3_t point, trRefEntity_t *entity,
             (void)VectorNormalize(*direction);
         }
 
-        contribution = contributions[sortedIndices[lightIndex]];
+        contribution = intensities[sortedIndices[lightIndex]];
         mergedDirection[0] += contribution * (*direction)[0];
         mergedDirection[1] += contribution * (*direction)[1];
         mergedDirection[2] += contribution * (*direction)[2];
@@ -181,7 +181,7 @@ void R_MergeLights(const vec3_t point, trRefEntity_t *entity,
         const renderer_light_t *light = entity->lights[lightIndex].light;
         const vec3_t *direction = &lightDirections[lightIndex];
         const float contribution =
-            contributions[sortedIndices[lightIndex]];
+            intensities[sortedIndices[lightIndex]];
         float directionDot =
             mergedDirection[0] * (*direction)[0] +
             mergedDirection[2] * (*direction)[2] +
@@ -719,8 +719,10 @@ void R_PickFinalLights(const trRefdef_t *refdef,
 
     if (r_showLeafLights->integer > 0)
         R_ShowLeafLights(point, entity);
+    /* Merge weights are the ranked intensities. Keep the merge's in-place
+     * sun adjustment in this per-call scratch array. */
     if (mergeLights != qfalse)
-        R_MergeLights(point, entity, contributions, selectedIndices);
+        R_MergeLights(point, entity, candidateIntensities, selectedIndices);
 }
 
 /* Source: CoDUOMP.exe 0x004c78f0..0x004c7977.
