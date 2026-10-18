@@ -10,8 +10,10 @@
 #endif
 
 #if defined(_WIN32) && defined(__MINGW32__) && UINTPTR_MAX == UINT32_MAX
-extern void __register_frame(const void *frameStart);
-extern void __deregister_frame(const void *frameStart);
+/* These compiler-private libgcc hooks are absent from the installed unwind.h.
+ * Their declarations use an unqualified pointer to the loaded frame table. */
+extern void __register_frame(void *frameStart);
+extern void __deregister_frame(void *frameStart);
 
 /* NOT_FROM_ORIGINAL_SOURCE: read a bounded extent from a loaded PE image's
  * backing file. MinGW stores long final-image section names in the COFF string
@@ -76,13 +78,13 @@ static int coduomp_mingw32_long_section_name_matches(HANDLE file, const IMAGE_FI
  * unwind table so the executable's single static libgcc registry can own it.
  * Without this registration, a ScriptErrorClass thrown by the engine cannot
  * unwind through uo_game_mp_x86.dll back to the engine's catch handler. */
-static const void *coduomp_mingw32_static_unwind_frames(HMODULE module)
+static void *coduomp_mingw32_static_unwind_frames(HMODULE module)
 {
-    const unsigned char *const imageBase = (const unsigned char *)module;
+    unsigned char *const imageBase = (unsigned char *)module;
     const IMAGE_DOS_HEADER *dosHeader;
     const IMAGE_NT_HEADERS32 *ntHeaders;
     const IMAGE_SECTION_HEADER *sections;
-    const void *frameStart = NULL;
+    void *frameStart = NULL;
     char modulePath[MAX_PATH];
     DWORD modulePathLength;
     HANDLE file;
@@ -137,7 +139,7 @@ static const void *coduomp_mingw32_static_unwind_frames(HMODULE module)
         if (sectionRva != 0 && sectionRva < ntHeaders->OptionalHeader.SizeOfImage &&
             sectionSize >= sizeof(uint32_t) &&
             sectionSize <= ntHeaders->OptionalHeader.SizeOfImage - sectionRva) {
-            const uint32_t *const candidate = (const uint32_t *)(imageBase + sectionRva);
+            uint32_t *const candidate = (uint32_t *)(imageBase + sectionRva);
             if (*candidate != 0)
                 frameStart = candidate;
         }
@@ -191,7 +193,7 @@ void *coduomp_library_open(const char *libraryName)
 #if defined(_WIN32)
     HMODULE const module = LoadLibraryA(libraryName);
 #if defined(__MINGW32__) && UINTPTR_MAX == UINT32_MAX
-    const void *const frameStart = coduomp_mingw32_static_unwind_frames(module);
+    void *const frameStart = coduomp_mingw32_static_unwind_frames(module);
     if (frameStart != NULL)
         __register_frame(frameStart);
 #endif
@@ -226,7 +228,7 @@ int32_t coduomp_library_close(void *libraryHandle)
 {
 #if defined(_WIN32)
 #if defined(__MINGW32__) && UINTPTR_MAX == UINT32_MAX
-    const void *const frameStart = coduomp_mingw32_static_unwind_frames((HMODULE)libraryHandle);
+    void *const frameStart = coduomp_mingw32_static_unwind_frames((HMODULE)libraryHandle);
     if (frameStart != NULL)
         __deregister_frame(frameStart);
 #endif
