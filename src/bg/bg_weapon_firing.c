@@ -2,6 +2,7 @@
 
 #include "bg_vehicle.h"
 #include "bg_weapon.h"
+#include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_native_x87.h"
 #include "compat/coduo_x87emu.h"
 #include "qcommon/q_bits.h"
@@ -138,6 +139,12 @@ void PM_Weapon_StartFiring(qboolean delayExpired)
 #elif defined(__x86_64__) && \
       (defined(__GNUC__) || defined(__clang__))
             ps->weaponDelay = CODUO_X87_TRUNCATE_I32(
+                ((long double)one / (long double)rate) *
+                ((long double)one - (long double)adsFraction));
+#elif defined(WINDOWS_BEHAVIOR)
+            /* Preserve the live quotient and product on hosts without x87;
+             * a float reciprocal can move the delay to the next millisecond. */
+            ps->weaponDelay = coduo_fp_to_i32_extended(
                 ((long double)one / (long double)rate) *
                 ((long double)one - (long double)adsFraction));
 #else
