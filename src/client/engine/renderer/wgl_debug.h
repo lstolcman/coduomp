@@ -6,9 +6,22 @@
 
 #include "gl_api.h"
 
-/* Platform-neutral carriers for Win32's opaque WGL handles. They remain real
- * native pointers on 64-bit hosts; no Windows handle is narrowed to a PE32
- * word in maintained source. */
+/* Use SDK types on Windows and platform-neutral carriers for the inactive WGL
+ * slots elsewhere. They remain real native pointers on 64-bit hosts; no Windows
+ * handle is narrowed to a PE32 word in maintained source. */
+#if defined(_WIN32)
+typedef HDC renderer_wgl_device_context_t;
+typedef HGLRC renderer_wgl_render_context_t;
+typedef HPBUFFERARB renderer_wgl_pbuffer_t;
+typedef GLYPHMETRICSFLOAT renderer_wgl_glyph_metrics_float_t;
+typedef LAYERPLANEDESCRIPTOR renderer_wgl_layer_plane_descriptor_t;
+typedef PROC renderer_wgl_proc_t;
+typedef WNDPROC renderer_win32_window_proc_t;
+typedef DWORD renderer_wgl_dword_t;
+typedef COLORREF renderer_wgl_color_t;
+#else
+typedef uint32_t renderer_wgl_dword_t;
+typedef uint32_t renderer_wgl_color_t;
 typedef struct renderer_wgl_device_context_s *renderer_wgl_device_context_t;
 typedef struct renderer_wgl_render_context_s *renderer_wgl_render_context_t;
 typedef struct renderer_wgl_pbuffer_s *renderer_wgl_pbuffer_t;
@@ -21,96 +34,100 @@ typedef intptr_t
     (RENDERER_GL_API_CALL *renderer_win32_window_proc_t)(
         void *window, uint32_t message, uintptr_t wParam, intptr_t lParam);
 
-/* Platform-neutral spelling of the Win32 PIXELFORMATDESCRIPTOR. This is an
- * operating-system ABI record rather than a host-pointer-bearing game struct,
- * so its 40-byte layout is identical for 32- and 64-bit Windows. */
-typedef struct renderer_pixel_format_descriptor_s {
-    uint16_t size;
-    uint16_t version;
-    uint32_t flags;
-    uint8_t pixelType;
-    uint8_t colorBits;
-    uint8_t redBits;
-    uint8_t redShift;
-    uint8_t greenBits;
-    uint8_t greenShift;
-    uint8_t blueBits;
-    uint8_t blueShift;
-    uint8_t alphaBits;
-    uint8_t alphaShift;
-    uint8_t accumBits;
-    uint8_t accumRedBits;
-    uint8_t accumGreenBits;
-    uint8_t accumBlueBits;
-    uint8_t accumAlphaBits;
-    uint8_t depthBits;
-    uint8_t stencilBits;
-    uint8_t auxBuffers;
-    uint8_t layerType;
-    uint8_t reserved;
-    uint32_t layerMask;
-    uint32_t visibleMask;
-    uint32_t damageMask;
-} renderer_pixel_format_descriptor_t;
-
-#if UINTPTR_MAX == UINT32_MAX
-_Static_assert(_Alignof(renderer_pixel_format_descriptor_t) == 4,
-               "i386 pixel-format descriptor alignment changed");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, size) == 0x00,
-               "i386 pixel-format descriptor size word moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, version) == 0x02,
-               "i386 pixel-format descriptor version moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, flags) == 0x04,
-               "i386 pixel-format descriptor flags moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, pixelType) == 0x08,
-               "i386 pixel-format descriptor pixel type moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, colorBits) == 0x09,
-               "i386 pixel-format descriptor color bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, redBits) == 0x0a,
-               "i386 pixel-format descriptor red bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, redShift) == 0x0b,
-               "i386 pixel-format descriptor red shift moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, greenBits) == 0x0c,
-               "i386 pixel-format descriptor green bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, greenShift) == 0x0d,
-               "i386 pixel-format descriptor green shift moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, blueBits) == 0x0e,
-               "i386 pixel-format descriptor blue bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, blueShift) == 0x0f,
-               "i386 pixel-format descriptor blue shift moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, alphaBits) == 0x10,
-               "i386 pixel-format descriptor alpha bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, alphaShift) == 0x11,
-               "i386 pixel-format descriptor alpha shift moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, accumBits) == 0x12,
-               "i386 pixel-format descriptor accumulation bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, accumRedBits) == 0x13,
-               "i386 pixel-format descriptor accumulation red bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, accumGreenBits) == 0x14,
-               "i386 pixel-format descriptor accumulation green bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, accumBlueBits) == 0x15,
-               "i386 pixel-format descriptor accumulation blue bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, accumAlphaBits) == 0x16,
-               "i386 pixel-format descriptor accumulation alpha bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, depthBits) == 0x17,
-               "i386 pixel-format descriptor depth bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, stencilBits) == 0x18,
-               "i386 pixel-format descriptor stencil bits moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, auxBuffers) == 0x19,
-               "i386 pixel-format descriptor auxiliary count moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, layerType) == 0x1a,
-               "i386 pixel-format descriptor layer type moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, reserved) == 0x1b,
-               "i386 pixel-format descriptor reserved byte moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, layerMask) == 0x1c,
-               "i386 pixel-format descriptor layer mask moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, visibleMask) == 0x20,
-               "i386 pixel-format descriptor visible mask moved");
-_Static_assert(offsetof(renderer_pixel_format_descriptor_t, damageMask) == 0x24,
-               "i386 pixel-format descriptor damage mask moved");
-_Static_assert(sizeof(renderer_pixel_format_descriptor_t) == 0x28,
-               "i386 pixel-format descriptor size changed");
 #endif
+
+/* The Windows SDK owns PIXELFORMATDESCRIPTOR. The non-Windows spelling keeps
+ * the unused WGL setup path compileable. This operating-system ABI record has
+ * the same 40-byte layout on 32- and 64-bit Windows. */
+#if defined(_WIN32)
+typedef PIXELFORMATDESCRIPTOR renderer_pixel_format_descriptor_t;
+#else
+typedef struct renderer_pixel_format_descriptor_s {
+    uint16_t nSize;
+    uint16_t nVersion;
+    uint32_t dwFlags;
+    uint8_t iPixelType;
+    uint8_t cColorBits;
+    uint8_t cRedBits;
+    uint8_t cRedShift;
+    uint8_t cGreenBits;
+    uint8_t cGreenShift;
+    uint8_t cBlueBits;
+    uint8_t cBlueShift;
+    uint8_t cAlphaBits;
+    uint8_t cAlphaShift;
+    uint8_t cAccumBits;
+    uint8_t cAccumRedBits;
+    uint8_t cAccumGreenBits;
+    uint8_t cAccumBlueBits;
+    uint8_t cAccumAlphaBits;
+    uint8_t cDepthBits;
+    uint8_t cStencilBits;
+    uint8_t cAuxBuffers;
+    uint8_t iLayerType;
+    uint8_t bReserved;
+    uint32_t dwLayerMask;
+    uint32_t dwVisibleMask;
+    uint32_t dwDamageMask;
+} renderer_pixel_format_descriptor_t;
+#endif
+
+_Static_assert(_Alignof(renderer_pixel_format_descriptor_t) == 4,
+               "pixel-format descriptor alignment changed");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, nSize) == 0x00,
+               "pixel-format descriptor size word moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, nVersion) == 0x02,
+               "pixel-format descriptor version moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, dwFlags) == 0x04,
+               "pixel-format descriptor flags moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, iPixelType) == 0x08,
+               "pixel-format descriptor pixel type moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cColorBits) == 0x09,
+               "pixel-format descriptor color bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cRedBits) == 0x0a,
+               "pixel-format descriptor red bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cRedShift) == 0x0b,
+               "pixel-format descriptor red shift moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cGreenBits) == 0x0c,
+               "pixel-format descriptor green bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cGreenShift) == 0x0d,
+               "pixel-format descriptor green shift moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cBlueBits) == 0x0e,
+               "pixel-format descriptor blue bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cBlueShift) == 0x0f,
+               "pixel-format descriptor blue shift moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cAlphaBits) == 0x10,
+               "pixel-format descriptor alpha bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cAlphaShift) == 0x11,
+               "pixel-format descriptor alpha shift moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cAccumBits) == 0x12,
+               "pixel-format descriptor accumulation bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cAccumRedBits) == 0x13,
+               "pixel-format descriptor accumulation red bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cAccumGreenBits) == 0x14,
+               "pixel-format descriptor accumulation green bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cAccumBlueBits) == 0x15,
+               "pixel-format descriptor accumulation blue bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cAccumAlphaBits) == 0x16,
+               "pixel-format descriptor accumulation alpha bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cDepthBits) == 0x17,
+               "pixel-format descriptor depth bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cStencilBits) == 0x18,
+               "pixel-format descriptor stencil bits moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, cAuxBuffers) == 0x19,
+               "pixel-format descriptor auxiliary count moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, iLayerType) == 0x1a,
+               "pixel-format descriptor layer type moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, bReserved) == 0x1b,
+               "pixel-format descriptor reserved byte moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, dwLayerMask) == 0x1c,
+               "pixel-format descriptor layer mask moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, dwVisibleMask) == 0x20,
+               "pixel-format descriptor visible mask moved");
+_Static_assert(offsetof(renderer_pixel_format_descriptor_t, dwDamageMask) == 0x24,
+               "pixel-format descriptor damage mask moved");
+_Static_assert(sizeof(renderer_pixel_format_descriptor_t) == 0x28,
+               "pixel-format descriptor size changed");
 
 typedef enum renderer_wgl_setup_result_e {
     R_WGL_SETUP_SUCCESS = 0,
@@ -166,6 +183,37 @@ qboolean GLW_TryFallbackMode(int32_t mode,
 qboolean GLW_LoadOpenGL(void);
 void GLW_ApplyRendererAutoConfig(void);
 
+#if defined(_WIN32)
+typedef __typeof__(&wglCopyContext) renderer_wgl_copy_context_func_t;
+typedef __typeof__(&wglCreateContext) renderer_wgl_create_context_func_t;
+typedef __typeof__(&wglCreateLayerContext) renderer_wgl_create_layer_context_func_t;
+typedef __typeof__(&wglDeleteContext) renderer_wgl_delete_context_func_t;
+typedef __typeof__(&wglGetCurrentContext) renderer_wgl_get_current_context_func_t;
+typedef __typeof__(&wglGetCurrentDC) renderer_wgl_get_current_dc_func_t;
+typedef __typeof__(&wglGetProcAddress) renderer_wgl_get_proc_address_func_t;
+typedef __typeof__(&wglMakeCurrent) renderer_wgl_make_current_func_t;
+typedef __typeof__(&wglShareLists) renderer_wgl_share_lists_func_t;
+typedef __typeof__(&wglUseFontBitmapsA) renderer_wgl_use_font_bitmaps_func_t;
+typedef __typeof__(&wglUseFontOutlinesA) renderer_wgl_use_font_outlines_func_t;
+typedef __typeof__(&wglDescribeLayerPlane) renderer_wgl_describe_layer_plane_func_t;
+typedef __typeof__(&wglSetLayerPaletteEntries) renderer_wgl_set_layer_palette_entries_func_t;
+typedef __typeof__(&wglGetLayerPaletteEntries) renderer_wgl_get_layer_palette_entries_func_t;
+typedef __typeof__(&wglRealizeLayerPalette) renderer_wgl_realize_layer_palette_func_t;
+typedef __typeof__(&wglSwapLayerBuffers) renderer_wgl_swap_layer_buffers_func_t;
+typedef PFNWGLGETEXTENSIONSSTRINGEXTPROC renderer_wgl_get_extensions_string_ext_func_t;
+typedef PFNWGLSWAPINTERVALEXTPROC renderer_wgl_swap_interval_ext_func_t;
+typedef PFNWGLGETPIXELFORMATATTRIBIVARBPROC renderer_wgl_get_pixel_format_attribiv_arb_func_t;
+typedef PFNWGLGETPIXELFORMATATTRIBFVARBPROC renderer_wgl_get_pixel_format_attribfv_arb_func_t;
+typedef PFNWGLCHOOSEPIXELFORMATARBPROC renderer_wgl_choose_pixel_format_arb_func_t;
+typedef PFNWGLCREATEPBUFFERARBPROC renderer_wgl_create_pbuffer_arb_func_t;
+typedef PFNWGLGETPBUFFERDCARBPROC renderer_wgl_get_pbuffer_dc_arb_func_t;
+typedef PFNWGLRELEASEPBUFFERDCARBPROC renderer_wgl_release_pbuffer_dc_arb_func_t;
+typedef PFNWGLDESTROYPBUFFERARBPROC renderer_wgl_destroy_pbuffer_arb_func_t;
+typedef PFNWGLQUERYPBUFFERARBPROC renderer_wgl_query_pbuffer_arb_func_t;
+typedef PFNWGLBINDTEXIMAGEARBPROC renderer_wgl_bind_tex_image_arb_func_t;
+typedef PFNWGLRELEASETEXIMAGEARBPROC renderer_wgl_release_tex_image_arb_func_t;
+typedef PFNWGLSETPBUFFERATTRIBARBPROC renderer_wgl_set_pbuffer_attrib_arb_func_t;
+#else
 typedef int32_t (RENDERER_GL_API_CALL *renderer_wgl_copy_context_func_t)(
     renderer_wgl_render_context_t source,
     renderer_wgl_render_context_t destination, uint32_t mask);
@@ -191,11 +239,11 @@ typedef int32_t (RENDERER_GL_API_CALL *renderer_wgl_share_lists_func_t)(
     renderer_wgl_render_context_t source,
     renderer_wgl_render_context_t destination);
 typedef int32_t (RENDERER_GL_API_CALL *renderer_wgl_use_font_bitmaps_func_t)(
-    renderer_wgl_device_context_t deviceContext, uint32_t firstGlyph,
-    uint32_t glyphCount, uint32_t listBase);
+    renderer_wgl_device_context_t deviceContext, renderer_wgl_dword_t firstGlyph,
+    renderer_wgl_dword_t glyphCount, renderer_wgl_dword_t listBase);
 typedef int32_t (RENDERER_GL_API_CALL *renderer_wgl_use_font_outlines_func_t)(
-    renderer_wgl_device_context_t deviceContext, uint32_t firstGlyph,
-    uint32_t glyphCount, uint32_t listBase, float deviation, float extrusion,
+    renderer_wgl_device_context_t deviceContext, renderer_wgl_dword_t firstGlyph,
+    renderer_wgl_dword_t glyphCount, renderer_wgl_dword_t listBase, float deviation, float extrusion,
     int32_t format, renderer_wgl_glyph_metrics_float_t *metrics);
 typedef int32_t
     (RENDERER_GL_API_CALL *renderer_wgl_describe_layer_plane_func_t)(
@@ -205,11 +253,11 @@ typedef int32_t
 typedef int32_t
     (RENDERER_GL_API_CALL *renderer_wgl_set_layer_palette_entries_func_t)(
         renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
-        int32_t firstEntry, int32_t entryCount, const uint32_t *colors);
+        int32_t firstEntry, int32_t entryCount, const renderer_wgl_color_t *colors);
 typedef int32_t
     (RENDERER_GL_API_CALL *renderer_wgl_get_layer_palette_entries_func_t)(
         renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
-        int32_t firstEntry, int32_t entryCount, uint32_t *colors);
+        int32_t firstEntry, int32_t entryCount, renderer_wgl_color_t *colors);
 typedef int32_t
     (RENDERER_GL_API_CALL *renderer_wgl_realize_layer_palette_func_t)(
         renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
@@ -263,6 +311,8 @@ typedef int32_t
     (RENDERER_GL_API_CALL *renderer_wgl_set_pbuffer_attrib_arb_func_t)(
         renderer_wgl_pbuffer_t pbuffer, const int32_t *attributes);
 
+#endif
+
 #define QGL_WGL_ENTRY(type_, name_) \
     extern type_ rendererWgl##name_##Driver; \
     extern type_ qwgl##name_;
@@ -294,11 +344,11 @@ int32_t RENDERER_GL_API_CALL WGL_LogShareLists(
     renderer_wgl_render_context_t source,
     renderer_wgl_render_context_t destination);
 int32_t RENDERER_GL_API_CALL WGL_LogUseFontBitmaps(
-    renderer_wgl_device_context_t deviceContext, uint32_t firstGlyph,
-    uint32_t glyphCount, uint32_t listBase);
+    renderer_wgl_device_context_t deviceContext, renderer_wgl_dword_t firstGlyph,
+    renderer_wgl_dword_t glyphCount, renderer_wgl_dword_t listBase);
 int32_t RENDERER_GL_API_CALL WGL_LogUseFontOutlines(
-    renderer_wgl_device_context_t deviceContext, uint32_t firstGlyph,
-    uint32_t glyphCount, uint32_t listBase, float deviation, float extrusion,
+    renderer_wgl_device_context_t deviceContext, renderer_wgl_dword_t firstGlyph,
+    renderer_wgl_dword_t glyphCount, renderer_wgl_dword_t listBase, float deviation, float extrusion,
     int32_t format, renderer_wgl_glyph_metrics_float_t *metrics);
 int32_t RENDERER_GL_API_CALL WGL_LogDescribeLayerPlane(
     renderer_wgl_device_context_t deviceContext, int32_t pixelFormat,
@@ -306,10 +356,10 @@ int32_t RENDERER_GL_API_CALL WGL_LogDescribeLayerPlane(
     renderer_wgl_layer_plane_descriptor_t *descriptor);
 int32_t RENDERER_GL_API_CALL WGL_LogSetLayerPaletteEntries(
     renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
-    int32_t firstEntry, int32_t entryCount, const uint32_t *colors);
+    int32_t firstEntry, int32_t entryCount, const renderer_wgl_color_t *colors);
 int32_t RENDERER_GL_API_CALL WGL_LogGetLayerPaletteEntries(
     renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
-    int32_t firstEntry, int32_t entryCount, uint32_t *colors);
+    int32_t firstEntry, int32_t entryCount, renderer_wgl_color_t *colors);
 int32_t RENDERER_GL_API_CALL WGL_LogRealizeLayerPalette(
     renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
     int32_t realize);
@@ -370,11 +420,11 @@ int32_t RENDERER_GL_API_CALL WGL_CheckedShareLists(
     renderer_wgl_render_context_t source,
     renderer_wgl_render_context_t destination);
 int32_t RENDERER_GL_API_CALL WGL_CheckedUseFontBitmaps(
-    renderer_wgl_device_context_t deviceContext, uint32_t firstGlyph,
-    uint32_t glyphCount, uint32_t listBase);
+    renderer_wgl_device_context_t deviceContext, renderer_wgl_dword_t firstGlyph,
+    renderer_wgl_dword_t glyphCount, renderer_wgl_dword_t listBase);
 int32_t RENDERER_GL_API_CALL WGL_CheckedUseFontOutlines(
-    renderer_wgl_device_context_t deviceContext, uint32_t firstGlyph,
-    uint32_t glyphCount, uint32_t listBase, float deviation, float extrusion,
+    renderer_wgl_device_context_t deviceContext, renderer_wgl_dword_t firstGlyph,
+    renderer_wgl_dword_t glyphCount, renderer_wgl_dword_t listBase, float deviation, float extrusion,
     int32_t format, renderer_wgl_glyph_metrics_float_t *metrics);
 int32_t RENDERER_GL_API_CALL WGL_CheckedDescribeLayerPlane(
     renderer_wgl_device_context_t deviceContext, int32_t pixelFormat,
@@ -382,10 +432,10 @@ int32_t RENDERER_GL_API_CALL WGL_CheckedDescribeLayerPlane(
     renderer_wgl_layer_plane_descriptor_t *descriptor);
 int32_t RENDERER_GL_API_CALL WGL_CheckedSetLayerPaletteEntries(
     renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
-    int32_t firstEntry, int32_t entryCount, const uint32_t *colors);
+    int32_t firstEntry, int32_t entryCount, const renderer_wgl_color_t *colors);
 int32_t RENDERER_GL_API_CALL WGL_CheckedGetLayerPaletteEntries(
     renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
-    int32_t firstEntry, int32_t entryCount, uint32_t *colors);
+    int32_t firstEntry, int32_t entryCount, renderer_wgl_color_t *colors);
 int32_t RENDERER_GL_API_CALL WGL_CheckedRealizeLayerPalette(
     renderer_wgl_device_context_t deviceContext, int32_t layerPlane,
     int32_t realize);

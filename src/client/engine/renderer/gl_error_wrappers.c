@@ -259,7 +259,7 @@ uint8_t RENDERER_GL_API_CALL GL_CheckedIsBufferARB(uint32_t buffer)
 }
 
 void RENDERER_GL_API_CALL GL_CheckedBufferDataARB(
-    uint32_t target, intptr_t size, const void *data, uint32_t usage)
+    uint32_t target, GLsizeiptrARB size, const void *data, uint32_t usage)
 {
     uint32_t error;
 
@@ -270,7 +270,7 @@ void RENDERER_GL_API_CALL GL_CheckedBufferDataARB(
 }
 
 void RENDERER_GL_API_CALL GL_CheckedBufferSubDataARB(
-    uint32_t target, intptr_t offset, intptr_t size, const void *data)
+    uint32_t target, GLintptrARB offset, GLsizeiptrARB size, const void *data)
 {
     uint32_t error;
 
@@ -281,7 +281,7 @@ void RENDERER_GL_API_CALL GL_CheckedBufferSubDataARB(
 }
 
 void RENDERER_GL_API_CALL GL_CheckedGetBufferSubDataARB(
-    uint32_t target, intptr_t offset, intptr_t size, void *data)
+    uint32_t target, GLintptrARB offset, GLsizeiptrARB size, void *data)
 {
     uint32_t error;
 

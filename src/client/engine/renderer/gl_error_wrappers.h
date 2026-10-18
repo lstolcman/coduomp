@@ -54,11 +54,11 @@ void RENDERER_GL_API_CALL GL_CheckedGenBuffersARB(
     int32_t count, uint32_t *buffers);
 uint8_t RENDERER_GL_API_CALL GL_CheckedIsBufferARB(uint32_t buffer);
 void RENDERER_GL_API_CALL GL_CheckedBufferDataARB(
-    uint32_t target, intptr_t size, const void *data, uint32_t usage);
+    uint32_t target, GLsizeiptrARB size, const void *data, uint32_t usage);
 void RENDERER_GL_API_CALL GL_CheckedBufferSubDataARB(
-    uint32_t target, intptr_t offset, intptr_t size, const void *data);
+    uint32_t target, GLintptrARB offset, GLsizeiptrARB size, const void *data);
 void RENDERER_GL_API_CALL GL_CheckedGetBufferSubDataARB(
-    uint32_t target, intptr_t offset, intptr_t size, void *data);
+    uint32_t target, GLintptrARB offset, GLsizeiptrARB size, void *data);
 void *RENDERER_GL_API_CALL GL_CheckedMapBufferARB(
     uint32_t target, uint32_t access);
 uint8_t RENDERER_GL_API_CALL GL_CheckedUnmapBufferARB(uint32_t target);

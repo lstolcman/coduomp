@@ -27,7 +27,7 @@ void RENDERER_GL_API_CALL GL_LogBindProgramARB(uint32_t target,
 void RENDERER_GL_API_CALL GL_LogBindFragmentShaderATI(uint32_t shader);
 void RENDERER_GL_API_CALL GL_LogBindBufferARB(uint32_t target,
                                               uint32_t buffer);
-void RENDERER_GL_API_CALL GL_LogBufferDataARB(uint32_t target, intptr_t size,
+void RENDERER_GL_API_CALL GL_LogBufferDataARB(uint32_t target, GLsizeiptrARB size,
                                               const void *data,
                                               uint32_t usage);
 void *RENDERER_GL_API_CALL GL_LogMapBufferARB(uint32_t target,
@@ -131,9 +131,9 @@ void RENDERER_GL_API_CALL GL_LogGenBuffersARB(int32_t count,
                                               uint32_t *buffers);
 uint8_t RENDERER_GL_API_CALL GL_LogIsBufferARB(uint32_t buffer);
 void RENDERER_GL_API_CALL GL_LogBufferSubDataARB(
-    uint32_t target, intptr_t offset, intptr_t size, const void *data);
+    uint32_t target, GLintptrARB offset, GLsizeiptrARB size, const void *data);
 void RENDERER_GL_API_CALL GL_LogGetBufferSubDataARB(
-    uint32_t target, intptr_t offset, intptr_t size, void *data);
+    uint32_t target, GLintptrARB offset, GLsizeiptrARB size, void *data);
 void RENDERER_GL_API_CALL GL_LogGetBufferParameterivARB(
     uint32_t target, uint32_t parameter, int32_t *values);
 void RENDERER_GL_API_CALL GL_LogGetBufferPointervARB(
