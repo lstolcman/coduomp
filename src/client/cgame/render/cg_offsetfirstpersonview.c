@@ -99,9 +99,11 @@ void CG_OffsetFirstPersonView(void)
 
         AngleVectors(angles, forward, NULL, NULL);
         distance = cg_predictedPlayerState.adsFraction * 19.0f;
-        traceEnd[0] = cg_refdef.vieworg[0] + distance * forward[0];
-        traceEnd[1] = cg_refdef.vieworg[1] + distance * forward[1];
-        traceEnd[2] = cg_refdef.vieworg[2] + distance * forward[2];
+        /* 0x3003fcc9..0x3003fcfb keeps each multiply/add wide until the
+         * endpoint component's binary32 store. */
+        traceEnd[0] = (float)((long double)cg_refdef.vieworg[0] + (long double)distance * forward[0]);
+        traceEnd[1] = (float)((long double)cg_refdef.vieworg[1] + (long double)distance * forward[1]);
+        traceEnd[2] = (float)((long double)cg_refdef.vieworg[2] + (long double)distance * forward[2]);
 
         CG_Trace(
             CG_FIRST_PERSON_TRACE_HANDLE,
@@ -152,15 +154,16 @@ void CG_OffsetFirstPersonView(void)
         coduo_x87_sincosf(roll, &sinRoll, &cosRoll);
         sinRollSinPitch = sinRoll * sinPitch;
 
-        bobDirection[0] =
-            cosRoll * sinYaw - sinRollSinPitch * cosYaw;
-        bobDirection[1] =
-            -cosRoll * cosYaw - sinRollSinPitch * sinYaw;
+        /* 0x3003fe4e..0x3003fe7c stores the two differences only after
+         * both products; sinRollSinPitch was already rounded above. */
+        bobDirection[0] = (float)((long double)cosRoll * sinYaw - (long double)sinRollSinPitch * cosYaw);
+        bobDirection[1] = (float)(-(long double)cosRoll * cosYaw - (long double)sinRollSinPitch * sinYaw);
         bobDirection[2] = -sinRoll * cosPitch;
 
-        cg_refdef.vieworg[0] += horizontalBob * bobDirection[0];
-        cg_refdef.vieworg[1] += horizontalBob * bobDirection[1];
-        cg_refdef.vieworg[2] += horizontalBob * bobDirection[2];
+        /* 0x3003fe92..0x3003fec8 rounds after each complete origin update. */
+        cg_refdef.vieworg[0] = (float)((long double)cg_refdef.vieworg[0] + (long double)horizontalBob * bobDirection[0]);
+        cg_refdef.vieworg[1] = (float)((long double)cg_refdef.vieworg[1] + (long double)horizontalBob * bobDirection[1]);
+        cg_refdef.vieworg[2] = (float)((long double)cg_refdef.vieworg[2] + (long double)horizontalBob * bobDirection[2]);
     }
 
     /* 0x3003fe37..0x3003ff53: the local impact kick rises for 150 ms and falls
@@ -180,13 +183,15 @@ void CG_OffsetFirstPersonView(void)
 
         if (elapsedFloat < (float)CG_IMPACT_KICK_RISE_MS) {
             phase = elapsedFloat / (float)CG_IMPACT_KICK_RISE_MS;
-            cg_refdef.vieworg[2] += cg_impactViewKick * phase;
+            cg_refdef.vieworg[2] = (float)((long double)cg_refdef.vieworg[2] + (long double)cg_impactViewKick * phase);
         } else if (elapsedFloat < (float)CG_IMPACT_KICK_TOTAL_MS) {
             /* 0x3003ff25/0x3003ff2b: (elapsedFloat - 150.0f) is rounded to a float
              * slot and reloaded at 0x3003ff2f before the divide (Class 1). */
             float fallElapsed = elapsedFloat - (float)CG_IMPACT_KICK_RISE_MS;
-            phase = 1.0f - fallElapsed / (float)CG_IMPACT_KICK_FALL_MS;
-            cg_refdef.vieworg[2] += cg_impactViewKick * phase;
+            /* 0x3003ff2f..0x3003ff53 retains divide/subtract precision until
+             * the phase store, then multiply/add precision until the Z store. */
+            phase = (float)(1.0L - (long double)fallElapsed / CG_IMPACT_KICK_FALL_MS);
+            cg_refdef.vieworg[2] = (float)((long double)cg_refdef.vieworg[2] + (long double)cg_impactViewKick * phase);
         }
     }
 
