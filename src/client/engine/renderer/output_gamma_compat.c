@@ -217,16 +217,16 @@ void coduomp_output_gamma_set_lut_compat(
 typedef struct coduomp_xrandr_gamma_api_s {
     void *xrandrLibrary;
     void *x11Library;
-    XRRScreenResources *(*getScreenResourcesCurrent)(Display *, Window);
-    void (*freeScreenResources)(XRRScreenResources *);
-    XRRCrtcInfo *(*getCrtcInfo)(Display *, XRRScreenResources *, RRCrtc);
-    void (*freeCrtcInfo)(XRRCrtcInfo *);
-    int (*getCrtcGammaSize)(Display *, RRCrtc);
-    XRRCrtcGamma *(*getCrtcGamma)(Display *, RRCrtc);
-    XRRCrtcGamma *(*allocGamma)(int);
-    void (*setCrtcGamma)(Display *, RRCrtc, XRRCrtcGamma *);
-    void (*freeGamma)(XRRCrtcGamma *);
-    int (*flush)(Display *);
+    __typeof__(&XRRGetScreenResourcesCurrent) getScreenResourcesCurrent;
+    __typeof__(&XRRFreeScreenResources) freeScreenResources;
+    __typeof__(&XRRGetCrtcInfo) getCrtcInfo;
+    __typeof__(&XRRFreeCrtcInfo) freeCrtcInfo;
+    __typeof__(&XRRGetCrtcGammaSize) getCrtcGammaSize;
+    __typeof__(&XRRGetCrtcGamma) getCrtcGamma;
+    __typeof__(&XRRAllocGamma) allocGamma;
+    __typeof__(&XRRSetCrtcGamma) setCrtcGamma;
+    __typeof__(&XRRFreeGamma) freeGamma;
+    __typeof__(&XFlush) flush;
 } coduomp_xrandr_gamma_api_t;
 
 static coduomp_xrandr_gamma_api_t coduompXRandrGammaApi;

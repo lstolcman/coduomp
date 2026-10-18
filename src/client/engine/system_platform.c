@@ -29,6 +29,7 @@
 #include <windows.h>
 #include <mmsystem.h>
 #include <shellapi.h>
+#include <shellscalingapi.h>
 #else
 #include "platform/sdl_platform.h"
 
@@ -292,15 +293,15 @@ void Sys_CreateCrashMarker(void)
  * of them have no DPI virtualization to opt out of. */
 void coduomp_sys_enable_dpi_awareness(void)
 {
-    typedef BOOL(WINAPI *sys_set_dpi_context_fn)(void *);
-    typedef HRESULT(WINAPI *sys_set_dpi_awareness_fn)(int32_t);
-    typedef BOOL(WINAPI *sys_set_dpi_aware_fn)(void);
-    /* DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2; the SDK handle constant
-     * is absent from older MinGW headers. */
-    void *const perMonitorAwareV2 = (void *)(intptr_t)-4;
-    /* PROCESS_PER_MONITOR_DPI_AWARE from the Windows 8.1 shell-scaling
-     * enumeration, likewise absent from older MinGW headers. */
-    enum { SYS_PROCESS_PER_MONITOR_DPI_AWARE = 2 };
+    typedef __typeof__(&SetProcessDpiAwarenessContext) sys_set_dpi_context_fn;
+    typedef __typeof__(&SetProcessDpiAwareness) sys_set_dpi_awareness_fn;
+    typedef __typeof__(&SetProcessDPIAware) sys_set_dpi_aware_fn;
+    /* Use the SDK's context handle and constant; resolving the entry point
+     * dynamically keeps older Windows releases supported. */
+    const DPI_AWARENESS_CONTEXT perMonitorAwareV2 = DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2;
+    /* The Windows 8.1 fallback takes the SDK's shell-scaling enumeration,
+     * with the same optional DLL loading as the newer context setter. */
+    const PROCESS_DPI_AWARENESS perMonitorAware = PROCESS_PER_MONITOR_DPI_AWARE;
 
     HMODULE user32 = GetModuleHandleA("user32.dll");
     if (user32 != NULL) {
@@ -317,7 +318,7 @@ void coduomp_sys_enable_dpi_awareness(void)
         coduomp_library_symbol(shcore, "SetProcessDpiAwareness",
                                &setAwareness, sizeof(setAwareness));
         if (setAwareness != NULL &&
-            SUCCEEDED(setAwareness(SYS_PROCESS_PER_MONITOR_DPI_AWARE))) {
+            SUCCEEDED(setAwareness(perMonitorAware))) {
             FreeLibrary(shcore);
             return;
         }
