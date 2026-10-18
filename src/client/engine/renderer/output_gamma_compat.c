@@ -26,6 +26,15 @@ enum {
     CODUOMP_OUTPUT_GAMMA_COMPONENT_COUNT = 4
 };
 
+/* NOT_FROM_ORIGINAL_SOURCE: R_AllocImage assigns texture names starting at
+ * 1024 as images load. Keep both output-owned textures below that range;
+ * a generated texture name can fall into it before a later map image claims
+ * that name. */
+enum {
+    CODUOMP_OUTPUT_GAMMA_LUT_TEXTURE_ID = 1,
+    CODUOMP_OUTPUT_PRESENTATION_TEXTURE_ID = 2
+};
+
 /* NOT_FROM_ORIGINAL_SOURCE_STORAGE_FILE: the complete final-presentation
  * compatibility path lives in this translation unit so the recovered WGL
  * source retains only lifecycle hooks. */
@@ -187,7 +196,7 @@ void coduomp_output_gamma_set_lut_compat(
     qglPushAttrib(CODUOMP_GL_ALL_ATTRIB_BITS);
     qglActiveTextureARB(GL_TEXTURE0_ARB + 1);
     if (coduompOutputGammaLutTexture == 0)
-        qglGenTextures(1, &coduompOutputGammaLutTexture);
+        coduompOutputGammaLutTexture = CODUOMP_OUTPUT_GAMMA_LUT_TEXTURE_ID;
     qglBindTexture(GL_TEXTURE_2D, coduompOutputGammaLutTexture);
     qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -581,11 +590,9 @@ void coduomp_output_gamma_present_compat(void)
     RB_EndMultitexture();
     qglPushAttrib(CODUOMP_GL_ALL_ATTRIB_BITS);
     qglReadBuffer(GL_BACK);
+    if (coduompOutputPresentationTexture == 0)
+        coduompOutputPresentationTexture = CODUOMP_OUTPUT_PRESENTATION_TEXTURE_ID;
     qglBindTexture(GL_TEXTURE_2D, coduompOutputPresentationTexture);
-    if (coduompOutputPresentationTexture == 0) {
-        qglGenTextures(1, &coduompOutputPresentationTexture);
-        qglBindTexture(GL_TEXTURE_2D, coduompOutputPresentationTexture);
-    }
     if (textureWidth != coduompOutputPresentationTextureWidth ||
         textureHeight != coduompOutputPresentationTextureHeight) {
         qglTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
