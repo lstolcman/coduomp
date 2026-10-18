@@ -915,13 +915,11 @@ void GLimp_Extensions(void)
     /* The two stores following every GetProcAddress call target the typed
      * driver slot and its public dispatch peer. */
 #define GLIMP_LOAD_GL(type_, name_, symbol_) do { \
-    rendererGl##name_##Driver = \
-        (type_)qwglGetProcAddress((symbol_)); \
+    CODUOMP_WGL_LOAD_SYMBOL(rendererGl##name_##Driver, (symbol_)); \
     qgl##name_ = rendererGl##name_##Driver; \
 } while (0)
 #define GLIMP_LOAD_WGL(type_, name_, symbol_) do { \
-    rendererWgl##name_##Driver = \
-        (type_)qwglGetProcAddress((symbol_)); \
+    CODUOMP_WGL_LOAD_SYMBOL(rendererWgl##name_##Driver, (symbol_)); \
     qwgl##name_ = rendererWgl##name_##Driver; \
 } while (0)
 
@@ -1951,9 +1949,7 @@ void GLimp_Init(void)
         (const char *)qglGetString(GL_EXTENSIONS);
 
 #if defined(_WIN32)
-    rendererWglGetExtensionsStringEXTDriver =
-        (renderer_wgl_get_extensions_string_ext_func_t)
-            qwglGetProcAddress("wglGetExtensionsStringEXT");
+    CODUOMP_WGL_LOAD_SYMBOL(rendererWglGetExtensionsStringEXTDriver, "wglGetExtensionsStringEXT");
     qwglGetExtensionsStringEXT =
         rendererWglGetExtensionsStringEXTDriver;
     if (qwglGetExtensionsStringEXT != NULL)

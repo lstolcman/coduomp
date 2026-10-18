@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "gl_api.h"
 
@@ -318,6 +319,16 @@ typedef int32_t
     extern type_ qwgl##name_;
 #include "qgl_wgl_entries.h"
 #undef QGL_WGL_ENTRY
+
+/* NOT_FROM_ORIGINAL_SOURCE: the SDK's PROC is an address carrier, not the
+ * signature of a resolved extension. Copy it into the typed dispatch slot at
+ * this loader boundary without calling through PROC or disguising its type. */
+#define CODUOMP_WGL_LOAD_SYMBOL(destination_, name_) do { \
+    renderer_wgl_proc_t coduomp_wgl_symbol = qwglGetProcAddress(name_); \
+    _Static_assert(sizeof(destination_) == sizeof(coduomp_wgl_symbol), \
+                   "WGL procedure address must fit its typed dispatch slot"); \
+    memcpy(&(destination_), &coduomp_wgl_symbol, sizeof(destination_)); \
+} while (0)
 
 #ifdef __cplusplus
 extern "C" {
