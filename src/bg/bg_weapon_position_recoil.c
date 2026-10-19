@@ -103,6 +103,16 @@ void BG_CalculateWeaponPosition_GunRecoil(pm_weapon_angle_state_t *state,
     float dampAccel = BG_RECOIL_LERP(
         weaponInfo->recoilFrictionHip, weaponInfo->recoilFrictionAds);
 #undef BG_RECOIL_LERP
+#elif defined(WINDOWS_BEHAVIOR)
+    /* Each blended coefficient narrows only after the final addition. */
+    float springAccel = (float)(
+        ((long double)weaponInfo->recoilReturnAds - weaponInfo->recoilReturnHip) * adsFraction + weaponInfo->recoilReturnHip);
+    float velLimit = (float)(
+        ((long double)weaponInfo->recoilVelocityAds - weaponInfo->recoilVelocityHip) * adsFraction + weaponInfo->recoilVelocityHip);
+    float dampCoef = (float)(
+        ((long double)weaponInfo->recoilDampingAds - weaponInfo->recoilDampingHip) * adsFraction + weaponInfo->recoilDampingHip);
+    float dampAccel = (float)(
+        ((long double)weaponInfo->recoilFrictionAds - weaponInfo->recoilFrictionHip) * adsFraction + weaponInfo->recoilFrictionHip);
 #else
     float springAccel =
         (weaponInfo->recoilReturnAds - weaponInfo->recoilReturnHip) *
