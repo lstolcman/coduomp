@@ -29,6 +29,7 @@
 #define PM_ANGLE2SHORT_SCALE 182.04445f
 #define PM_SHORT2ANGLE_SCALE 0.0054931641f
 #define PM_DEGREES_TO_RADIANS 0.017453292f
+#define PM_PRONE_DEBUG_LINE_LENGTH 18.0f
 
 enum {
     PM_PITCH_CLAMP = 16000,
@@ -185,12 +186,16 @@ void PM_UpdateViewAngles(playerState_t *ps, const usercmd_t *cmd,
          * and preserves the same paired-output interface on other hosts. */
         coduo_x87_sincosf(yaw, &sinYaw, &cosYaw);
         coduo_x87_sincosf(pitch, &sinPitch, &cosPitch);
+        /* The direction products round to binary32 before the line scale and
+         * origin add. Explicit stores preserve that boundary on x87 hosts. */
+        volatile float forwardX = (float)((long double)cosPitch * (long double)cosYaw);
+        volatile float forwardY = (float)((long double)cosPitch * (long double)sinYaw);
         end[0] = (float)((long double)start[0] +
-                         (long double)cosPitch * (long double)cosYaw * 18.0L);
+                         (long double)forwardX * (long double)PM_PRONE_DEBUG_LINE_LENGTH);
         end[1] = (float)((long double)start[1] +
-                         (long double)cosPitch * (long double)sinYaw * 18.0L);
+                         (long double)forwardY * (long double)PM_PRONE_DEBUG_LINE_LENGTH);
         end[2] = (float)((long double)start[2] -
-                         (long double)sinPitch * 18.0L);
+                         (long double)sinPitch * (long double)PM_PRONE_DEBUG_LINE_LENGTH);
         bg_compat_pmove_debug_line(start, end);
         bg_compat_pmove_debug_arc(
             start,
