@@ -623,7 +623,7 @@ void CL_CubemapShot_f(void);
 void Com_WriteLocalizedSoundAliasFiles(void);
 void CL_InitRenderer(void);
 void CL_StartHunkUsers(void);
-float CL_KeyState(clKeyButton_t *button);
+long double CL_KeyState(clKeyButton_t *button);
 void CL_AdjustAngles(void);
 void CL_CmdButtons(usercmd_t *command);
 void CL_KeyMove(usercmd_t *command);
