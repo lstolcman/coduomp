@@ -281,8 +281,14 @@ void XAnimUpdateClientInfoSyncInternal(uint32_t nodeIndex,
         allowNotify = qfalse;
     }
 
+    /* Windows keeps the frame time plus epsilon wide through this comparison. */
+#if defined(WINDOWS_BEHAVIOR)
+    if ((long double)primary->weightBlendTimeRemaining <
+        (long double)xanim_evalTime + (long double)XANIM_BLEND_TIME_EPSILON) {
+#else
     if (primary->weightBlendTimeRemaining <
         xanim_evalTime + XANIM_BLEND_TIME_EPSILON) {
+#endif
         primary->currentWeight = primary->targetWeight;
         primary->weightBlendTimeRemaining = 0.0f;
     } else {
@@ -390,8 +396,14 @@ void XAnimUpdateClientInfoInternal(uint32_t nodeIndex, float delta,
         allowNotify = qfalse;
     }
 
+    /* Windows keeps the frame time plus epsilon wide through this comparison. */
+#if defined(WINDOWS_BEHAVIOR)
+    if ((long double)primary->weightBlendTimeRemaining <
+        (long double)xanim_evalTime + (long double)XANIM_BLEND_TIME_EPSILON) {
+#else
     if (primary->weightBlendTimeRemaining <
         xanim_evalTime + XANIM_BLEND_TIME_EPSILON) {
+#endif
         primary->currentWeight = primary->targetWeight;
         primary->weightBlendTimeRemaining = 0.0f;
     } else {
@@ -649,8 +661,14 @@ void XAnimUpdateServerInfoSyncInternal(uint32_t nodeIndex)
 
     secondary->oldTime = secondary->time;
     secondary->oldCycleCount = secondary->cycleCount;
+    /* Windows keeps the frame time plus epsilon wide through this comparison. */
+#if defined(WINDOWS_BEHAVIOR)
+    if ((long double)secondary->weightBlendTimeRemaining <
+        (long double)xanim_evalTime + (long double)XANIM_BLEND_TIME_EPSILON) {
+#else
     if (secondary->weightBlendTimeRemaining <
         xanim_evalTime + XANIM_BLEND_TIME_EPSILON) {
+#endif
         secondary->currentWeight = secondary->targetWeight;
         secondary->weightBlendTimeRemaining = 0.0f;
     } else {

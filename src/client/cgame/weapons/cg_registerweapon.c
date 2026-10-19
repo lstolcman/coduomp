@@ -121,8 +121,9 @@ void CG_RegisterWeapon(int weaponIndex)
         SET_ANIM_RATE(WEAPON_XANIM_RELOAD, weapon->reloadTime);
         SET_ANIM_RATE(WEAPON_XANIM_RELOAD_EMPTY, weapon->reloadEmptyTime);
         SET_ANIM_RATE(WEAPON_XANIM_RELOAD_START, weapon->reloadStartTime);
-        /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-        SET_ANIM_RATE(WEAPON_XANIM_RELOAD_END, weapon->reloadEndTime);
+        /* Reload-end animation uses the full reload duration; the gameplay
+         * reload-end timer is a separate field. */
+        SET_ANIM_RATE(WEAPON_XANIM_RELOAD_END, weapon->reloadTime);
         SET_ANIM_RATE(WEAPON_XANIM_RAISE, weapon->switchRaiseTime);
         SET_ANIM_RATE(WEAPON_XANIM_DROP, weapon->lowerTime);
         SET_ANIM_RATE(WEAPON_XANIM_ALT_RAISE, weapon->altSwitchRaiseTime);
