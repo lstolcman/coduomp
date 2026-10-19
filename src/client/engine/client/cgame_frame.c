@@ -503,9 +503,12 @@ void CL_MouseMove(usercmd_t *command)
                 (long double)(float)cl_commandFrameMsec *
                 cl.inputState.shellshockMouseMaxYawSpeed *
                 cl_mouseMsecToSeconds);
-            yawDelta = Com_ClampFloat(
-                -maximumYawDelta, maximumYawDelta,
-                yawDelta);
+            /* Apply the upper bound before the lower bound, including when
+             * a custom speed limit makes the bounds cross. */
+            if (maximumYawDelta < yawDelta)
+                yawDelta = maximumYawDelta;
+            if (-maximumYawDelta > yawDelta)
+                yawDelta = -maximumYawDelta;
         }
         cl.inputState.viewAngles[1] -= yawDelta;
     }
@@ -520,9 +523,11 @@ void CL_MouseMove(usercmd_t *command)
                 (long double)(float)cl_commandFrameMsec *
                 cl.inputState.shellshockMouseMaxPitchSpeed *
                 cl_mouseMsecToSeconds);
-            pitchDelta = Com_ClampFloat(
-                -maximumPitchDelta, maximumPitchDelta,
-                pitchDelta);
+            /* Retain the same upper-then-lower order as the yaw limit. */
+            if (maximumPitchDelta < pitchDelta)
+                pitchDelta = maximumPitchDelta;
+            if (-maximumPitchDelta > pitchDelta)
+                pitchDelta = -maximumPitchDelta;
         }
         cl.inputState.viewAngles[0] += pitchDelta;
     } else {
