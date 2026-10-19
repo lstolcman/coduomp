@@ -71,9 +71,14 @@ void CG_CalcWeaponMovementAngles(vec3_t angles)
 
         for (int i = 0; i < 3; ++i) {
             /* 0x30044da1..0x30044e0d forms factor*move and factor*bias
-             * separately, adds them while both are still wide, then stores. */
-            target[i] = (float)(factor * (long double)(*move)[i] +
-                                factor * (long double)bias[i]);
+             * separately. The vertical movement product is stored before its
+             * bias is added; the other two products remain wide. */
+            long double movement = factor * (long double)(*move)[i];
+            if (i == 2) {
+                const float verticalMovement = (float)movement;
+                movement = verticalMovement;
+            }
+            target[i] = (float)(movement + factor * (long double)bias[i]);
         }
     }
 
