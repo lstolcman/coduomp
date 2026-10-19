@@ -8,6 +8,7 @@
 #include "../math/vector_math.h"
 #include "../platform/crt_boundary.h"
 #include "qcommon/q_string.h"
+#include "compat/coduo_native_x87.h"
 #include "../renderer/renderer_api.h"
 #include "../sound/sound_system.h"
 #include "../system_platform.h"
@@ -79,6 +80,9 @@ enum {
     182.04444885253906f /* exact 0x43360b61, 65536 / 360 */
 #define CL_MSEC_TO_SECONDS \
     0.0010000000474974513f /* exact 0x3a83126f */
+
+/* The mouse-limit multiplications load the binary32 millisecond scale. */
+static const float cl_mouseMsecToSeconds = CL_MSEC_TO_SECONDS;
 
 /* Source: CoDUOMP.exe 0x0040b680..0x0040b6fc.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0040b680_0040b6fd.mcode.
@@ -462,12 +466,14 @@ void CL_MouseMove(usercmd_t *command)
     cl.inputState.mouseDx[cl.inputState.mouseIndex] = 0;
     cl.inputState.mouseDy[cl.inputState.mouseIndex] = 0;
 
-    const float mouseRate =
-        sqrtf(mouseX * mouseX + mouseY * mouseY) /
-        (float)cl_commandFrameMsec;
-    const float acceleratedSensitivity =
-        mouseRate * cl_mouseAccel->value +
-        sensitivity->value;
+    /* The squared components stay wide through the square root. The length
+     * is stored as float before division, and acceleration is stored only
+     * after adding the base sensitivity. */
+    const float mouseLength = (float)coduo_x87_sqrtl(
+        (long double)mouseX * mouseX + (long double)mouseY * mouseY);
+    const float mouseRate = mouseLength / (float)cl_commandFrameMsec;
+    const float acceleratedSensitivity = (float)(
+        (long double)mouseRate * cl_mouseAccel->value + sensitivity->value);
     const float effectiveSensitivity =
         cl.inputState.userCmdSensitivityScale *
         acceleratedSensitivity;
@@ -501,15 +507,15 @@ void CL_MouseMove(usercmd_t *command)
         command->rightmove =
             ClampChar(
                 (int32_t)command->rightmove +
-                (int32_t)(mouseX * m_side->value));
+                coduo_fp_to_i32_extended((long double)mouseX * m_side->value));
     } else {
         float yawDelta = mouseX * m_yaw->value;
         if (cl.inputState.shellshockMouseMaxYawSpeed !=
             0.0f) {
-            const float maximumYawDelta =
-                (float)cl_commandFrameMsec *
+            const float maximumYawDelta = (float)(
+                (long double)(float)cl_commandFrameMsec *
                 cl.inputState.shellshockMouseMaxYawSpeed *
-                CL_MSEC_TO_SECONDS;
+                cl_mouseMsecToSeconds);
             yawDelta = Com_ClampFloat(
                 -maximumYawDelta, maximumYawDelta,
                 yawDelta);
@@ -523,10 +529,10 @@ void CL_MouseMove(usercmd_t *command)
         float pitchDelta = mouseY * m_pitch->value;
         if (cl.inputState.shellshockMouseMaxPitchSpeed !=
             0.0f) {
-            const float maximumPitchDelta =
-                (float)cl_commandFrameMsec *
+            const float maximumPitchDelta = (float)(
+                (long double)(float)cl_commandFrameMsec *
                 cl.inputState.shellshockMouseMaxPitchSpeed *
-                CL_MSEC_TO_SECONDS;
+                cl_mouseMsecToSeconds);
             pitchDelta = Com_ClampFloat(
                 -maximumPitchDelta, maximumPitchDelta,
                 pitchDelta);
@@ -536,7 +542,7 @@ void CL_MouseMove(usercmd_t *command)
         command->forwardmove =
             ClampChar(
                 (int32_t)command->forwardmove -
-                (int32_t)(mouseY * m_forward->value));
+                coduo_fp_to_i32_extended((long double)mouseY * m_forward->value));
     }
 }
 

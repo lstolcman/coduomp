@@ -822,16 +822,17 @@ void CL_MouseEvent(int32_t deltaX, int32_t deltaY)
     if (coduomp_DemoPlaybackMouseEvent(deltaX, deltaY) != qfalse)
         return;
 
-    if ((cls.keyCatchers & KEYCATCH_UI) != 0 &&
-        cl_bypassMouseInput->integer != 1) {
-        (void)VM_Call(
-            coduo_uiVm, UIVM_MOUSE_EVENT,
-            deltaX, deltaY,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-        return;
-    }
-
-    if ((cls.keyCatchers & KEYCATCH_CGAME) != 0) {
+    if ((cls.keyCatchers & KEYCATCH_UI) != 0) {
+        if (cl_bypassMouseInput->integer != 1) {
+            (void)VM_Call(
+                coduo_uiVm, UIVM_MOUSE_EVENT,
+                deltaX, deltaY,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            return;
+        }
+        /* Bypassing an active UI routes directly to the view accumulators,
+         * even when the cgame catcher is also set. */
+    } else if ((cls.keyCatchers & KEYCATCH_CGAME) != 0) {
         (void)VM_Call(
             coduo_cgameVm, CGVM_MOUSE_EVENT,
             deltaX, deltaY,

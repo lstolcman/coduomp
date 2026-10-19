@@ -15,4 +15,7 @@ void Sys_ClearEventQueue(void);
 void Sys_PumpEvents(void);
 sysEvent_t Sys_GetEvent(void);
 
+/* NOT_FROM_ORIGINAL_SOURCE: available slots for bounded native event pumps. */
+int32_t coduomp_sys_event_queue_remaining(void);
+
 #endif
