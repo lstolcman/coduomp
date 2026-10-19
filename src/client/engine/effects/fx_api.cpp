@@ -138,8 +138,8 @@ float FX_RandomFloatRange(const fx_float_range_t &range)
     }
 
     const float randomValue = static_cast<float>(FX_NextRandom15());
-    return (range.end - range.start) * randomValue / 32768.0f +
-           range.start;
+    /* Keep the range arithmetic wide until the returned float is stored. */
+    return static_cast<float>((static_cast<long double>(range.end) - range.start) * randomValue / 32768.0f + range.start);
 }
 
 /* Source: CoDUOMP.exe 0x004a5f50..0x004a5fcc.
@@ -153,8 +153,7 @@ int32_t FX_RandomIntRange(const fx_float_range_t &range)
     }
 
     const float randomValue = static_cast<float>(FX_NextRandom15());
-    const float value =
-        (range.end - range.start) * randomValue / 32768.0f + range.start;
+    const float value = static_cast<float>((static_cast<long double>(range.end) - range.start) * randomValue / 32768.0f + range.start);
     return coduo_fp_to_i32_extended((long double)value + 0.5L);
 }
 
@@ -1344,6 +1343,16 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
             (primitiveTemplate->spawnFlags &
              FX_SPAWNFLAG_ABSOLUTE_VELOCITY) != 0,
             velocity);
+        if ((primitiveTemplate->spawnFlags & FX_SPAWNFLAG_ABSOLUTE_VELOCITY) == 0) {
+            /* Relative velocity and its limiting goal use the same spawn frame. */
+            const vec3_t localGoal = {velocityGoal[0], velocityGoal[1], velocityGoal[2]};
+            for (int32_t component = 0; component < 3; ++component) {
+                velocityGoal[component] = static_cast<float>(
+                    (static_cast<long double>(localGoal[0]) * spawnAxis[0][component] +
+                     static_cast<long double>(localGoal[1]) * spawnAxis[1][component]) +
+                    static_cast<long double>(spawnAxis[2][component]) * localGoal[2]);
+            }
+        }
         if ((primitiveTemplate->spawnFlags &
              FX_SPAWNFLAG_AFFECTED_BY_WIND) != 0) {
             const float windScale =
