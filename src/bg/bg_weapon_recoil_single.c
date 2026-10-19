@@ -105,9 +105,9 @@ qboolean BG_CalculateWeaponPosition_GunRecoil_SingleAngle(float *pValue /*EDX*/,
 
     /* --- 0x300156a6: restoring acceleration toward 0, opposing sign(value) --- */
     if (*pValue > 0.0f) {                    /* FLD [EDX];FCOMP 0.0f; JNZ==le -> 0x300156c1 */
-        *pRate = *pRate - dt * springAccel; /* FLD dt;FMUL springAccel;FSUBR [ECX];FSTP [ECX] */
+        *pRate = (float)((long double)*pRate - (long double)dt * springAccel); /* FLD dt;FMUL springAccel;FSUBR [ECX];FSTP [ECX] */
     } else if (*pValue < 0.0f) {             /* 0x300156c1: FLD [EDX];FCOMP 0.0f; JP==ge -> skip */
-        *pRate = *pRate + dt * springAccel; /* FADD [ECX];FSTP [ECX] */
+        *pRate = (float)((long double)*pRate + (long double)dt * springAccel); /* FADD [ECX];FSTP [ECX] */
     }
     /* *pValue == 0.0f leaves *pRate unchanged (0x300156dc reached directly). */
 
