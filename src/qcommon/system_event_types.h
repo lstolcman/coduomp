@@ -4,7 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-enum { SYS_EVENT_QUEUE_COUNT = 256 };
+/* NOT_FROM_ORIGINAL_SOURCE: burst capacity shared by both engine event rings. */
+enum { SYS_EVENT_QUEUE_COUNT = 4096 };
 
 #if defined(__cplusplus)
 #define SYS_EVENT_TYPES_STATIC_ASSERT static_assert

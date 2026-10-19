@@ -30,6 +30,7 @@ static SDL_GLContext coduoSdlGlContext;
 static qboolean coduoSdlInitialized;
 
 enum {
+    CODUO_SDL_EVENT_BATCH_COUNT = 256,
     CODUO_SDL_CHAR_PASTE = 22
 };
 
@@ -978,13 +979,22 @@ void CoduoSDL_PumpEvents(void)
     if (coduoSdlInitialized == qfalse)
         return;
 
+    /* NOT_FROM_ORIGINAL_SOURCE: keep each transfer batch small independently
+     * of the ring capacity. Count produced engine events, not SDL records:
+     * ignored records must not exhaust a batch with an empty engine queue.
+     * Sys_GetEvent returns queued events immediately, and Com_EventLoop
+     * resumes this pump after consuming them, before command creation. */
+    const int32_t queueRemaining = coduomp_sys_event_queue_remaining();
+    const int32_t batchReserve = queueRemaining > CODUO_SDL_EVENT_BATCH_COUNT
+        ? queueRemaining - CODUO_SDL_EVENT_BATCH_COUNT : 0;
+
     for (;;) {
         /* NOT_FROM_ORIGINAL_SOURCE: one text event can expand to one engine
          * event per byte; all other translations emit at most two. Leave
          * unconsumed events in SDL when the engine queue needs draining.
          * Reconcile physical buttons only after the queued SDL transitions,
          * so a partial drain cannot reorder a later press or release. */
-        if (coduomp_sys_event_queue_remaining() < SDL_TEXTINPUTEVENT_TEXT_SIZE)
+        if (coduomp_sys_event_queue_remaining() < batchReserve + SDL_TEXTINPUTEVENT_TEXT_SIZE)
             return;
         if (SDL_PollEvent(&event) == 0)
             break;
