@@ -837,10 +837,14 @@ void CalcMuzzlePoints(gentity_t *ent, weapon_muzzle_t *muzzle)
 void FireWeapon(gentity_t *ent)
 {
     weapon_muzzle_t muzzlePoints;
+#if defined(WINDOWS_BEHAVIOR)
+    long double minSpread;
+#else
     float minSpread;
+#endif
     float maxSpread;
     float spread;
-    float adsFraction;
+    float spreadFraction;
     int weaponType;
     int weapon;
 
@@ -858,8 +862,8 @@ void FireWeapon(gentity_t *ent)
         muzzlePoints.weaponInfo = wInfo;
         CalcMuzzlePoints(ent, &muzzlePoints);
 
-        /* Get ADS fraction for spread calculation */
-        adsFraction = ent->client->damageAlphaFraction;
+        /* Get the normalized spread accumulator for the shot calculation. */
+        spreadFraction = ent->client->damageAlphaFraction;
 
         /* Calculate spread */
         minSpread = BG_GetMinSpreadForWeapon(&ent->client->ps, ent->s.weapon,
@@ -868,14 +872,23 @@ void FireWeapon(gentity_t *ent)
 
         maxSpread = wInfo->maxSpread;
 
-        /* Interpolate spread based on ADS fraction */
-#if EMULATE_X87
+        /* Interpolate from the stance minimum using the spread accumulator.
+         * Windows retains the minimum's live return through this expression;
+         * Linux first stores the minimum as binary32. */
+#if defined(WINDOWS_BEHAVIOR) && EMULATE_X87
+        const x87f minimum = x87f_load_f64((double)minSpread);
+        spread = x87f_store_f32(x87f_add(
+            x87f_mul(x87f_sub(x87f_load_f32(maxSpread), minimum), x87f_load_f32(spreadFraction)),
+            minimum));
+#elif defined(WINDOWS_BEHAVIOR)
+        spread = (float)(((long double)maxSpread - minSpread) * spreadFraction + minSpread);
+#elif EMULATE_X87
         spread = x87f_store_f32(x87f_add(
             x87f_load_f32(minSpread),
             x87f_mul(x87f_sub(x87f_load_f32(maxSpread), x87f_load_f32(minSpread)),
-                     x87f_load_f32(adsFraction))));
+                     x87f_load_f32(spreadFraction))));
 #else
-        spread = minSpread + (maxSpread - minSpread) * adsFraction;
+        spread = minSpread + (maxSpread - minSpread) * spreadFraction;
 #endif
 
         /* Get weapon type */
