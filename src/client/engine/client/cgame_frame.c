@@ -366,7 +366,10 @@ void CL_JoystickMove(usercmd_t *command)
         command->buttons |= PM_BUTTON_ADS;
     }
 
-    long double angleSpeed = (float)cls.frameTime;
+    /* Explicit float objects retain the original conversion boundaries even
+     * when the compiler keeps excess precision across a cast. */
+    const volatile float frameTime = (float)cls.frameTime;
+    long double angleSpeed = frameTime;
     if (in_speed.active != qfalse)
         angleSpeed *= cl_anglespeedkey->value;
     const float frameAngleSpeed = (float)(angleSpeed * CL_MSEC_TO_SECONDS);
@@ -374,9 +377,9 @@ void CL_JoystickMove(usercmd_t *command)
     /* Axis conversion rounds to float; the following multiplies and angle
      * addition remain wide until the final view-angle store. */
     if (in_strafe.active == qfalse) {
+        const volatile float axis = (float)cl.inputState.joystickAxis[0];
         cl.inputState.viewAngles[1] +=
-            (long double)(float)cl.inputState.joystickAxis[0] *
-            cl_yawspeed->value * frameAngleSpeed;
+            (long double)axis * cl_yawspeed->value * frameAngleSpeed;
     } else {
         command->rightmove =
             ClampChar(
@@ -385,9 +388,9 @@ void CL_JoystickMove(usercmd_t *command)
     }
 
     if (in_mlooking != qfalse) {
+        const volatile float axis = (float)cl.inputState.joystickAxis[1];
         cl.inputState.viewAngles[0] +=
-            (long double)(float)cl.inputState.joystickAxis[1] *
-            cl_pitchspeed->value * frameAngleSpeed;
+            (long double)axis * cl_pitchspeed->value * frameAngleSpeed;
     } else {
         command->forwardmove =
             ClampChar(
