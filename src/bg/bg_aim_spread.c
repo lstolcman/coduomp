@@ -7,8 +7,13 @@
 #include <stdint.h>
 
 #define PM_SHORT_TO_ANGLE 0.0054931640625f
-#define PM_SPREAD_TURN_SCALE 0.01f
-#define PM_SPREAD_AIR_GROWTH 1.28f
+
+/* Float objects preserve the original binary32 operands even when the native
+ * x87 compiler carries promoted decimal literals at excess precision. */
+static const float PM_SPREAD_TURN_SCALE = 0.01f;
+#if defined(WINDOWS_BEHAVIOR)
+static const float PM_SPREAD_AIR_GROWTH = 1.28f;
+#endif
 
 /*
  * The authoritative Windows cgame/game bodies are instruction-identical at
@@ -235,12 +240,12 @@ void PM_AdjustAimSpreadScale(void)
 #if EMULATE_X87
                     growthRate = x87f_store_f32(x87f_add(
                         x87f_load_f32(growthRate),
-                        x87f_mul(x87f_load_f32(0.01f),
+                        x87f_mul(x87f_load_f32(PM_SPREAD_TURN_SCALE),
                                  x87f_load_f32(128.0f))));
 #else
                     growthRate = (float)(
                         (long double)growthRate +
-                        (long double)0.01f * 128.0L);
+                        (long double)PM_SPREAD_TURN_SCALE * 128.0L);
 #endif
                 }
             }
