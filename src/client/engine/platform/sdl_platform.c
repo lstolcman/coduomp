@@ -762,7 +762,17 @@ void CoduoSDL_PumpEvents(void)
     if (coduoSdlInitialized == qfalse)
         return;
 
-    while (SDL_PollEvent(&event) != 0) {
+    for (;;) {
+        /* NOT_FROM_ORIGINAL_SOURCE: one text event can expand to one engine
+         * event per byte; all other translations emit at most two. Leave
+         * unconsumed events in SDL when the engine queue needs draining.
+         * Reconcile physical buttons only after the queued SDL transitions,
+         * so a partial drain cannot reorder a later press or release. */
+        if (coduomp_sys_event_queue_remaining() < SDL_TEXTINPUTEVENT_TEXT_SIZE)
+            return;
+        if (SDL_PollEvent(&event) == 0)
+            break;
+
         sysMsgTime = (int32_t)event.common.timestamp;
 
         switch (event.type) {

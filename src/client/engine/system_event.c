@@ -27,6 +27,15 @@ static uint8_t sysPacketBuffer[MAX_MSGLEN];
 
 int32_t sysMsgTime; /* original 0x0489bc2c */
 
+/* NOT_FROM_ORIGINAL_SOURCE: SDL can provide many motion reports per frame.
+ * Let its translator yield before overflowing the engine's fixed queue,
+ * retaining unconsumed reports in SDL until the engine drains its events. */
+int32_t coduomp_sys_event_queue_remaining(void)
+{
+    const uint32_t queued = (uint32_t)eventHead - (uint32_t)eventTail;
+    return queued < SYS_EVENT_QUEUE_COUNT ? SYS_EVENT_QUEUE_COUNT - (int32_t)queued : 0;
+}
+
 /* Source: CoDUOMP.exe 0x0046ba10..0x0046bac0.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0046ba10_0046bac1.mcode.
  * Name and signature: exact same-module Mac symbol Sys_QueEvent. */
