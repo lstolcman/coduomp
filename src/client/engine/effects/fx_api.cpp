@@ -61,12 +61,14 @@ static uint32_t FX_NextRandom15(void)
 
 float FX_RandomFloatRange(const fx_float_range_t &range);
 
+enum class coduomp_fx_vector_sum_order { xyz, yzx, xzy, zxy, zyx };
+
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of the repeated vector-
  * range sampling and local-axis transform in CreateEffect.  The transformed
- * path samples z, y, x in that order, matching the Windows call sequence. */
-static void FX_SampleVectorRange(const fx_vector_range_t &range,
-                                 const axis_t axis, bool direct,
-                                 vec3_t sampled)
+ * path samples z, y, x in that order, matching the Windows call sequence.
+ * Each use retains its own wide sum order until the destination float store. */
+static void coduomp_fx_sample_vector_range(const fx_vector_range_t &range, const axis_t axis, bool direct,
+                                            vec3_t sampled, coduomp_fx_vector_sum_order sumOrder = coduomp_fx_vector_sum_order::xyz)
 {
     if (direct) {
         for (int32_t component = 0; component < 3; ++component) {
@@ -86,10 +88,26 @@ static void FX_SampleVectorRange(const fx_vector_range_t &range,
         local[component] = FX_RandomFloatRange(componentRange);
     }
     for (int32_t component = 0; component < 3; ++component) {
-        sampled[component] =
-            local[0] * axis[0][component] +
-            local[1] * axis[1][component] +
-            local[2] * axis[2][component];
+        const long double x = static_cast<long double>(local[0]) * axis[0][component];
+        const long double y = static_cast<long double>(local[1]) * axis[1][component];
+        const long double z = static_cast<long double>(local[2]) * axis[2][component];
+        switch (sumOrder) {
+        case coduomp_fx_vector_sum_order::xyz:
+            sampled[component] = static_cast<float>((x + y) + z);
+            break;
+        case coduomp_fx_vector_sum_order::yzx:
+            sampled[component] = static_cast<float>((y + z) + x);
+            break;
+        case coduomp_fx_vector_sum_order::xzy:
+            sampled[component] = static_cast<float>((x + z) + y);
+            break;
+        case coduomp_fx_vector_sum_order::zxy:
+            sampled[component] = static_cast<float>((z + x) + y);
+            break;
+        case coduomp_fx_vector_sum_order::zyx:
+            sampled[component] = static_cast<float>((z + y) + x);
+            break;
+        }
     }
 }
 
@@ -1240,7 +1258,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
     }
 
     vec3_t spawnOrigin;
-    FX_SampleVectorRange(
+    coduomp_fx_sample_vector_range(
         primitiveTemplate->origin1, spawnAxis,
         (primitiveTemplate->spawnFlags & FX_SPAWNFLAG_CHEAP_ORIGIN) != 0,
         spawnOrigin);
@@ -1326,7 +1344,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
         primitiveTemplate->primitiveType == FX_PRIMITIVE_TYPE_TAIL ||
         primitiveTemplate->primitiveType == FX_PRIMITIVE_TYPE_EMITTER;
     if (movingPrimitive) {
-        FX_SampleVectorRange(primitiveTemplate->velocityClamp, spawnAxis,
+        coduomp_fx_sample_vector_range(primitiveTemplate->velocityClamp, spawnAxis,
                              true, velocityGoal);
         if ((primitiveTemplate->flags &
              FX_PRIMITIVE_FLAG_CLAMP_VELOCITY_X) == 0)
@@ -1338,11 +1356,11 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
              FX_PRIMITIVE_FLAG_CLAMP_VELOCITY_Z) == 0)
             velocityGoal[2] = 0.0f;
 
-        FX_SampleVectorRange(
+        coduomp_fx_sample_vector_range(
             primitiveTemplate->velocity, spawnAxis,
             (primitiveTemplate->spawnFlags &
              FX_SPAWNFLAG_ABSOLUTE_VELOCITY) != 0,
-            velocity);
+            velocity, coduomp_fx_vector_sum_order::yzx);
         if ((primitiveTemplate->spawnFlags & FX_SPAWNFLAG_ABSOLUTE_VELOCITY) == 0) {
             /* Relative velocity and its limiting goal use the same spawn frame. */
             const vec3_t localGoal = {velocityGoal[0], velocityGoal[1], velocityGoal[2]};
@@ -1363,11 +1381,11 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
                     fx_windDirection[component] * windScale;
         }
 
-        FX_SampleVectorRange(
+        coduomp_fx_sample_vector_range(
             primitiveTemplate->acceleration, spawnAxis,
             (primitiveTemplate->spawnFlags &
              FX_SPAWNFLAG_ABSOLUTE_ACCELERATION) != 0,
-            acceleration);
+            acceleration, coduomp_fx_vector_sum_order::xzy);
         if ((primitiveTemplate->spawnFlags &
              FX_SPAWNFLAG_OPPOSITE_ACCELERATION) != 0) {
             constexpr float oppositeAccelerationThreshold =
@@ -1410,11 +1428,11 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
             if ((primitiveTemplate->spawnFlags &
                  FX_SPAWNFLAG_ORIGIN2_IS_OFFSET) != 0) {
                 vec3_t traceOffset;
-                FX_SampleVectorRange(
+                coduomp_fx_sample_vector_range(
                     primitiveTemplate->origin2, spawnAxis,
                     (primitiveTemplate->spawnFlags &
                      FX_SPAWNFLAG_CHEAP_ORIGIN2) != 0,
-                    traceOffset);
+                    traceOffset, coduomp_fx_vector_sum_order::zxy);
                 for (int32_t component = 0; component < 3; ++component)
                     traceEnd[component] += traceOffset[component];
             }
@@ -1438,11 +1456,11 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
                                    nullptr);
             }
         } else {
-            FX_SampleVectorRange(
+            coduomp_fx_sample_vector_range(
                 primitiveTemplate->origin2, spawnAxis,
                 (primitiveTemplate->spawnFlags &
                  FX_SPAWNFLAG_CHEAP_ORIGIN2) != 0,
-                secondOrigin);
+                secondOrigin, coduomp_fx_vector_sum_order::zyx);
             for (int32_t component = 0; component < 3; ++component)
                 secondOrigin[component] += origin[component];
         }
