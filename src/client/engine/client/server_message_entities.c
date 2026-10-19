@@ -582,7 +582,8 @@ void CL_ParseSnapshot(msg_t *message)
                 (uint32_t)packetSequence &
                 CL_SNAPSHOT_BACKUP_MASK];
         if (cl.snap.ps.commandTime >= packet->lastCommandTime) {
-            cl.snap.ping = cls.realtime - packet->sendRealTime;
+            /* The receive and send timestamps share the unscaled frame clock. */
+            cl.snap.ping = (int32_t)((uint32_t)cls.realTime - (uint32_t)packet->sendRealTime);
             break;
         }
     }
