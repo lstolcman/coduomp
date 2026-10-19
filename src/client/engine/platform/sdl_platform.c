@@ -773,7 +773,12 @@ void CoduoSDL_PumpEvents(void)
         if (SDL_PollEvent(&event) == 0)
             break;
 
-        sysMsgTime = (int32_t)event.common.timestamp;
+        /* NOT_FROM_ORIGINAL_SOURCE: SDL ticks and Sys_Milliseconds start at
+         * different epochs. Key hold durations subtract event timestamps
+         * from the engine frame clock, so preserve the event's age while
+         * translating it into that clock's wrapping millisecond domain. */
+        const uint32_t eventAge = SDL_GetTicks() - event.common.timestamp;
+        sysMsgTime = (int32_t)(Sys_Milliseconds() - eventAge);
 
         switch (event.type) {
         case SDL_QUIT:
