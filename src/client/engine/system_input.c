@@ -736,12 +736,14 @@ static void IN_JoyMove(void)
     previousJoystickDirections = directions;
 
     if (joystickCaps.wNumAxes >= IN_JOYSTICK_BALL_AXIS_COUNT) {
+        /* Convert the live scaled displacement, without a float store that
+         * could round a fractional movement up to the next integer. */
         const int32_t deltaX =
-            (int32_t)(JoyToI(joystickInfo.dwUpos) *
-                      in_joyBallScale->value);
+            coduo_fp_to_i32_extended((long double)JoyToI(joystickInfo.dwUpos) *
+                                     in_joyBallScale->value);
         const int32_t deltaY =
-            (int32_t)(JoyToI(joystickInfo.dwVpos) *
-                      in_joyBallScale->value);
+            coduo_fp_to_i32_extended((long double)JoyToI(joystickInfo.dwVpos) *
+                                     in_joyBallScale->value);
         if (deltaX != 0 || deltaY != 0)
             Sys_QueEvent(sysMsgTime, SE_MOUSE, deltaX, deltaY,
                          0, NULL);

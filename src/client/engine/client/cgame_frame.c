@@ -58,6 +58,7 @@ static const vec4_t cl_baseColorCodes[8] = {
 enum {
     CL_CONNECTIONLESS_SEQUENCE = -1,
     CL_PACKET_SEQUENCE_BYTES = 4,
+    CL_KEY_MOVE_MAX = 127,
     CL_TIMEOUT_GRACE_COUNT = 5,
     CL_MILLISECONDS_PER_SECOND = 1000,
     CL_TIME_NUDGE_MIN_MSEC = -30,
@@ -75,6 +76,7 @@ enum {
 
 #define CL_AVIDEMO_MSEC_PER_SECOND 1000.0f
 #define CL_TIMEGRAPH_FRAME_SCALE 0.25f
+#define CL_KEY_MOVE_SCALE ((float)CL_KEY_MOVE_MAX)
 #define CL_VIEW_PITCH_LIMIT 90.0f /* exact 0x42b40000 */
 #define CL_ANGLE_TO_SHORT_SCALE \
     182.04444885253906f /* exact 0x43360b61, 65536 / 360 */
@@ -87,7 +89,7 @@ static const float cl_mouseMsecToSeconds = CL_MSEC_TO_SECONDS;
 /* Source: CoDUOMP.exe 0x0040b680..0x0040b6fc.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0040b680_0040b6fd.mcode.
  * Name and accumulator semantics: exact same-module Mac symbol CL_KeyState. */
-float CL_KeyState(clKeyButton_t *button)
+long double CL_KeyState(clKeyButton_t *button)
 {
     int32_t elapsedMsec =
         button->accumulatedMsec;
@@ -105,9 +107,9 @@ float CL_KeyState(clKeyButton_t *button)
         button->downtime = com_frameTime;
     }
 
-    const float fraction =
-        (float)elapsedMsec /
-        (float)cl_commandFrameMsec;
+    /* The fraction stays live through the caller's angle or movement scale;
+     * there is no binary32 return boundary before those operations. */
+    const long double fraction = (long double)elapsedMsec / cl_commandFrameMsec;
     if (fraction < 0.0f)
         return 0.0f;
     if (fraction > 1.0f)
@@ -120,27 +122,24 @@ float CL_KeyState(clKeyButton_t *button)
  * Name and input mapping: exact same-module Mac symbol CL_AdjustAngles. */
 void CL_AdjustAngles(void)
 {
-    float speed =
-        (float)cls.frameTime;
+    long double speed = (long double)cls.frameTime;
     if (in_speed.active != qfalse)
         speed *= cl_anglespeedkey->value;
-    speed *= CL_MSEC_TO_SECONDS;
+    const float frameAngleSpeed = (float)(speed * CL_MSEC_TO_SECONDS);
 
+    /* Scale each live key fraction in this order and round only when storing
+     * the updated view angle. The frame speed above has its own float store. */
     if (in_strafe.active == qfalse) {
         cl.inputState.viewAngles[1] -=
-            speed * cl_yawspeed->value *
-            CL_KeyState(&in_right);
+            CL_KeyState(&in_right) * cl_yawspeed->value * frameAngleSpeed;
         cl.inputState.viewAngles[1] +=
-            speed * cl_yawspeed->value *
-            CL_KeyState(&in_left);
+            CL_KeyState(&in_left) * cl_yawspeed->value * frameAngleSpeed;
     }
 
     cl.inputState.viewAngles[0] -=
-        speed * cl_pitchspeed->value *
-        CL_KeyState(&in_lookup);
+        CL_KeyState(&in_lookup) * cl_pitchspeed->value * frameAngleSpeed;
     cl.inputState.viewAngles[0] +=
-        speed * cl_pitchspeed->value *
-        CL_KeyState(&in_lookdown);
+        CL_KeyState(&in_lookdown) * cl_pitchspeed->value * frameAngleSpeed;
 }
 
 /* Source: CoDUOMP.exe 0x0040bf40..0x0040c175.
@@ -185,8 +184,7 @@ void CL_KeyMove(usercmd_t *command)
     }
     command->wbuttons = stanceButtons;
 
-    if ((cl_run->integer != 0) ==
-        (in_speed.active != qfalse)) {
+    if (cl_run->integer == (int32_t)in_speed.active) {
         command->buttons |=
             PM_BUTTON_ADS;
     } else {
@@ -205,17 +203,13 @@ void CL_KeyMove(usercmd_t *command)
     int32_t rightMove = 0;
     if (in_strafe.active != qfalse) {
         rightMove =
-            (int32_t)(CL_KeyState(&in_right) *
-                      127.0f) +
-            (int32_t)(CL_KeyState(&in_left) *
-                      -127.0f);
+            coduo_fp_to_i32_extended(CL_KeyState(&in_right) * CL_KEY_MOVE_SCALE) +
+            coduo_fp_to_i32_extended(CL_KeyState(&in_left) * -CL_KEY_MOVE_SCALE);
     }
     rightMove +=
-        (int32_t)(CL_KeyState(&in_moveright) *
-                  127.0f);
+        coduo_fp_to_i32_extended(CL_KeyState(&in_moveright) * CL_KEY_MOVE_SCALE);
     rightMove +=
-        (int32_t)(CL_KeyState(&in_moveleft) *
-                  -127.0f);
+        coduo_fp_to_i32_extended(CL_KeyState(&in_moveleft) * -CL_KEY_MOVE_SCALE);
 
     const pmType_t pmType =
         cl.snap.ps.pmType;
@@ -230,33 +224,28 @@ void CL_KeyMove(usercmd_t *command)
           EF_VEHICLE_ALLOW_WEAPON) == 0) ||
         pmType == PM_TYPE_SPECTATOR) {
         upMove =
-            (int32_t)(CL_KeyState(&in_stanceUp) *
-                      127.0f);
+            coduo_fp_to_i32_extended(CL_KeyState(&in_stanceUp) * CL_KEY_MOVE_SCALE);
     }
 
     upMove +=
-        (int32_t)(CL_KeyState(&in_up) *
-                  127.0f);
+        coduo_fp_to_i32_extended(CL_KeyState(&in_up) * CL_KEY_MOVE_SCALE);
 
     if ((command->wbuttons &
          PM_WBUTTON_CROUCH) != 0) {
         if (in_down.active != qfalse) {
             upMove +=
-                (int32_t)(CL_KeyState(&in_down) *
-                          -127.0f);
+                coduo_fp_to_i32_extended(CL_KeyState(&in_down) * -CL_KEY_MOVE_SCALE);
         } else {
-            upMove -= 127;
+            upMove -= CL_KEY_MOVE_MAX;
         }
     } else if ((command->wbuttons &
                 PM_WBUTTON_PRONE) != 0) {
-        upMove -= 127;
+        upMove -= CL_KEY_MOVE_MAX;
     }
 
     const int32_t forwardMove =
-        (int32_t)(CL_KeyState(&in_forward) *
-                  127.0f) +
-        (int32_t)(CL_KeyState(&in_back) *
-                  -127.0f);
+        coduo_fp_to_i32_extended(CL_KeyState(&in_forward) * CL_KEY_MOVE_SCALE) +
+        coduo_fp_to_i32_extended(CL_KeyState(&in_back) * -CL_KEY_MOVE_SCALE);
 
     if ((entityFlags & EF_FORCED_STANCE_MASK) != 0) {
         return;
@@ -378,21 +367,24 @@ void CL_CmdButtons(usercmd_t *command)
  * CL_JoystickMove. */
 void CL_JoystickMove(usercmd_t *command)
 {
-    if ((cl_run->integer != 0) ==
-        (in_speed.active != qfalse)) {
+    if (cl_run->integer == (int32_t)in_speed.active) {
         command->buttons |= PM_BUTTON_ADS;
     }
 
-    float angleSpeed =
-        (float)cls.frameTime;
+    /* Explicit float objects retain the original conversion boundaries even
+     * when the compiler keeps excess precision across a cast. */
+    const volatile float frameTime = (float)cls.frameTime;
+    long double angleSpeed = frameTime;
     if (in_speed.active != qfalse)
         angleSpeed *= cl_anglespeedkey->value;
-    angleSpeed *= CL_MSEC_TO_SECONDS;
+    const float frameAngleSpeed = (float)(angleSpeed * CL_MSEC_TO_SECONDS);
 
+    /* Axis conversion rounds to float; the following multiplies and angle
+     * addition remain wide until the final view-angle store. */
     if (in_strafe.active == qfalse) {
+        const volatile float axis = (float)cl.inputState.joystickAxis[0];
         cl.inputState.viewAngles[1] +=
-            (float)cl.inputState.joystickAxis[0] *
-            cl_yawspeed->value * angleSpeed;
+            (long double)axis * cl_yawspeed->value * frameAngleSpeed;
     } else {
         command->rightmove =
             ClampChar(
@@ -401,9 +393,9 @@ void CL_JoystickMove(usercmd_t *command)
     }
 
     if (in_mlooking != qfalse) {
+        const volatile float axis = (float)cl.inputState.joystickAxis[1];
         cl.inputState.viewAngles[0] +=
-            (float)cl.inputState.joystickAxis[1] *
-            cl_pitchspeed->value * angleSpeed;
+            (long double)axis * cl_pitchspeed->value * frameAngleSpeed;
     } else {
         command->forwardmove =
             ClampChar(
@@ -616,11 +608,12 @@ usercmd_t CL_CreateCmd(void)
         Cvar_Set("cl_viewYawCompensate", "0");
     }
 
-    if (cl.inputState.viewAngles[0] - oldPitch >
+    /* Compare the unrounded difference before storing a clamped pitch. */
+    if ((long double)cl.inputState.viewAngles[0] - oldPitch >
         CL_VIEW_PITCH_LIMIT) {
         cl.inputState.viewAngles[0] =
             oldPitch + CL_VIEW_PITCH_LIMIT;
-    } else if (oldPitch -
+    } else if ((long double)oldPitch -
                    cl.inputState.viewAngles[0] >
                CL_VIEW_PITCH_LIMIT) {
         cl.inputState.viewAngles[0] =

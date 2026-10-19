@@ -1453,12 +1453,14 @@ void CL_KeyEvent(int32_t key, qboolean down, uint32_t time)
         return;
     }
 
-    if ((cls.keyCatchers & KEYCATCH_CGAME) != 0 &&
-        coduo_cgameVm != NULL) {
-        (void)VM_Call(
-            coduo_cgameVm, CGVM_LAST_ATTACKER,
-            key, down, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0);
+    if ((cls.keyCatchers & KEYCATCH_CGAME) != 0) {
+        /* Capture still consumes the key while the module is absent. */
+        if (coduo_cgameVm != NULL) {
+            (void)VM_Call(
+                coduo_cgameVm, CGVM_LAST_ATTACKER,
+                key, down, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0);
+        }
         return;
     }
 
