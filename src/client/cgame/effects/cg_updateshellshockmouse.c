@@ -74,9 +74,11 @@ void CG_UpdateShellShockMouse(shellshock_t *params, int32_t startTime,
          * divide exact as integers. */
         long double frac = (long double)t / duration;
         if (frac != 1.0f) {
-            /* Interpolate sensitivity from 1.0f toward the configured scale. */
+            /* Interpolate sensitivity from 1.0f toward the configured scale.
+             * The subtraction remains live through the multiply and add;
+             * only the final sensitivity has a float store. */
             cg_shellshockMouseSensitivityScale =
-                (params->mouseSensitivityScale - 1.0f) * frac + 1.0f;
+                ((long double)params->mouseSensitivityScale - 1.0f) * frac + 1.0f;
 
             /* Scale both mouse-speed limits by 1.0f/frac (FDIVR 1.0f at
              * 0x3003c5ee). Both trap args remain raw float bit patterns. */
