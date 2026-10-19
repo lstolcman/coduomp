@@ -323,24 +323,26 @@ void RB_SetModelMatrixForRigidSurface(
     const float *modelMatrix = backEnd.orientation.modelMatrix;
     float result[16];
 
+    /* The matrix composition keeps each product and sum wide until the
+     * destination float store, including the translation term. */
     for (int32_t row = 0; row < 3; ++row) {
-        result[row] =
-            (modelMatrix[row] * boneMatrix->axis[0][0] +
-             modelMatrix[8 + row] * boneMatrix->axis[0][2]) +
-            modelMatrix[4 + row] * boneMatrix->axis[0][1];
-        result[4 + row] =
-            (modelMatrix[row] * boneMatrix->axis[1][0] +
-             modelMatrix[4 + row] * boneMatrix->axis[1][1]) +
-            modelMatrix[8 + row] * boneMatrix->axis[1][2];
-        result[8 + row] =
-            (modelMatrix[row] * boneMatrix->axis[2][0] +
-             modelMatrix[4 + row] * boneMatrix->axis[2][1]) +
-            modelMatrix[8 + row] * boneMatrix->axis[2][2];
-        result[12 + row] =
-            ((modelMatrix[row] * boneMatrix->origin[0] +
-              modelMatrix[4 + row] * boneMatrix->origin[1]) +
-             modelMatrix[8 + row] * boneMatrix->origin[2]) +
-            modelMatrix[12 + row];
+        result[row] = (float)(
+            ((long double)modelMatrix[row] * boneMatrix->axis[0][0] +
+             (long double)modelMatrix[8 + row] * boneMatrix->axis[0][2]) +
+            (long double)modelMatrix[4 + row] * boneMatrix->axis[0][1]);
+        result[4 + row] = (float)(
+            ((long double)modelMatrix[row] * boneMatrix->axis[1][0] +
+             (long double)modelMatrix[4 + row] * boneMatrix->axis[1][1]) +
+            (long double)modelMatrix[8 + row] * boneMatrix->axis[1][2]);
+        result[8 + row] = (float)(
+            ((long double)modelMatrix[row] * boneMatrix->axis[2][0] +
+             (long double)modelMatrix[4 + row] * boneMatrix->axis[2][1]) +
+            (long double)modelMatrix[8 + row] * boneMatrix->axis[2][2]);
+        result[12 + row] = (float)(
+            (((long double)modelMatrix[row] * boneMatrix->origin[0] +
+              (long double)modelMatrix[4 + row] * boneMatrix->origin[1]) +
+             (long double)modelMatrix[8 + row] * boneMatrix->origin[2]) +
+            modelMatrix[12 + row]);
     }
     result[3] = 0.0f;
     result[7] = 0.0f;
