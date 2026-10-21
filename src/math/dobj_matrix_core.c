@@ -18,6 +18,228 @@
  * order, so the complete platform bodies remain separate below.
  */
 
+#if (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
+#define CODUOMP_DOBJ_NATIVE_X87 1
+
+/* NOT_FROM_ORIGINAL_SOURCE: preserve binary32 arithmetic memory operands,
+ * platform-specific float spills, and output order on native x87. Converting
+ * all inputs to extended locals first changes signaling-NaN propagation.
+ * All input reads finish before output writes, including overlapping arrays.
+ * GNU AT&T fsubrp below encodes the Intel subtract-pop operation. */
+static void coduomp_dobj_quat_multiply_native(const vec4_t lhs, const vec4_t rhs, vec4_t out)
+{
+#if defined(WINDOWS_BEHAVIOR)
+    float spillZ;
+
+    __asm__ __volatile__(
+        "flds 12(%[lhs])\n\t"
+        "fmuls 0(%[rhs])\n\t"
+        "flds 4(%[rhs])\n\t"
+        "fmuls 8(%[lhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 12(%[rhs])\n\t"
+        "fmuls 0(%[lhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 8(%[rhs])\n\t"
+        "fmuls 4(%[lhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "flds 12(%[rhs])\n\t"
+        "fmuls 4(%[lhs])\n\t"
+        "flds 0(%[rhs])\n\t"
+        "fmuls 8(%[lhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "flds 12(%[lhs])\n\t"
+        "fmuls 4(%[rhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 8(%[rhs])\n\t"
+        "fmuls 0(%[lhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 12(%[rhs])\n\t"
+        "fmuls 8(%[lhs])\n\t"
+        "flds 4(%[lhs])\n\t"
+        "fmuls 0(%[rhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 4(%[rhs])\n\t"
+        "fmuls 0(%[lhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "flds 12(%[lhs])\n\t"
+        "fmuls 8(%[rhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "fstps %[spillZ]\n\t"
+        "flds 12(%[rhs])\n\t"
+        "fmuls 12(%[lhs])\n\t"
+        "flds 0(%[lhs])\n\t"
+        "fmuls 0(%[rhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "flds 4(%[lhs])\n\t"
+        "fmuls 4(%[rhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "flds 8(%[rhs])\n\t"
+        "movl %[spillZ], %%eax\n\t"
+        "fmuls 8(%[lhs])\n\t"
+        "movl %%eax, 8(%[out])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "fstps 12(%[out])\n\t"
+        "fxch %%st(1)\n\t"
+        "fstps 0(%[out])\n\t"
+        "fstps 4(%[out])"
+        : [spillZ] "=m"(spillZ)
+        : [lhs] "r"(lhs), [rhs] "r"(rhs), [out] "r"(out)
+        : "eax", "memory", "st", "st(1)", "st(2)", "st(3)");
+#else
+    float spillX, spillY, spillZ;
+
+    __asm__ __volatile__(
+        "flds 0(%[lhs])\n\t"
+        "fmuls 12(%[rhs])\n\t"
+        "flds 12(%[lhs])\n\t"
+        "fmuls 0(%[rhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 8(%[lhs])\n\t"
+        "fmuls 4(%[rhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 4(%[lhs])\n\t"
+        "fmuls 8(%[rhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "fstps %[spillX]\n\t"
+        "flds 4(%[lhs])\n\t"
+        "fmuls 12(%[rhs])\n\t"
+        "flds 8(%[lhs])\n\t"
+        "fmuls 0(%[rhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "flds 12(%[lhs])\n\t"
+        "fmuls 4(%[rhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 0(%[lhs])\n\t"
+        "fmuls 8(%[rhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "fstps %[spillY]\n\t"
+        "flds 8(%[lhs])\n\t"
+        "fmuls 12(%[rhs])\n\t"
+        "flds 4(%[lhs])\n\t"
+        "fmuls 0(%[rhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 0(%[lhs])\n\t"
+        "fmuls 4(%[rhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "flds 12(%[lhs])\n\t"
+        "fmuls 8(%[rhs])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "fstps %[spillZ]\n\t"
+        "flds 12(%[lhs])\n\t"
+        "fmuls 12(%[rhs])\n\t"
+        "flds 0(%[lhs])\n\t"
+        "fmuls 0(%[rhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "flds 4(%[lhs])\n\t"
+        "fmuls 4(%[rhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "flds 8(%[lhs])\n\t"
+        "fmuls 8(%[rhs])\n\t"
+        "fsubrp %%st, %%st(1)\n\t"
+        "fstps 12(%[out])\n\t"
+        "movl %[spillX], %%eax\n\t"
+        "movl %%eax, 0(%[out])\n\t"
+        "movl %[spillY], %%eax\n\t"
+        "movl %%eax, 4(%[out])\n\t"
+        "movl %[spillZ], %%eax\n\t"
+        "movl %%eax, 8(%[out])"
+        : [spillX] "=m"(spillX), [spillY] "=m"(spillY), [spillZ] "=m"(spillZ)
+        : [lhs] "r"(lhs), [rhs] "r"(rhs), [out] "r"(out)
+        : "eax", "memory", "st", "st(1)", "st(2)", "st(3)");
+#endif
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: retain the original x87 memory operands and
+ * per-platform rounding points. Matrix rows are four binary32 lanes; all
+ * matrix and point reads precede the in-place output stores. */
+static void coduomp_dobj_transform_in_place_native(vec3_t point, const DObjSkelMat *matrix)
+{
+#if defined(WINDOWS_BEHAVIOR)
+
+    __asm__ __volatile__(
+        "flds 32(%[matrix])\n\t"
+        "fmuls 8(%[point])\n\t"
+        "flds 16(%[matrix])\n\t"
+        "fmuls 4(%[point])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 0(%[point])\n\t"
+        "fmuls 0(%[matrix])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "fadds 48(%[matrix])\n\t"
+        "flds 36(%[matrix])\n\t"
+        "fmuls 8(%[point])\n\t"
+        "flds 20(%[matrix])\n\t"
+        "fmuls 4(%[point])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 4(%[matrix])\n\t"
+        "fmuls 0(%[point])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "fadds 52(%[matrix])\n\t"
+        "flds 40(%[matrix])\n\t"
+        "fmuls 8(%[point])\n\t"
+        "flds 24(%[matrix])\n\t"
+        "fmuls 4(%[point])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 8(%[matrix])\n\t"
+        "fmuls 0(%[point])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "fadds 56(%[matrix])\n\t"
+        "fstps 8(%[point])\n\t"
+        "fxch %%st(1)\n\t"
+        "fstps 0(%[point])\n\t"
+        "fstps 4(%[point])"
+        :
+        : [point] "r"(point), [matrix] "r"(matrix)
+        : "memory", "st", "st(1)", "st(2)", "st(3)");
+#else
+    float spillX, spillY;
+
+    __asm__ __volatile__(
+        "flds 0(%[point])\n\t"
+        "fmuls 0(%[matrix])\n\t"
+        "flds 4(%[point])\n\t"
+        "fmuls 16(%[matrix])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 8(%[point])\n\t"
+        "fmuls 32(%[matrix])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "fadds 48(%[matrix])\n\t"
+        "fstps %[spillX]\n\t"
+        "flds 0(%[point])\n\t"
+        "fmuls 4(%[matrix])\n\t"
+        "flds 4(%[point])\n\t"
+        "fmuls 20(%[matrix])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 8(%[point])\n\t"
+        "fmuls 36(%[matrix])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "fadds 52(%[matrix])\n\t"
+        "fstps %[spillY]\n\t"
+        "flds 0(%[point])\n\t"
+        "fmuls 8(%[matrix])\n\t"
+        "flds 4(%[point])\n\t"
+        "fmuls 24(%[matrix])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "flds 8(%[point])\n\t"
+        "fmuls 40(%[matrix])\n\t"
+        "faddp %%st, %%st(1)\n\t"
+        "fadds 56(%[matrix])\n\t"
+        "fstps 8(%[point])\n\t"
+        "movl %[spillX], %%eax\n\t"
+        "movl %%eax, 0(%[point])\n\t"
+        "movl %[spillY], %%eax\n\t"
+        "movl %%eax, 4(%[point])"
+        : [spillX] "=m"(spillX), [spillY] "=m"(spillY)
+        : [point] "r"(point), [matrix] "r"(matrix)
+        : "eax", "memory", "st", "st(1)", "st(2)", "st(3)");
+#endif
+}
+
+#else
+#define CODUOMP_DOBJ_NATIVE_X87 0
+#endif
+
 #if defined(WINDOWS_BEHAVIOR)
 
 void DObjQuatToMatrix43(const vec4_t quat, DObjSkelMat *matrix)
@@ -75,6 +297,9 @@ void DObjQuatToMatrix43(const vec4_t quat, DObjSkelMat *matrix)
 void DObjMatrixTransformVector43InPlace(
     vec3_t point, const DObjSkelMat *matrix)
 {
+#if CODUOMP_DOBJ_NATIVE_X87
+    coduomp_dobj_transform_in_place_native(point, matrix);
+#else
     float x = point[0];
     float y = point[1];
     float z = point[2];
@@ -96,6 +321,7 @@ void DObjMatrixTransformVector43InPlace(
     point[2] = (float)outZ;
     point[0] = (float)outX;
     point[1] = (float)outY;
+#endif
 }
 
 void DObjMatrixTransformVector43(const vec3_t point,
@@ -136,6 +362,9 @@ void DObjMatrixInverseTransformVector43(
 
 void DObjQuatMultiplyIntoFirst(vec4_t quat, const vec4_t rhs)
 {
+#if CODUOMP_DOBJ_NATIVE_X87
+    coduomp_dobj_quat_multiply_native(quat, rhs, quat);
+#else
     long double rhsW = rhs[3];
     long double quatW = quat[3];
     long double rhsX = rhs[0];
@@ -154,10 +383,14 @@ void DObjQuatMultiplyIntoFirst(vec4_t quat, const vec4_t rhs)
     quat[3] = (float)outW;
     quat[0] = (float)outX;
     quat[1] = (float)outY;
+#endif
 }
 
 void DObjQuatMultiplyIntoSecond(const vec4_t lhs, vec4_t quat)
 {
+#if CODUOMP_DOBJ_NATIVE_X87
+    coduomp_dobj_quat_multiply_native(lhs, quat, quat);
+#else
     long double lhsX = lhs[0];
     long double rhsW = quat[3];
     long double lhsW = lhs[3];
@@ -176,6 +409,7 @@ void DObjQuatMultiplyIntoSecond(const vec4_t lhs, vec4_t quat)
     quat[3] = (float)outW;
     quat[0] = (float)outX;
     quat[1] = (float)outY;
+#endif
 }
 
 #else
@@ -266,6 +500,9 @@ void DObjQuatToMatrix43(const vec4_t quat, DObjSkelMat *matrix)
 void DObjMatrixTransformVector43InPlace(
     vec3_t point, const DObjSkelMat *matrix)
 {
+#if CODUOMP_DOBJ_NATIVE_X87
+    coduomp_dobj_transform_in_place_native(point, matrix);
+#else
     float x = point[0];
     float y = point[1];
     float z = point[2];
@@ -280,10 +517,14 @@ void DObjMatrixTransformVector43InPlace(
                z * matrix->axis[2][2] + matrix->origin[2];
     point[0] = outX;
     point[1] = outY;
+#endif
 }
 
 void DObjQuatMultiplyIntoFirst(vec4_t quat, const vec4_t rhs)
 {
+#if CODUOMP_DOBJ_NATIVE_X87
+    coduomp_dobj_quat_multiply_native(quat, rhs, quat);
+#else
     float rhsW = rhs[3];
     float quatW = quat[3];
     float rhsX = rhs[0];
@@ -305,10 +546,14 @@ void DObjQuatMultiplyIntoFirst(vec4_t quat, const vec4_t rhs)
     quat[0] = outX;
     quat[1] = outY;
     quat[2] = outZ;
+#endif
 }
 
 void DObjQuatMultiplyIntoSecond(const vec4_t lhs, vec4_t quat)
 {
+#if CODUOMP_DOBJ_NATIVE_X87
+    coduomp_dobj_quat_multiply_native(lhs, quat, quat);
+#else
     float lhsX = lhs[0];
     float rhsW = quat[3];
     float lhsW = lhs[3];
@@ -326,6 +571,7 @@ void DObjQuatMultiplyIntoSecond(const vec4_t lhs, vec4_t quat)
     quat[0] = outX;
     quat[1] = outY;
     quat[2] = outZ;
+#endif
 }
 
 #endif
