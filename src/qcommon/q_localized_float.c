@@ -29,8 +29,11 @@
  * Legacy MSVC _snprintf receives bufferSize - 1 and can fill that complete
  * count without terminating; the following explicit store terminates at
  * bufferSize - 1. C99 snprintf reserves one character of its count for NUL.
- * Passing bufferSize to C99 therefore reproduces the Windows byte result for
- * every nonzero size. Linux keeps its literal size-minus-one call.
+ * Passing bufferSize to C99 preserves that output-capacity convention when
+ * both formatters produce the same character sequence. Conversion, locale,
+ * and formatting-error behavior remain provider-specific. The Windows path
+ * limits positive precision to 512 before conversion. Linux keeps its
+ * literal size-minus-one call.
  */
 
 #if defined(WINDOWS_BEHAVIOR)
@@ -53,10 +56,15 @@ void Q_LocalizedFloatToString(float value, char *buffer,
                               uint32_t bufferSize, int32_t precision,
                               language_t language)
 {
+    enum { Q_LOCALIZED_FLOAT_MAX_PRECISION = 512 };
+
     /* NOT_FROM_ORIGINAL_SOURCE: a zero-sized output has no writable
      * terminator slot. */
     if (bufferSize == 0) {
         return;
+    }
+    if (precision > Q_LOCALIZED_FLOAT_MAX_PRECISION) {
+        precision = Q_LOCALIZED_FLOAT_MAX_PRECISION;
     }
     snprintf(buffer, (size_t)bufferSize, "%.*f", precision, (double)value);
     buffer[bufferSize - 1u] = '\0';
