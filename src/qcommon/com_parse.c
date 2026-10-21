@@ -1,5 +1,6 @@
 #include "com_parse.h"
 #include "compat/crt/atof_compat.h"
+#include "compat/crt/atoi_compat.h"
 #include "com_parse_error_binding.h"
 #include "q_string.h"
 
@@ -686,7 +687,7 @@ float Com_ParseFloat(char **data)
 int32_t Com_ParseInt(char **data)
 {
     char *token = Com_Parse(data);
-    return token[0] == '\0' ? 0 : atoi(token);
+    return token[0] == '\0' ? 0 : coduo_compat_atoi(token);
 }
 
 /* Source: CoDUOMP.exe 0x0044f0b0..0x0044f177, recovered from an executable
