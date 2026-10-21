@@ -291,8 +291,9 @@ void DObjDumpInfo(const DObj *obj)
 
     Com_Printf("\nModels:\n");
 
+    const int32_t modelCount = obj->modelCount;
     int32_t modelBoneBase = 0;
-    for (int32_t modelIndex = 0; modelIndex < obj->modelCount;
+    for (int32_t modelIndex = 0; modelIndex < modelCount;
          ++modelIndex) {
         const XModel *model = obj->models[modelIndex];
 
@@ -301,7 +302,8 @@ void DObjDumpInfo(const DObj *obj)
     }
 
     Com_Printf("\nBones:\n");
-    for (int32_t boneIndex = 0; boneIndex < obj->boneCount; ++boneIndex) {
+    const int32_t boneCount = obj->boneCount;
+    for (int32_t boneIndex = 0; boneIndex < boneCount; ++boneIndex) {
         Com_Printf("Bone %d: '%s'\n", boneIndex,
                    DObjGetBoneName(obj, boneIndex));
     }
@@ -309,11 +311,12 @@ void DObjDumpInfo(const DObj *obj)
     if (obj->tracePartRemapHandle == 0) {
         Com_Printf("\nNo part duplicates.\n");
     } else {
+        Com_Printf("\nPart duplicates:\n");
+
         const DObjTracePartRemap *partRemap =
             (const DObjTracePartRemap *)SL_ConvertToString(
                 obj->tracePartRemapHandle);
 
-        Com_Printf("\nPart duplicates:\n");
         for (int32_t remapIndex = 0;
              partRemap->duplicatePairs[remapIndex] != 0;
              remapIndex += 2) {
@@ -321,10 +324,11 @@ void DObjDumpInfo(const DObj *obj)
                 partRemap->duplicatePairs[remapIndex] - 1;
             int32_t targetPart =
                 partRemap->duplicatePairs[remapIndex + 1] - 1;
+            const char *targetName = DObjGetBoneName(obj, targetPart);
+            const char *sourceName = DObjGetBoneName(obj, sourcePart);
 
             Com_Printf("%d ('%s') -> %d ('%s')\n", sourcePart,
-                       DObjGetBoneName(obj, sourcePart), targetPart,
-                       DObjGetBoneName(obj, targetPart));
+                       sourceName, targetPart, targetName);
         }
     }
 
