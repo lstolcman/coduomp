@@ -121,7 +121,7 @@ static void dobj_compat_eval_part_copy_quat(DObjAnimMat *dest,
     memmove(&dest->quat[3], &source->quat[3], sizeof(dest->quat[3]));
 }
 
-#if !defined(WINDOWS_BEHAVIOR) || !(defined(__i386__) || defined(__x86_64__)) || !defined(__GNUC__)
+#if !(defined(__i386__) || defined(__x86_64__)) || !defined(__GNUC__)
 /* NOT_FROM_ORIGINAL_SOURCE: typed copy between eval-part translation lanes. */
 static void dobj_compat_eval_part_load_translation(
     const DObjAnimMat *part, vec3_t translation)
@@ -305,6 +305,10 @@ static void dobj_compat_eval_part_transform_translation(
             : [point] "r"(part->translation), [matrix] "r"(matrix)
             : "memory", "st", "st(1)", "st(2)", "st(3)");
     }
+#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
+    /* The native transform publishes each result directly to the pose. */
+    (void)path;
+    DObjMatrixTransformVector43InPlace(part->translation, matrix);
 #else
     vec3_t translation;
 
@@ -340,6 +344,21 @@ static void dobj_compat_eval_part_add_base_translation(
         "fstps 4(%[point])\n\t"
         "flds 8(%[base])\n\t"
         "fadds 8(%[point])\n\t"
+        "fstps 8(%[point])"
+        :
+        : [point] "r"(part->translation), [base] "r"(baseTranslation)
+        : "memory", "st");
+#elif (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
+    /* Load the pose lane first; add its binary32 base lane before storing it. */
+    __asm__ __volatile__(
+        "flds 0(%[point])\n\t"
+        "fadds 0(%[base])\n\t"
+        "fstps 0(%[point])\n\t"
+        "flds 4(%[point])\n\t"
+        "fadds 4(%[base])\n\t"
+        "fstps 4(%[point])\n\t"
+        "flds 8(%[point])\n\t"
+        "fadds 8(%[base])\n\t"
         "fstps 8(%[point])"
         :
         : [point] "r"(part->translation), [base] "r"(baseTranslation)
