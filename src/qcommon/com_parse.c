@@ -455,10 +455,10 @@ char *Com_ParseExt(char **data, qboolean allowLineBreaks)
                 } else {
                     if (character == '"')
                         break;
+                    /* The cursor points past the consumed byte; escaped quotes skip this line update. */
+                    if (*text == '\n')
+                        ++com_parseSession->line;
                 }
-                /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-                if (character == '\n')
-                    ++com_parseSession->line;
                 qcommon_compat_append_parse_token_character(&tokenLength, character);
             }
             goto finish_token;
