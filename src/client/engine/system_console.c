@@ -29,6 +29,7 @@ enum {
     SYS_CONSOLE_PRINT_BUFFER_CAPACITY = 32768,
     SYS_CONSOLE_TEXT_RETAIN_LIMIT = 16384,
     SYS_CONSOLE_APPEND_POSITION = 65535,
+    SYS_CONSOLE_SCROLL_TO_END_LINES = 65535,
     SYS_CONSOLE_ERROR_TEXT_CAPACITY = 512,
     SYS_CONSOLE_INPUT_CAPACITY = 512,
     SYS_CONSOLE_INPUT_APPEND_LIMIT = 507,
@@ -869,7 +870,7 @@ void Sys_ShowConsole(int32_t visibility, qboolean quitOnClose)
     case SYS_CONSOLE_VISIBLE:
         ShowWindow((HWND)sysConsoleWindow, SW_SHOWNORMAL);
         SendMessageA((HWND)sysConsoleOutputWindow, EM_LINESCROLL,
-                     0, 65535);
+                     0, SYS_CONSOLE_SCROLL_TO_END_LINES);
         return;
     case SYS_CONSOLE_MINIMIZED:
         ShowWindow((HWND)sysConsoleWindow, SW_MINIMIZE);
@@ -937,7 +938,7 @@ void Sys_Print(const char *text)
         /* Move the caret beyond the retained text before inserting output. */
         SendMessageA((HWND)sysConsoleOutputWindow, EM_SETSEL, SYS_CONSOLE_APPEND_POSITION, SYS_CONSOLE_APPEND_POSITION);
     }
-    SendMessageA((HWND)sysConsoleOutputWindow, EM_LINESCROLL, 0, 65535);
+    SendMessageA((HWND)sysConsoleOutputWindow, EM_LINESCROLL, 0, SYS_CONSOLE_SCROLL_TO_END_LINES);
     SendMessageA((HWND)sysConsoleOutputWindow, EM_SCROLLCARET, 0, 0);
     SendMessageA((HWND)sysConsoleOutputWindow, EM_REPLACESEL, 0,
                  (LPARAM)output);
