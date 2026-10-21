@@ -195,7 +195,7 @@ static uint16_t coduomp_script_string_pop_free_hash_slot(void)
     uint16_t freeSlot = script_stringHashSlots[0].linkAndFlags;
     if (freeSlot == 0) {
         Scr_DumpScriptThreads();
-        Com_Error(1,
+        Com_Error(ERR_DROP,
                   "\x15" "exceeded maximum number of script strings\n");
     }
 
@@ -343,6 +343,7 @@ uint16_t SL_FindString(const char *text)
 uint16_t SL_FindLowercaseString(const char *text)
 {
     size_t textSize = strlen(text) + 1u;
+    /* NOT_FROM_ORIGINAL_SOURCE: bound lowercase scratch storage to the string arena limit. */
     if (textSize > SCRIPT_STRING_MAX_BYTE_COUNT) {
         return 0;
     }
@@ -467,6 +468,7 @@ uint16_t SL_GetString_(const char *text, uint8_t user, int32_t type)
 uint16_t SL_GetLowercaseStringOfLen(const char *text, uint8_t user,
                                     size_t size, int32_t type)
 {
+    /* NOT_FROM_ORIGINAL_SOURCE: bound lowercase scratch storage before allocation. */
     if (size > SCRIPT_STRING_MAX_BYTE_COUNT) {
         Com_Error(ERR_DROP, "\x15" "script string exceeds maximum length of %i bytes", SCRIPT_STRING_MAX_BYTE_COUNT - 1);
         return 0;
@@ -700,9 +702,6 @@ void SL_ShutdownSystem(uint8_t usage)
 void CreateCanonicalFilename(char *dest, const char *source,
                              int32_t maxLength)
 {
-    const char *const originalSource = source;
-    const int32_t originalMaxLength = maxLength;
-
     for (;;) {
         uint8_t ch;
         do {
@@ -716,10 +715,10 @@ void CreateCanonicalFilename(char *dest, const char *source,
             *dest++ = (char)tolower(coduo_ctype_signed_byte_arg(ch));
             --maxLength;
             if (maxLength == 0) {
-                /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-                Com_Error(1,
+                /* Report the advanced source cursor and exhausted remaining capacity. */
+                Com_Error(ERR_DROP,
                           "\x15" "Filename '%s' exceeds maximum length of %d",
-                          originalSource, originalMaxLength);
+                          source, maxLength);
             }
             if (ch == '\\') {
                 break;
