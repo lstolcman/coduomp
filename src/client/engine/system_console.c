@@ -30,6 +30,7 @@ enum {
     SYS_CONSOLE_TEXT_RETAIN_LIMIT = 16384,
     SYS_CONSOLE_APPEND_POSITION = 65535,
     SYS_CONSOLE_SCROLL_TO_END_LINES = 65535,
+    SYS_CONSOLE_SELECT_ALL_END = -1,
     SYS_CONSOLE_ERROR_TEXT_CAPACITY = 512,
     SYS_CONSOLE_INPUT_CAPACITY = 512,
     SYS_CONSOLE_INPUT_APPEND_LIMIT = 507,
@@ -933,7 +934,7 @@ void Sys_Print(const char *text)
     sysConsoleTextLength += (uint32_t)outputLength;
     if (sysConsoleTextLength >
         (uint32_t)SYS_CONSOLE_TEXT_RETAIN_LIMIT) {
-        SendMessageA((HWND)sysConsoleOutputWindow, EM_SETSEL, 0, -1);
+        SendMessageA((HWND)sysConsoleOutputWindow, EM_SETSEL, 0, SYS_CONSOLE_SELECT_ALL_END);
         sysConsoleTextLength = (uint32_t)outputLength;
     } else {
         /* Move the caret beyond the retained text before inserting output. */
@@ -941,7 +942,7 @@ void Sys_Print(const char *text)
     }
     SendMessageA((HWND)sysConsoleOutputWindow, EM_LINESCROLL, 0, SYS_CONSOLE_SCROLL_TO_END_LINES);
     SendMessageA((HWND)sysConsoleOutputWindow, EM_SCROLLCARET, 0, 0);
-    SendMessageA((HWND)sysConsoleOutputWindow, EM_REPLACESEL, 0,
+    SendMessageA((HWND)sysConsoleOutputWindow, EM_REPLACESEL, FALSE,
                  (LPARAM)output);
 #else
     /* NOT_FROM_ORIGINAL_SOURCE: native terminal output corresponding to the
