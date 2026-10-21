@@ -103,12 +103,12 @@ void CG_DrawSpectatorFollowHints(void)
     float stopLineY = 416.0f;
 
     if (nextPreviousFlags & 0x100000u) {
-        const char *keyStr;
+        char *keyStr;
         const char *translatedLabel;
         const char *text;
 
         // Line A: "Next Player" bound to "+attack".
-        if (UI_KeysStringForBinding("+attack", (char **)&keyStr) == 0) {
+        if (UI_KeysStringForBinding("+attack", &keyStr) == 0) {
             keyStr = "+attack"; // unbound: show the raw command token
         }
         translatedLabel = CG_SafeTranslateString_Internal(
@@ -123,7 +123,7 @@ void CG_DrawSpectatorFollowHints(void)
         // Line B: "Previous Player" bound to "+melee" (0x30076aa8, loaded at
         // 0x3001be0b/0x3001be19). A prior pass used the ADJACENT .rdata string
         // "toggle cl_run" (0x30076a98) -- which is Line C's command, not this one.
-        if (UI_KeysStringForBinding("+melee", (char **)&keyStr) == 0) {
+        if (UI_KeysStringForBinding("+melee", &keyStr) == 0) {
             keyStr = "+melee"; // unbound: show the raw command token
         }
         translatedLabel = CG_SafeTranslateString_Internal(
@@ -138,14 +138,14 @@ void CG_DrawSpectatorFollowHints(void)
     }
 
     if (cg_snap->ps.playerStateFlags & 0x200000u) {
-        const char *keyStr;
+        char *keyStr;
         const char *translatedLabel;
         const char *text;
 
         // Line C: "Stop Following" — its key is whichever of "toggle cl_run" or
         // "+speed" is currently bound; if neither is bound, the line is skipped.
-        if (UI_KeysStringForBinding("toggle cl_run", (char **)&keyStr) == 0 &&
-            UI_KeysStringForBinding("+speed", (char **)&keyStr) == 0) {
+        if (UI_KeysStringForBinding("toggle cl_run", &keyStr) == 0 &&
+            UI_KeysStringForBinding("+speed", &keyStr) == 0) {
             return;
         }
         translatedLabel =

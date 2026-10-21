@@ -37,7 +37,7 @@ void CG_DrawVote(void)
     float color[4] = {1.0f, 1.0f, 0.0f, 1.0f};
     char yesKey[256];
     char noKey[256];
-    const char *binding;
+    char *binding;
 
     /* 0x3001b7f0..0x3001b893 skips only the binding construction when the
      * entry snapshots say that neither display is active. It does not return:
@@ -46,14 +46,14 @@ void CG_DrawVote(void)
         /* Both complaint and ordinary vote text can show the current yes/no
          * bindings. The DLL uses CRT strncpy(count=255) followed by an explicit
          * byte-255 NUL. */
-        if (UI_KeysStringForBinding("vote yes", (char **)&binding) != 0) {
+        if (UI_KeysStringForBinding("vote yes", &binding) != 0) {
             strncpy(yesKey, binding, 255);
         } else {
             strncpy(yesKey, "vote yes", 255);
         }
         yesKey[255] = '\0';
 
-        if (UI_KeysStringForBinding("vote no", (char **)&binding) != 0) {
+        if (UI_KeysStringForBinding("vote no", &binding) != 0) {
             strncpy(noKey, binding, 255);
         } else {
             strncpy(noKey, "vote no", 255);
