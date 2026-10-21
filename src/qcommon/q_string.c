@@ -5,14 +5,19 @@
 #include <string.h>
 
 enum {
-    Q_STRING_WHOLE_COMPARE_COUNT = 99999
+    Q_STRING_WHOLE_COMPARE_COUNT = 99999,
+    Q_STRING_COMPARE_LESS = -1,
+    Q_STRING_COMPARE_EQUAL = 0,
+    Q_STRING_COMPARE_GREATER = 1,
+    Q_STRING_COMPARE_MISMATCH = -1,
+    Q_STRING_COMPARE_NULL_INPUT = -1
 };
 
 void Com_Error(errorParm_t code, const char *format, ...);
 
 /* Original-machine-code sources for the common Q string/character subsystem.
- * The Windows bodies at each address are instruction-identical within a
- * function except for image-local call targets. The Linux bodies use the same
+ * Windows entry addresses are listed per image; internal calling conventions
+ * and call sequences can differ between images. The Linux bodies use the same
  * ASCII predicates, byte order, copy bounds, color-code grammar, and return
  * domains. Supporting Mac symbols provide the retained canonical Q_* names.
  *
@@ -44,7 +49,7 @@ void Com_Error(errorParm_t code, const char *format, ...);
  * the complete sequence are 0009325e, 00093285, 000932ac, 000932d3,
  * 00093308, 0009332f, 0009337a,
  * 000933c8, 00093415, 00093451, 00093506, 00093575, 000935c2, 00093609,
- * 000936b5, 0009371d, 000937a5, 00093833, and 000938cd.
+ * 00093650, 000936b5, 0009371d, 000937a5, 00093833, and 000938cd.
  */
 
 qboolean Q_isprint(int32_t character)
@@ -125,9 +130,9 @@ int32_t Q_stricmpn(const char *left, const char *right, int32_t count)
         int32_t leftCharacter;
         int32_t rightCharacter;
 
-        /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
+        /* NOT_FROM_ORIGINAL_SOURCE: stop before reading another byte pair once the comparison budget is exhausted. */
         if (remaining == 0) {
-            return 0;
+            return Q_STRING_COMPARE_EQUAL;
         }
         remaining -= UINT32_C(1);
         leftCharacter = (int32_t)(signed char)*left++;
@@ -141,12 +146,12 @@ int32_t Q_stricmpn(const char *left, const char *right, int32_t count)
                 rightCharacter -= 'a' - 'A';
             }
             if (leftCharacter != rightCharacter) {
-                return leftCharacter < rightCharacter ? -1 : 1;
+                return leftCharacter < rightCharacter ? Q_STRING_COMPARE_LESS : Q_STRING_COMPARE_GREATER;
             }
         }
 
         if (leftCharacter == '\0') {
-            return 0;
+            return Q_STRING_COMPARE_EQUAL;
         }
     }
 }
@@ -159,19 +164,19 @@ int32_t Q_strncmp(const char *left, const char *right, int32_t count)
         int32_t leftCharacter;
         int32_t rightCharacter;
 
-        /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
+        /* NOT_FROM_ORIGINAL_SOURCE: stop before reading another byte pair once the comparison budget is exhausted. */
         if (remaining == 0) {
-            return 0;
+            return Q_STRING_COMPARE_EQUAL;
         }
         remaining -= UINT32_C(1);
         leftCharacter = (int32_t)(signed char)*left++;
         rightCharacter = (int32_t)(signed char)*right++;
 
         if (leftCharacter != rightCharacter) {
-            return leftCharacter < rightCharacter ? -1 : 1;
+            return leftCharacter < rightCharacter ? Q_STRING_COMPARE_LESS : Q_STRING_COMPARE_GREATER;
         }
         if (leftCharacter == '\0') {
-            return 0;
+            return Q_STRING_COMPARE_EQUAL;
         }
     }
 }
@@ -179,7 +184,7 @@ int32_t Q_strncmp(const char *left, const char *right, int32_t count)
 int32_t Q_stricmp(const char *left, const char *right)
 {
     if (left == NULL || right == NULL) {
-        return -1;
+        return Q_STRING_COMPARE_NULL_INPUT;
     }
 
     return Q_stricmpn(left, right, Q_STRING_WHOLE_COMPARE_COUNT);
@@ -189,8 +194,9 @@ char *Q_strlwr(char *string)
 {
     char *cursor;
 
-    /* No original image calls setlocale. Its CRT calls therefore use the C
-     * locale: ASCII letters fold and every other stored byte is unchanged. */
+    /* The original Windows CRT's default-context path folds ASCII letters and
+     * preserves other bytes. Spell out that mapping to avoid host-locale changes
+     * and the host ctype domain restriction on negative signed bytes. */
     for (cursor = string; *cursor != '\0'; ++cursor) {
         if (*cursor >= 'A' && *cursor <= 'Z') {
             *cursor = (char)(*cursor + ('a' - 'A'));
@@ -267,10 +273,15 @@ char *Q_CleanStr(char *string)
 
 uint8_t Q_CleanCharacter(uint8_t character)
 {
-    if (character == UINT8_C(0x92)) {
+    enum {
+        Q_CLEAN_CHARACTER_APOSTROPHE_ALIAS = 146,
+        Q_CLEAN_CHARACTER_ASCII_MAX = 127
+    };
+
+    if (character == Q_CLEAN_CHARACTER_APOSTROPHE_ALIAS) {
         return (uint8_t)'\'';
     }
-    if (character > UINT8_C(0x7f)) {
+    if (character > Q_CLEAN_CHARACTER_ASCII_MAX) {
         return (uint8_t)'.';
     }
     return character;
@@ -284,9 +295,9 @@ int32_t Q_strncasecmp(const char *left, const char *right, int32_t count)
         int32_t leftCharacter;
         int32_t rightCharacter;
 
-        /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
+        /* NOT_FROM_ORIGINAL_SOURCE: stop before reading another byte pair once the comparison budget is exhausted. */
         if (remaining == 0) {
-            return 0;
+            return Q_STRING_COMPARE_EQUAL;
         }
         remaining -= UINT32_C(1);
         leftCharacter = (int32_t)(signed char)*left++;
@@ -300,11 +311,11 @@ int32_t Q_strncasecmp(const char *left, const char *right, int32_t count)
                 rightCharacter -= 'a' - 'A';
             }
             if (leftCharacter != rightCharacter) {
-                return -1;
+                return Q_STRING_COMPARE_MISMATCH;
             }
         }
         if (leftCharacter == '\0') {
-            return 0;
+            return Q_STRING_COMPARE_EQUAL;
         }
     }
 }
