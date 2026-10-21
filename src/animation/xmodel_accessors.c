@@ -63,12 +63,16 @@ int32_t XModelGetBoneIndex(const XModel *model, uint16_t partName)
 
 void XModelGetBounds(const XModel *model, vec3_t mins, vec3_t maxs)
 {
-    mins[0] = model->info->mins[0];
-    mins[1] = model->info->mins[1];
-    mins[2] = model->info->mins[2];
-    maxs[0] = model->info->maxs[0];
-    maxs[1] = model->info->maxs[1];
-    maxs[2] = model->info->maxs[2];
+    const XModelInfo *info = model->info;
+
+    /* Copy each lane's bits in order, including when the vectors overlap,
+     * without evaluating the stored floating-point values. */
+    memmove(&mins[0], &info->mins[0], sizeof(mins[0]));
+    memmove(&mins[1], &info->mins[1], sizeof(mins[1]));
+    memmove(&mins[2], &info->mins[2], sizeof(mins[2]));
+    memmove(&maxs[0], &info->maxs[0], sizeof(maxs[0]));
+    memmove(&maxs[1], &info->maxs[1], sizeof(maxs[1]));
+    memmove(&maxs[2], &info->maxs[2], sizeof(maxs[2]));
 }
 
 int32_t XModelGetSurfaces(const XModel *model, XSurface ***surfacesOut,
