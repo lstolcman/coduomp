@@ -284,9 +284,7 @@ int32_t UI_KeysStringForBinding(const char *command, char **bindingTextOut)
 
     /* NOT_FROM_ORIGINAL_SOURCE: bound the separator and second translated key
      * to the display buffer. */
-    Q_strcat(localizedBindingText, UI_LOCALIZED_BINDING_TEXT_SIZE, " ");
-    Q_strcat(localizedBindingText, UI_LOCALIZED_BINDING_TEXT_SIZE, DC->getLocalizedString("KEY_OR"));
-    Q_strcat(localizedBindingText, UI_LOCALIZED_BINDING_TEXT_SIZE, " ");
+    Q_strcat(localizedBindingText, UI_LOCALIZED_BINDING_TEXT_SIZE, va(" %s ", DC->getLocalizedString("KEY_OR")));
     translated = DC->translateString(secondKeyName);
     Q_strcat(localizedBindingText, UI_LOCALIZED_BINDING_TEXT_SIZE, translated != NULL ? translated : secondKeyName);
     return keyCount;
