@@ -1,5 +1,7 @@
 #include "q_math.h"
 
+#include <float.h>
+
 #if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
 #error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
 #elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
@@ -408,6 +410,22 @@ static void coduomp_dobj_inverse_transform_native(const vec3_t point, const DObj
 
 #if defined(WINDOWS_BEHAVIOR)
 
+/* NOT_FROM_ORIGINAL_SOURCE: round an extended matrix result directly into its
+ * output lane, without reloading a binary32 temporary before publication. */
+static void coduomp_dobj_store_extended_lane(float *lane, long double value)
+{
+#if (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__) && LDBL_MANT_DIG == 64 && LDBL_MAX_EXP == 16384
+    __asm__ __volatile__(
+        "fldt %[value]\n\t"
+        "fstps %[lane]"
+        : [lane] "=m" (*lane)
+        : [value] "m" (value)
+        : "memory", "st");
+#else
+    *lane = value;
+#endif
+}
+
 void DObjQuatToMatrix43(const vec4_t quat, DObjSkelMat *matrix)
 {
     float q0Sq = quat[0] * quat[0];
@@ -430,32 +448,36 @@ void DObjQuatToMatrix43(const vec4_t quat, DObjSkelMat *matrix)
         long double yScale = quat[1] * scale;
         float yz = (float)(yScale * quat[2]);
         float yw = (float)(yScale * quat[3]);
-        long double zw = ((long double)quat[2] * quat[3]) * scale;
+        long double zw = (long double)quat[3] * quat[2];
 
-        matrix->axis[0][0] = (float)(1.0L - (yy + zz));
-        matrix->axis[0][1] = (float)(xy + zw);
-        matrix->axis[0][2] = xz - yw;
+        /* Publish the padding before the final scale operation and round each
+         * extended result directly into its output lane without a float reload. */
         matrix->axis[0][3] = 0.0f;
-        matrix->axis[1][0] = (float)(xy - zw);
-        matrix->axis[1][1] = (float)(1.0L - (xx + zz));
-        matrix->axis[1][2] = yz + xw;
         matrix->axis[1][3] = 0.0f;
+        matrix->axis[2][3] = 0.0f;
+        zw *= scale;
+
+        coduomp_dobj_store_extended_lane(&matrix->axis[0][0], 1.0L - (yy + zz));
+        coduomp_dobj_store_extended_lane(&matrix->axis[0][1], xy + zw);
+        matrix->axis[0][2] = xz - yw;
+        coduomp_dobj_store_extended_lane(&matrix->axis[1][0], xy - zw);
+        coduomp_dobj_store_extended_lane(&matrix->axis[1][1], 1.0L - (xx + zz));
+        matrix->axis[1][2] = yz + xw;
         matrix->axis[2][0] = xz + yw;
         matrix->axis[2][1] = yz - xw;
-        matrix->axis[2][2] = (float)(1.0L - (xx + yy));
-        matrix->axis[2][3] = 0.0f;
+        coduomp_dobj_store_extended_lane(&matrix->axis[2][2], 1.0L - (xx + yy));
     } else {
         matrix->axis[0][0] = 1.0f;
         matrix->axis[0][1] = 0.0f;
         matrix->axis[0][2] = 0.0f;
-        matrix->axis[0][3] = 0.0f;
         matrix->axis[1][0] = 0.0f;
         matrix->axis[1][1] = 1.0f;
         matrix->axis[1][2] = 0.0f;
-        matrix->axis[1][3] = 0.0f;
         matrix->axis[2][0] = 0.0f;
         matrix->axis[2][1] = 0.0f;
         matrix->axis[2][2] = 1.0f;
+        matrix->axis[0][3] = 0.0f;
+        matrix->axis[1][3] = 0.0f;
         matrix->axis[2][3] = 0.0f;
     }
 }
