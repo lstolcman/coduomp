@@ -282,8 +282,8 @@ void DObjShutdown(void)
 }
 
 /* Sources: CoDUOMP.exe 0x00493d50..0x00493ef2 and coduo_lnxded
- * 0x080c5608..0x080c5832. */
-void DObjBuildTracePartRemap(DObj *state)
+ * 0x080c5608..0x080c5832. Name: exact same-version Mac symbol DObjCreateDuplicateParts. */
+void DObjCreateDuplicateParts(DObj *state)
 {
     DObj *record;
     size_t remapStackSize;
@@ -393,7 +393,7 @@ void DObjGetHierarchyBits(DObj *state,
     record = state;
 
     if (state->tracePartRemapHandle == 0) {
-        DObjBuildTracePartRemap(state);
+        DObjCreateDuplicateParts(state);
     }
 
     traceRemap = (const DObjTracePartRemap *)SL_ConvertToString(
@@ -482,7 +482,7 @@ void DObjCompleteHierarchyBits(DObj *state,
     boneIndex = state->boneCount - 1;
 
     if (state->tracePartRemapHandle == 0) {
-        DObjBuildTracePartRemap(state);
+        DObjCreateDuplicateParts(state);
     }
 
     traceRemap = (const DObjTracePartRemap *)SL_ConvertToString(
@@ -589,7 +589,7 @@ void DObjCalcSkel(DObj *state, const uint32_t *partBits)
     }
 
     if (state->tracePartRemapHandle == 0) {
-        DObjBuildTracePartRemap(state);
+        DObjCreateDuplicateParts(state);
     }
 
     const DObjTracePartRemap *traceRemap =

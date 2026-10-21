@@ -59,7 +59,7 @@ void DObjShutdown(void);
 void DObjCreate(const DObjModel *models, uint16_t modelCount,
                 XAnimTree *runtimeTree, DObj *obj, uint16_t gameId);
 void DObjFree(DObj *obj, qboolean releaseRuntimeTree);
-void DObjBuildTracePartRemap(DObj *obj);
+void DObjCreateDuplicateParts(DObj *obj);
 void DObjGetHierarchyBits(DObj *obj, int32_t boneIndex,
                           uint32_t *partBits);
 void DObjCompleteHierarchyBits(DObj *obj, uint32_t *partBits);
