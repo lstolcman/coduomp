@@ -48,26 +48,17 @@ typedef struct dobj_trace_result_s {
     uint8_t allsolid;
 } dobj_trace_result_t;
 
-/* DObj animation storage has three 16-byte part bitsets followed by two
- * DObjAnimMat lanes per bone.  A third lane per bone begins immediately after
- * the complete partSpans array.  Windows DObjGetAllocSkelSize/DObjCreateSkel
+/* DObj animation storage has three 16-byte part bitsets followed by one
+ * DObjSkelMat per bone, then a separate DObjAnimMat array with one entry per
+ * bone.  Windows DObjGetAllocSkelSize/DObjCreateSkel
  * (CoDUOMP.exe 0x00494c50 and 0x00494cb0) and Linux
  * (coduo_lnxded 0x080c6a24 and 0x080c6ac4) agree on the 0x30-byte prefix,
- * 0x40-byte span, and total 0x30 + boneCount * 0x60 allocation size. */
-typedef struct dobj_eval_part_span_s {
-    DObjAnimMat parts[2];
-} dobj_eval_part_span_t;
-
-typedef union dobj_eval_storage_span_u {
-    dobj_eval_part_span_t evalParts;
-    DObjSkelMat basePose;
-} dobj_eval_storage_span_t;
-
+ * 0x40-byte matrix stride, and total 0x30 + boneCount * 0x60 allocation size. */
 typedef struct dobj_eval_storage_s {
     uint32_t evaluatedPartBits[DOBJ_PART_BITSET_WORD_COUNT];
     uint32_t controlPartBits[DOBJ_PART_BITSET_WORD_COUNT];
     uint32_t blockedPartBits[DOBJ_PART_BITSET_WORD_COUNT];
-    dobj_eval_storage_span_t partSpans[];
+    DObjSkelMat matrices[];
 } dobj_eval_storage_t;
 
 /* Exact retail type name from the Mac
@@ -143,22 +134,12 @@ struct DObj_s {
 #define DOBJ_TYPES_ASSERT(name, expression) \
     typedef char name[(expression) ? 1 : -1]
 
-DOBJ_TYPES_ASSERT(dobj_eval_part_span_alignment,
-                  DOBJ_TYPES_ALIGNOF(dobj_eval_part_span_t) == 0x04);
-DOBJ_TYPES_ASSERT(dobj_eval_part_span_second_part_offset,
-                  offsetof(dobj_eval_part_span_t, parts[1]) == 0x20);
-DOBJ_TYPES_ASSERT(dobj_eval_part_span_size,
-                  sizeof(dobj_eval_part_span_t) == 0x40);
-DOBJ_TYPES_ASSERT(dobj_eval_storage_span_alignment,
-                  DOBJ_TYPES_ALIGNOF(dobj_eval_storage_span_t) == 0x04);
-DOBJ_TYPES_ASSERT(dobj_eval_storage_span_size,
-                  sizeof(dobj_eval_storage_span_t) == 0x40);
 DOBJ_TYPES_ASSERT(dobj_eval_storage_control_bits_offset,
                   offsetof(dobj_eval_storage_t, controlPartBits) == 0x10);
 DOBJ_TYPES_ASSERT(dobj_eval_storage_blocked_bits_offset,
                   offsetof(dobj_eval_storage_t, blockedPartBits) == 0x20);
-DOBJ_TYPES_ASSERT(dobj_eval_storage_spans_offset,
-                  offsetof(dobj_eval_storage_t, partSpans) == 0x30);
+DOBJ_TYPES_ASSERT(dobj_eval_storage_matrices_offset,
+                  offsetof(dobj_eval_storage_t, matrices) == 0x30);
 DOBJ_TYPES_ASSERT(dobj_eval_storage_size,
                   sizeof(dobj_eval_storage_t) == 0x30);
 DOBJ_TYPES_ASSERT(xanim_to_xmodel_alignment,

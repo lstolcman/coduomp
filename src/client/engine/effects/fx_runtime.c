@@ -119,7 +119,7 @@ qboolean FX_GetBoneOrientation(const sfx_bolt_info_t *boltInfo,
     const int32_t matrixIndex =
         (int32_t)obj->modelPartBaseIndices[0] + boltInfo->boneIndex;
     const DObjSkelMat *boneMatrix =
-        &obj->evaluationStorage->partSpans[matrixIndex].basePose;
+        &obj->evaluationStorage->matrices[matrixIndex];
 
     /* 0x004af624..0x004af72e: the x87 schedule accumulates each axis result
      * in 2,1,0 term order. Each float product is exact in double and the sum

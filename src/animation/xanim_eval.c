@@ -1213,8 +1213,8 @@ void DObjCalcAnim(DObj *obj, const uint32_t *partBits)
     xanim_evalChildRefs = obj->models;
     xanim_evalPartCount = obj->boneCount;
 
-    DObjAnimMat *output =
-        &storage->partSpans[obj->boneCount].evalParts.parts[0];
+    DObjAnimMat *output = (DObjAnimMat *)((unsigned char *)storage + sizeof(*storage)
+                                       + (size_t)obj->boneCount * sizeof(DObjSkelMat));
     if (xanim_currentTree != NULL) {
         xanim_evalPartBytes =
             (size_t)obj->boneCount * sizeof(DObjAnimMat);

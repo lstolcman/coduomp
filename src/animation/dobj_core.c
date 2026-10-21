@@ -619,7 +619,7 @@ void DObjCalcSkel(DObj *state, const uint32_t *partBits)
             ~skipQuatBits[wordIndex] | buildPartBits[wordIndex];
     }
 
-    DObjSkelMat *matrices = &storage->partSpans[0].basePose;
+    DObjSkelMat *matrices = storage->matrices;
     DObjAnimMat *evalParts = DObjGetRotTransArray(state);
     DObjAnimMat *evalPart = evalParts;
     int32_t globalPart = 0;

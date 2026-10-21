@@ -200,9 +200,7 @@ void R_FinishDObjToStaticModel(
             vec3_t *destinationNormals = surface->normals + baseVertex;
             vec3_t *destinationVertices = surface->vertices + baseVertex;
             const DObjSkelMat *basePose =
-                &obj->evaluationStorage
-                     ->partSpans[obj->modelPartBaseIndices[ref->modelIndex]]
-                     .basePose;
+                &obj->evaluationStorage->matrices[obj->modelPartBaseIndices[ref->modelIndex]];
 
             memcpy(destinationIndices, sourceSurface->triangles,
                    (size_t)sourceIndexCount * sizeof(destinationIndices[0]));
