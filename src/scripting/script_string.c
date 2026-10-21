@@ -35,15 +35,17 @@ enum {
     SCRIPT_STRING_TEMP_HASH_ENTRY_COUNT = 65536
 };
 
-typedef struct script_string_entry_s {
-    int16_t refCount;
-    uint8_t byteCount;
-    uint8_t flags;
-    char text[];
-} script_string_entry_t;
+/* This type describes the original header fields and layout. String storage
+ * uses the whole allocator array's character representation, never a header
+ * structure overlaid on an allocator block. */
+typedef struct script_string_header_s {
+    uint16_t refCount;
+    unsigned char byteCount;
+    unsigned char flags;
+} script_string_header_t;
 
 enum {
-    SCRIPT_STRING_MAX_BYTE_COUNT = SCRIPT_MEMORY_MAX_ALLOCATION_SIZE - sizeof(script_string_entry_t) - 1
+    SCRIPT_STRING_MAX_BYTE_COUNT = SCRIPT_MEMORY_MAX_ALLOCATION_SIZE - sizeof(script_string_header_t) - 1
 };
 
 /* NOT_FROM_ORIGINAL_SOURCE: retain full payload sizes for bounded comparisons
@@ -51,14 +53,28 @@ enum {
  * low byte; interned data can also contain embedded NUL bytes. */
 static uint16_t coduomp_script_string_entry_sizes[SCRIPT_MEMORY_BLOCK_COUNT];
 
-/* NOT_FROM_ORIGINAL_SOURCE: express the original INC/DEC word operations
- * without relying on the host C implementation's signed-overflow rules. */
-static int16_t coduomp_script_string_ref_from_bits(uint16_t bits)
+/* NOT_FROM_ORIGINAL_SOURCE: load the original reference word through the
+ * allocator array's character representation into an unsigned local value. */
+static uint16_t coduomp_script_string_load_ref(const unsigned char *entry)
 {
-    int16_t value;
+    uint16_t refCount;
 
-    memcpy(&value, &bits, sizeof(value));
-    return value;
+    memcpy(&refCount, entry + offsetof(script_string_header_t, refCount), sizeof(refCount));
+    return refCount;
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: store only the reference word, preserving the
+ * neighboring byte count and usage flags. */
+static void coduomp_script_string_store_ref(unsigned char *entry, uint16_t refCount)
+{
+    memcpy(entry + offsetof(script_string_header_t, refCount), &refCount, sizeof(refCount));
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: the payload follows the complete header and may
+ * span multiple allocator blocks within the whole array's byte view. */
+static const char *coduomp_script_string_text(const unsigned char *entry)
+{
+    return (const char *)(entry + sizeof(script_string_header_t));
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: defined signed view of a target dword for the
@@ -72,53 +88,45 @@ static int32_t coduomp_script_string_int32_from_bits(uint32_t bits)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: source-level spelling of the original word INC. */
-static void coduomp_script_string_increment_ref(
-    script_string_entry_t *entry)
+static void coduomp_script_string_increment_ref(unsigned char *entry)
 {
     /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-    if ((uint16_t)entry->refCount == SCRIPT_REFERENCE_COUNT_MAX) {
+    if (coduomp_script_string_load_ref(entry) == SCRIPT_REFERENCE_COUNT_MAX) {
         Com_Error(ERR_DROP, "\x15" "script string reference count overflow");
     }
-    entry->refCount = coduomp_script_string_ref_from_bits(
-        (uint16_t)((uint16_t)entry->refCount + 1u));
+    coduomp_script_string_store_ref(entry, (uint16_t)(coduomp_script_string_load_ref(entry) + 1u));
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: source-level spelling of the original word DEC. */
-static void coduomp_script_string_decrement_ref(
-    script_string_entry_t *entry)
+static void coduomp_script_string_decrement_ref(unsigned char *entry)
 {
-    entry->refCount = coduomp_script_string_ref_from_bits(
-        (uint16_t)((uint16_t)entry->refCount - 1u));
+    coduomp_script_string_store_ref(entry, (uint16_t)(coduomp_script_string_load_ref(entry) - 1u));
 }
 
 #if UINTPTR_MAX == UINT32_MAX
-_Static_assert(sizeof(script_string_entry_t) == 0x04 &&
-                   _Alignof(script_string_entry_t) == 0x02 &&
-                   offsetof(script_string_entry_t, byteCount) == 0x02 &&
-                   offsetof(script_string_entry_t, flags) == 0x03 &&
-                   offsetof(script_string_entry_t, text) == 0x04,
-               "original i386 script-string entry layout changed");
+_Static_assert(sizeof(script_string_header_t) == 4 &&
+                   _Alignof(script_string_header_t) == 2 &&
+                   offsetof(script_string_header_t, refCount) == 0 &&
+                   offsetof(script_string_header_t, byteCount) == 2 &&
+                   offsetof(script_string_header_t, flags) == 3,
+               "original i386 script-string header layout changed");
 #endif
 
 /* Source: CoDUOMP.exe 0x00482270..0x0048227c.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00482270_0048227d.mcode.
  * Same-module Mac identity: GetRefString(unsigned short). The returned pointer
  * is the header of the string-pool entry selected by the 16-bit arena handle. */
-static script_string_entry_t *GetRefStringByHandle(uint16_t string)
+static unsigned char *GetRefStringByHandle(uint16_t string)
 {
-    return (script_string_entry_t *)(
-        script_stringPoolBase +
-        (size_t)string * SCRIPT_STRING_HANDLE_UNIT_SIZE);
+    return script_stringPoolBase + (size_t)string * SCRIPT_STRING_HANDLE_UNIT_SIZE;
 }
 
 /* Source: CoDUOMP.exe 0x00482280..0x00482283.
  * Same-module Mac identity: GetRefString(const char *). This overload reverses
- * the fixed text-member displacement used by SL_ConvertToString. */
-static const script_string_entry_t *GetRefStringByText(const char *text)
+ * the fixed header displacement used by SL_ConvertToString. */
+static const unsigned char *GetRefStringByText(const char *text)
 {
-    return (const script_string_entry_t *)(
-        (const uint8_t *)(const void *)text -
-        offsetof(script_string_entry_t, text));
+    return (const unsigned char *)text - sizeof(script_string_header_t);
 }
 
 /* Source: CoDUOMP.exe 0x004822b0..0x004822c2.
@@ -126,7 +134,7 @@ static const script_string_entry_t *GetRefStringByText(const char *text)
  * Name and argument: exact same-module Mac symbol SL_ConvertFromString. */
 uint16_t SL_ConvertFromString(const char *text)
 {
-    const script_string_entry_t *entry =
+    const unsigned char *entry =
         GetRefStringByText(text);
     uint32_t byteOffsetBits =
         (uint32_t)((uintptr_t)(const void *)entry -
@@ -142,14 +150,14 @@ uint16_t SL_ConvertFromString(const char *text)
 static qboolean coduomp_script_string_entry_matches(
     const script_string_hash_slot_t *slot, const char *text, size_t size)
 {
-    const script_string_entry_t *entry =
+    const unsigned char *entry =
         GetRefStringByHandle(slot->stringHandle);
 
     /* NOT_FROM_ORIGINAL_SOURCE: compare complete allocation sizes before the
      * byte comparison; the header's low byte alone is not a size bound. */
-    return entry->byteCount == (uint8_t)size &&
+    return entry[offsetof(script_string_header_t, byteCount)] == (uint8_t)size &&
                    coduomp_script_string_entry_sizes[slot->stringHandle] == size &&
-                   memcmp(entry->text, text, size) == 0
+                   memcmp(coduomp_script_string_text(entry), text, size) == 0
                ? qtrue
                : qfalse;
 }
@@ -371,10 +379,10 @@ uint16_t SL_GetStringOfLen(const char *text, uint8_t user, size_t size,
     if ((head->linkAndFlags & SCRIPT_STRING_HASH_FLAGS_MASK) ==
         SCRIPT_STRING_HASH_OCCUPIED) {
         if (coduomp_script_string_entry_matches(head, text, size) != qfalse) {
-            script_string_entry_t *entry =
+            unsigned char *entry =
                 GetRefStringByHandle(head->stringHandle);
-            if ((entry->flags & user) == 0) {
-                entry->flags |= user;
+            if ((entry[offsetof(script_string_header_t, flags)] & user) == 0) {
+                entry[offsetof(script_string_header_t, flags)] |= user;
                 coduomp_script_string_increment_ref(entry);
             }
             return head->stringHandle;
@@ -393,10 +401,10 @@ uint16_t SL_GetStringOfLen(const char *text, uint8_t user, size_t size,
                 qfalse) {
                 coduomp_script_string_move_slot_to_hash_head(
                     hash, previousSlot, currentSlot);
-                script_string_entry_t *entry =
+                unsigned char *entry =
                     GetRefStringByHandle(head->stringHandle);
-                if ((entry->flags & user) == 0) {
-                    entry->flags |= user;
+                if ((entry[offsetof(script_string_header_t, flags)] & user) == 0) {
+                    entry[offsetof(script_string_header_t, flags)] |= user;
                     coduomp_script_string_increment_ref(entry);
                 }
                 return head->stringHandle;
@@ -419,19 +427,19 @@ uint16_t SL_GetStringOfLen(const char *text, uint8_t user, size_t size,
     }
 
     uint32_t allocationSize =
-        (uint32_t)size + (uint32_t)sizeof(script_string_entry_t);
+        (uint32_t)size + (uint32_t)sizeof(script_string_header_t);
 #if defined(WINDOWS_BEHAVIOR)
     (void)type;
     head->stringHandle = MT_AllocIndex(allocationSize);
 #else
     head->stringHandle = MT_AllocIndex(allocationSize, type);
 #endif
-    script_string_entry_t *entry =
+    unsigned char *entry =
         GetRefStringByHandle(head->stringHandle);
-    memcpy(entry->text, text, size);
-    entry->flags = user;
-    entry->refCount = 0;
-    entry->byteCount = (uint8_t)size;
+    memcpy(entry + sizeof(script_string_header_t), text, size);
+    entry[offsetof(script_string_header_t, flags)] = user;
+    coduomp_script_string_store_ref(entry, 0);
+    entry[offsetof(script_string_header_t, byteCount)] = (uint8_t)size;
     coduomp_script_string_entry_sizes[head->stringHandle] = (uint16_t)size;
     return head->stringHandle;
 }
@@ -524,7 +532,7 @@ const char *SL_ConvertToString(uint16_t string)
         return NULL;
     }
 
-    return GetRefStringByHandle(string)->text;
+    return coduomp_script_string_text(GetRefStringByHandle(string));
 }
 
 /* Source: CoDUOMP.exe 0x00482a00..0x00482a10.
@@ -541,12 +549,12 @@ void SL_AddRefToString(uint16_t string)
  * the redundant reference; otherwise transfer it by setting the owner bit. */
 void SL_TransferRefToString(uint16_t string, uint8_t user)
 {
-    script_string_entry_t *entry = GetRefStringByHandle(string);
+    unsigned char *entry = GetRefStringByHandle(string);
 
-    if ((entry->flags & user) != 0) {
+    if ((entry[offsetof(script_string_header_t, flags)] & user) != 0) {
         coduomp_script_string_decrement_ref(entry);
     } else {
-        entry->flags |= user;
+        entry[offsetof(script_string_header_t, flags)] |= user;
     }
 }
 
@@ -554,10 +562,10 @@ void SL_TransferRefToString(uint16_t string, uint8_t user)
  * at all proven executable call sites and has no standalone function body. */
 void coduomp_script_string_mark_usage(uint16_t string, uint8_t usage)
 {
-    script_string_entry_t *entry = GetRefStringByHandle(string);
+    unsigned char *entry = GetRefStringByHandle(string);
 
-    if ((entry->flags & usage) == 0) {
-        entry->flags |= usage;
+    if ((entry[offsetof(script_string_header_t, flags)] & usage) == 0) {
+        entry[offsetof(script_string_header_t, flags)] |= usage;
     } else {
         coduomp_script_string_decrement_ref(entry);
     }
@@ -567,11 +575,11 @@ void coduomp_script_string_mark_usage(uint16_t string, uint8_t usage)
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00482b00_00482b3e.mcode. */
 void SL_RemoveRefToString(uint16_t string)
 {
-    script_string_entry_t *entry = GetRefStringByHandle(string);
+    unsigned char *entry = GetRefStringByHandle(string);
 
-    if (entry->refCount == 0) {
-        SL_FreeString(string, entry->text,
-                      (uint32_t)strlen(entry->text) + 1u);
+    if (coduomp_script_string_load_ref(entry) == 0) {
+        SL_FreeString(string, coduomp_script_string_text(entry),
+                      (uint32_t)strlen(coduomp_script_string_text(entry)) + 1u);
         return;
     }
     coduomp_script_string_decrement_ref(entry);
@@ -581,10 +589,10 @@ void SL_RemoveRefToString(uint16_t string)
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00482b40_00482b6d.mcode. */
 void SL_RemoveRefToStringOfLen(uint16_t string, uint32_t size)
 {
-    script_string_entry_t *entry = GetRefStringByHandle(string);
+    unsigned char *entry = GetRefStringByHandle(string);
 
-    if (entry->refCount == 0) {
-        SL_FreeString(string, entry->text, size);
+    if (coduomp_script_string_load_ref(entry) == 0) {
+        SL_FreeString(string, coduomp_script_string_text(entry), size);
         return;
     }
     coduomp_script_string_decrement_ref(entry);
@@ -600,7 +608,7 @@ void SL_FreeString(uint16_t string, const char *text, uint32_t size)
 
     MT_FreeIndex(
         string, (uint32_t)size +
-                    (uint32_t)sizeof(script_string_entry_t));
+                    (uint32_t)sizeof(script_string_header_t));
     coduomp_script_string_entry_sizes[string] = 0;
 
     uint16_t replacementSlot =
@@ -671,13 +679,13 @@ void SL_ShutdownSystem(uint8_t usage)
                 break;
             }
 
-            script_string_entry_t *entry =
+            unsigned char *entry =
                 GetRefStringByHandle(hashSlot->stringHandle);
-            if ((entry->flags & usage) == 0) {
+            if ((entry[offsetof(script_string_header_t, flags)] & usage) == 0) {
                 break;
             }
 
-            entry->flags &= (uint8_t)~usage;
+            entry[offsetof(script_string_header_t, flags)] &= (uint8_t)~usage;
             script_stringFreedHashSlot = NULL;
             SL_RemoveRefToString(hashSlot->stringHandle);
             if (script_stringFreedHashSlot == NULL) {

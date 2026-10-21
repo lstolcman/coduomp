@@ -17,7 +17,7 @@ enum {
     SCRIPT_MEMORY_MAX_ALLOCATION_SIZE = 65536
 };
 
-extern uint8_t *script_stringPoolBase;
+extern unsigned char *script_stringPoolBase;
 extern uint8_t *script_vectorLocalPoolBase;
 extern uint8_t *script_memoryArenaEnd;
 extern size_t script_vectorLocalPoolByteCount;

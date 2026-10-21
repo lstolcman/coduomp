@@ -289,7 +289,9 @@ void MT_RemoveHeadMemoryNode(int32_t bucket)
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00480c60_00480cf9.mcode. */
 void MT_Init(void)
 {
-    script_stringPoolBase = (uint8_t *)script_memoryBlocks;
+    /* NOT_FROM_ORIGINAL_SOURCE: expose the complete declared arena's byte
+     * representation so string spans may cross allocator-block boundaries. */
+    script_stringPoolBase = (unsigned char *)&script_memoryBlocks;
     MT_InitBits();
     for (int32_t bucket = 0; bucket <= SCRIPT_MEMORY_MAX_BUCKET; ++bucket) {
         script_memoryFreeRoots[bucket] = 0;

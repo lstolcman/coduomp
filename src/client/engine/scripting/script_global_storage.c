@@ -139,7 +139,7 @@ script_variable_type_t script_coerceLeftType;
 script_variable_type_t script_coerceRightType;
 uint16_t *script_stringCanonicalMap;
 uint16_t script_stringCanonicalCount;
-uint8_t *script_stringPoolBase;
+unsigned char *script_stringPoolBase;
 uint8_t *script_vectorLocalPoolBase;
 size_t script_vectorLocalPoolByteCount;
 uint8_t *script_memoryArenaEnd;
