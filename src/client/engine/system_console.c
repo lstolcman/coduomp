@@ -30,6 +30,7 @@ enum {
     SYS_CONSOLE_PRINT_SOURCE_LIMIT = 16383,
     SYS_CONSOLE_PRINT_BUFFER_CAPACITY = 32768,
     SYS_CONSOLE_TEXT_RETAIN_LIMIT = 16384,
+    SYS_CONSOLE_APPEND_POSITION = 65535,
     SYS_CONSOLE_ERROR_TEXT_CAPACITY = 512,
     SYS_CONSOLE_INPUT_CAPACITY = 512,
     SYS_CONSOLE_INPUT_APPEND_LIMIT = 507,
@@ -967,7 +968,8 @@ void Sys_Print(const char *text)
         SendMessageA((HWND)sysConsoleOutputWindow, EM_SETSEL, 0, -1);
         sysConsoleTextLength = (uint32_t)outputLength;
     } else {
-        SendMessageA((HWND)sysConsoleOutputWindow, EM_SETSEL, -1, -1);
+        /* Move the caret beyond the retained text before inserting output. */
+        SendMessageA((HWND)sysConsoleOutputWindow, EM_SETSEL, SYS_CONSOLE_APPEND_POSITION, SYS_CONSOLE_APPEND_POSITION);
     }
     SendMessageA((HWND)sysConsoleOutputWindow, EM_LINESCROLL, 0, 65535);
     SendMessageA((HWND)sysConsoleOutputWindow, EM_SCROLLCARET, 0, 0);
