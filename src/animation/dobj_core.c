@@ -375,6 +375,7 @@ void DObjGetHierarchyBits(DObj *state,
     const DObjTracePartRemap *traceRemap;
     int32_t childBases[DOBJ_MAX_MODELS];
     int32_t childIndex;
+    int32_t modelCount;
 
     if (partBits == NULL) {
         return;
@@ -391,6 +392,7 @@ void DObjGetHierarchyBits(DObj *state,
     }
 
     record = state;
+    modelCount = state->modelCount;
 
     if (state->tracePartRemapHandle == 0) {
         DObjCreateDuplicateParts(state);
@@ -403,7 +405,7 @@ void DObjGetHierarchyBits(DObj *state,
      * every bone count before these cumulative child bases are used. */
     childBases[0] = 0;
     childIndex = 0;
-    while (childIndex < state->modelCount) {
+    while (childIndex < modelCount) {
         XModel *model = state->models[childIndex];
         dobj_compat_model_part_layout_t layout =
             dobj_compat_model_part_layout(model);
@@ -415,7 +417,7 @@ void DObjGetHierarchyBits(DObj *state,
         }
 
         ++childIndex;
-        if (childIndex == state->modelCount) {
+        if (childIndex == modelCount) {
             return;
         }
 
