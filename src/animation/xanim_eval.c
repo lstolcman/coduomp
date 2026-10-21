@@ -1143,8 +1143,10 @@ void XAnimCalc(uint32_t animIndex, float weight,
         return;
     }
 
-    DObjAnimMat scratch[xanim_evalPartCount];
-    DObjAnimMat *blendParts = clear != qfalse ? parts : scratch;
+    DObjAnimMat *blendParts = parts;
+    if (clear == qfalse) {
+        blendParts = __builtin_alloca(xanim_evalPartBytes);
+    }
     XAnimCalc(entry->payload.parent.firstChildIndex + firstActiveChild,
               firstWeight, blendParts, qtrue, qtrue);
     XAnimCalc(entry->payload.parent.firstChildIndex + secondActiveChild,
