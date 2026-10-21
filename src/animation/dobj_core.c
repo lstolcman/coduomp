@@ -926,8 +926,8 @@ update_part_count:
                       model->name);
             goto finish;
         }
-        partCount += modelPartCount;
-        if (partCount > DOBJ_MAX_BONE_INDEX) {
+        const int32_t nextPartCount = partCount + modelPartCount;
+        if (nextPartCount > DOBJ_MAX_BONE_INDEX) {
             XModel *rootModelRecord =
                 (XModel *)state->models[0];
 
@@ -937,6 +937,7 @@ update_part_count:
             goto finish;
         }
 
+        partCount = nextPartCount;
         ++childCount;
     }
 
