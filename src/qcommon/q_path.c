@@ -9,8 +9,8 @@
 
 /*
  * The four authoritative Windows copies have the same instruction bodies
- * after normalizing image-local CRT calls, format addresses, and stack-cookie
- * checks:
+ * after normalizing image-local CRT and helper calls, format addresses,
+ * and compiler cookie globals and checks:
  *
  *                         EXE        cgame      UI         game
  * Com_SkipPath            0044f310   3004e100   40006130   20057920
@@ -19,10 +19,10 @@
  * Com_DefaultExtension    0044f3a0   3004e190   400061c0   200579b0
  *
  * The Linux engine bodies at 0x080862d9, 0x08086308, 0x0808633d, and
- * 0x0808637a agree with the game-module bodies at RVAs 0x00092d0d,
- * 0x00092d3c, 0x00092d71, and 0x00092dbe.  Windows inlines Q_strncpyz in the
- * latter two functions while Linux retains the call; every copy has the same
- * copy count, terminator position, reverse scan, and output behavior.
+ * 0x0808637a correspond to game-module RVAs 0x00092d0d, 0x00092d3c, 0x00092d71, and 0x00092dbe.
+ * Windows inlines Q_strncpyz in the latter two functions; Linux retains the call.
+ * On valid nonempty strings, copy counts, terminators and scans agree under ordinary helper and CRT bindings.
+ * The empty-input guards below are non-original adaptations.
  * Supporting Mac traceback symbols retain the exact Com_* spellings.
  */
 
