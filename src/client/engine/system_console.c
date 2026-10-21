@@ -58,9 +58,9 @@ static int32_t sysConsoleVisibility; /* original 0x009d5f88 */
 static qboolean sysConsoleQuitOnClose; /* original 0x009d5f8c */
 static char sysConsoleErrorText[SYS_CONSOLE_ERROR_TEXT_CAPACITY];
 static qboolean winAltTabDisabled; /* original 0x009d5fa8 */
-/* Original producer state is the Win32 console edit control at
- * 0x009d5b88; Sys_ConsoleInput transfers one completed line to the separate
- * return buffer at 0x009d5d88. */
+/* Original queued input is stored at 0x009d5b88; Sys_ConsoleInput transfers
+ * all queued lines to the separate return buffer at 0x009d5d88.
+ * The returned buffer remains valid until the next nonempty input poll. */
 static char sysConsoleInputLine[SYS_CONSOLE_INPUT_CAPACITY];
 static char sysConsoleReturnedLine[SYS_CONSOLE_INPUT_CAPACITY];
 #if defined(_WIN32)
@@ -563,8 +563,9 @@ LRESULT CALLBACK InputLineWndProc(HWND window, UINT message,
         if (wParam == '\r') {
             const size_t queuedLength =
                 strlen(sysConsoleInputLine);
-            /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-            if (queuedLength > SYS_CONSOLE_INPUT_APPEND_LIMIT) {
+            /* NOT_FROM_ORIGINAL_SOURCE: when the append count wraps, the complete field, newline, and terminator must fit. */
+            if (queuedLength > SYS_CONSOLE_INPUT_APPEND_LIMIT &&
+                queuedLength + strlen(sysConsoleField.buffer) + sizeof("\n") > sizeof(sysConsoleInputLine)) {
                 Sys_Print("WARNING: console input queue is full\n");
                 return 0;
             }
@@ -952,7 +953,7 @@ void Sys_Print(const char *text)
 /* Source: CoDUOMP.exe 0x0046f730..0x0046f759.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0046f730_0046f75a.mcode.
  * Name and return contract: exact same-module Mac symbol Sys_ConsoleInput.
- * The complete NUL-terminated line is copied before the producer buffer's
+ * The complete NUL-terminated queue is copied before the producer buffer's
  * first byte is cleared. */
 char *Sys_ConsoleInput(void)
 {
