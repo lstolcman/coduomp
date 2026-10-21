@@ -39,7 +39,7 @@ void XAnimDisplay(XAnimTree *tree, uint32_t animIndex, int32_t depth)
     }
 
     for (int32_t indent = 0; indent < depth; ++indent) {
-        Com_Printf("  ");
+        Com_Printf(" ");
     }
 
     if (entry->childCount == 0) {
@@ -157,7 +157,7 @@ void XAnimDisplay(XAnimTree *tree, uint32_t animIndex, int32_t depth)
     }
 
     for (int32_t indent = 0; indent < depth; ++indent) {
-        Com_Printf("  ");
+        Com_Printf(" ");
     }
 
     if (entry->childCount == 0) {
