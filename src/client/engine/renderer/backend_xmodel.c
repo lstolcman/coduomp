@@ -68,7 +68,7 @@ static const DObjSkelMat *RB_GetXModelBasePose(
 
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of the identical logging
  * prefix in the ARB, ATI, and NV optimized rigid-surface backends. */
-static void RB_LogOptimizedXModelSurface(
+static void coduomp_log_optimized_xmodel_surface(
     const char *format, const renderer_entity_surface_t *entitySurface)
 {
     if (r_logFile->integer == 0)
@@ -82,7 +82,7 @@ static void RB_LogOptimizedXModelSurface(
 /* NOT_FROM_ORIGINAL_SOURCE: the ARB and NV paths contain the same pass loop
  * and show-triangle replay.  `baseTexCoord` is either a VBO byte offset or the
  * native base address of the interleaved NV vertex array. */
-static void RB_DrawOptimizedXModelPasses(
+static void coduomp_draw_optimized_xmodel_passes(
     const XSurface *surface, const void *baseTexCoord,
     const void *indices)
 {
@@ -407,7 +407,7 @@ void RB_SurfaceXModelRigidARB(renderer_surface_t *surfaceData)
     const XSurfaceOptimizedDataARB *optimized =
         surface->optimizedDataARB;
 
-    RB_LogOptimizedXModelSurface(logFormat, entitySurface);
+    coduomp_log_optimized_xmodel_surface(logFormat, entitySurface);
     RB_SetModelMatrixForRigidSurface(entitySurface);
     RB_SetIteratorFog();
     GL_Cull(tess.shader->cullType);
@@ -427,7 +427,7 @@ void RB_SurfaceXModelRigidARB(renderer_surface_t *surfaceData)
         (const void *)(uintptr_t)
             offsetof(XSurfaceARBVert, rigidVertex.position));
 
-    RB_DrawOptimizedXModelPasses(surface, NULL, NULL);
+    coduomp_draw_optimized_xmodel_passes(surface, NULL, NULL);
 
     qglBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
     qglBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
@@ -454,7 +454,7 @@ void RB_SurfaceXModelRigidATI(renderer_surface_t *surfaceData)
         surface->optimizedDataATI;
     const int32_t indexCount = surface->triangleCount * 3;
 
-    RB_LogOptimizedXModelSurface(logFormat, entitySurface);
+    coduomp_log_optimized_xmodel_surface(logFormat, entitySurface);
     RB_EndMultitexture();
     RB_SetModelMatrixForRigidSurface(entitySurface);
     RB_SetIteratorFog();
@@ -545,7 +545,7 @@ void RB_SurfaceXModelRigidNV(renderer_surface_t *surfaceData)
         (const XSurfaceARBVert *)(const void *)
             optimized->interleavedVertices;
 
-    RB_LogOptimizedXModelSurface(logFormat, entitySurface);
+    coduomp_log_optimized_xmodel_surface(logFormat, entitySurface);
     RB_SetModelMatrixForRigidSurface(entitySurface);
     RB_SetIteratorFog();
     GL_Cull(tess.shader->cullType);
@@ -558,7 +558,7 @@ void RB_SurfaceXModelRigidNV(renderer_surface_t *surfaceData)
     qglVertexPointer(3, GL_FLOAT, (int32_t)sizeof(vertices[0]),
                      vertices[0].rigidVertex.position);
 
-    RB_DrawOptimizedXModelPasses(surface, vertices,
+    coduomp_draw_optimized_xmodel_passes(surface, vertices,
                                  surface->triangles);
 
     qglLoadMatrixf(backEnd.orientation.modelMatrix);
