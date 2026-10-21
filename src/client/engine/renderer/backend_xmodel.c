@@ -67,7 +67,7 @@ static const DObjSkelMat *RB_GetXModelBasePose(
     const uint8_t partBaseIndex =
         obj->modelPartBaseIndices[entitySurface->modelIndex];
 
-    return &obj->evaluationStorage->partSpans[partBaseIndex].basePose;
+    return &obj->evaluationStorage->matrices[partBaseIndex];
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of the identical logging

@@ -9,8 +9,7 @@ DObjSkelMat *DObjGetMatrixArray(const DObj *obj, int32_t modelIndex)
     /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
     return obj != NULL && obj->evaluationStorage != NULL &&
                    (uint32_t)modelIndex < obj->modelCount
-               ? &obj->evaluationStorage
-                      ->partSpans[obj->modelPartBaseIndices[modelIndex]].basePose
+               ? &obj->evaluationStorage->matrices[obj->modelPartBaseIndices[modelIndex]]
                : NULL;
 }
 

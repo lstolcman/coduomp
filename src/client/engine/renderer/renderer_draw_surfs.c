@@ -126,8 +126,7 @@ void R_XModelDebugBoxes(trRefEntity_t *entity,
     XModelPartColl **partCollisions = CODUOMP_ALLOCA(
         (size_t)obj->boneCount * sizeof(*partCollisions));
     DObjSkelMat *boneMatrices =
-        &obj->evaluationStorage
-             ->partSpans[obj->modelPartBaseIndices[0]].basePose;
+        &obj->evaluationStorage->matrices[obj->modelPartBaseIndices[0]];
 
     DObjGetBoneInfo(obj, partCollisions);
     for (int32_t boneIndex = 0;
@@ -171,8 +170,7 @@ void R_XModelDebugAxes(trRefEntity_t *entity,
 {
     DObj *obj = entity->e.dobj;
     DObjSkelMat *boneMatrices =
-        &obj->evaluationStorage
-             ->partSpans[obj->modelPartBaseIndices[0]].basePose;
+        &obj->evaluationStorage->matrices[obj->modelPartBaseIndices[0]];
 
     for (int32_t boneIndex = 0;
          boneIndex < obj->boneCount; ++boneIndex) {

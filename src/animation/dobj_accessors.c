@@ -128,9 +128,10 @@ int32_t DObjNumBones(const DObj *obj)
 DObjAnimMat *DObjGetRotTransArray(const DObj *obj)
 {
     /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
+    /* The pose tail is a separate array after the matrix bytes, not another matrix element. */
     return obj != NULL && obj->evaluationStorage != NULL
-               ? &obj->evaluationStorage
-                      ->partSpans[obj->boneCount].evalParts.parts[0]
+               ? (DObjAnimMat *)((unsigned char *)obj->evaluationStorage + sizeof(dobj_eval_storage_t)
+                                + (size_t)obj->boneCount * sizeof(DObjSkelMat))
                : NULL;
 }
 

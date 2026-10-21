@@ -75,9 +75,7 @@ void R_GetXModelBounds(const DObj *obj, const axis_t transform,
             &surfaceRefs[surfaceRefIndex];
         int32_t modelIndex = surfaceRef->modelIndex;
         const DObjSkelMat *matrixArray =
-            &obj->evaluationStorage
-                 ->partSpans[obj->modelPartBaseIndices[modelIndex]]
-                 .basePose;
+            &obj->evaluationStorage->matrices[obj->modelPartBaseIndices[modelIndex]];
         XSurface *surface = DObjGetSurface(
             obj, modelIndex, surfaceRef->surfaceIndex, &lodIndex);
 
