@@ -177,12 +177,10 @@ uint32_t R_GenerateShaderHashValue(const char *name)
  * Name and void signature: exact same-module Mac symbol
  * BuildShaderChecksumLookup.
  *
- * Each entry points to the beginning of a shader-name token in the combined
- * shader text. A bucket's first definition lives directly in the bucket;
- * later collisions are prepended from the fixed 100000-node bank. The parser
- * mark is used only to retain the exact pre-token cursor. In particular, an
- * outstanding Com_UngetToken means the true token start is
- * savedParse, not the caller's current cursor. */
+ * Each entry retains the input cursor captured immediately before parsing
+ * its shader-name token. A bucket's first definition lives directly in the
+ * bucket; later collisions are prepended from the fixed 100000-node bank.
+ * Capture the cursor before Com_Parse applies any pending unget rewind. */
 void BuildShaderChecksumLookup(void)
 {
     char *parseCursor;
@@ -196,16 +194,12 @@ void BuildShaderChecksumLookup(void)
 
     parseCursor = rendererShaderText;
     for (;;) {
-        com_parse_mark_t tokenMark;
         char *definitionText;
         char *token;
         shader_text_hash_node_t *bucket;
 
-        Com_ParseSetMark(&parseCursor, &tokenMark);
+        definitionText = parseCursor;
         token = Com_Parse(&parseCursor);
-        definitionText = tokenMark.ungetToken != qfalse
-            ? tokenMark.savedParse
-            : tokenMark.parse;
 
         if (token[0] == '\0')
             return;
@@ -562,10 +556,9 @@ void R_InitShaders(void)
  * Name and return type: exact same-module Mac symbol
  * FindShaderInShaderText.
  *
- * Each hash entry retains the cursor at the definition's shader-name token.
- * Parsing a private cursor obtains that token without changing the indexed
- * text. A match returns the advanced cursor immediately after the name, which
- * is the opening-brace position consumed by ParseShader. */
+ * Each hash entry retains a parser input cursor. Parsing a private copy
+ * leaves the indexed cursor unchanged. A matching name returns the advanced
+ * private cursor for ParseShader. */
 char *FindShaderInShaderText(const char *shaderName)
 {
     shader_text_hash_node_t *node;
