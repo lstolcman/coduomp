@@ -121,6 +121,7 @@ static void dobj_compat_eval_part_copy_quat(DObjAnimMat *dest,
     memmove(&dest->quat[3], &source->quat[3], sizeof(dest->quat[3]));
 }
 
+#if !defined(WINDOWS_BEHAVIOR) || !(defined(__i386__) || defined(__x86_64__)) || !defined(__GNUC__)
 /* NOT_FROM_ORIGINAL_SOURCE: typed copy between eval-part translation lanes. */
 static void dobj_compat_eval_part_load_translation(
     const DObjAnimMat *part, vec3_t translation)
@@ -138,6 +139,8 @@ static void dobj_compat_eval_part_store_translation(
     memmove(&part->translation[1], &translation[1], sizeof(part->translation[1]));
     memmove(&part->translation[2], &translation[2], sizeof(part->translation[2]));
 }
+
+#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: typed copy between eval-part translation lanes. */
 static void dobj_compat_eval_part_copy_translation(
@@ -215,15 +218,101 @@ static void dobj_compat_eval_part_build_matrix(
     DObjQuatToMatrix43(quat, matrix);
 }
 
+/* NOT_FROM_ORIGINAL_SOURCE: selects the translation operation order used by
+ * the attached-root and child-part matrix paths. */
+typedef enum dobj_compat_translation_path_e {
+    DOBJ_TRANSLATION_ATTACHED_ROOT,
+    DOBJ_TRANSLATION_CHILD_PART
+} dobj_compat_translation_path_t;
+
 /* NOT_FROM_ORIGINAL_SOURCE: transforms eval-part translation in place. */
 static void dobj_compat_eval_part_transform_translation(
-    DObjAnimMat *part, const DObjSkelMat *matrix)
+    DObjAnimMat *part, const DObjSkelMat *matrix, dobj_compat_translation_path_t path)
 {
+#if defined(WINDOWS_BEHAVIOR) && (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
+    /* Keep binary32 arithmetic operands in memory and publish Z, X, then Y.
+     * The two paths differ from the standalone vector transform. */
+    if (path == DOBJ_TRANSLATION_ATTACHED_ROOT) {
+        __asm__ __volatile__(
+            "flds 32(%[matrix])\n\t"
+            "fmuls 8(%[point])\n\t"
+            "flds 16(%[matrix])\n\t"
+            "fmuls 4(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "flds 0(%[matrix])\n\t"
+            "fmuls 0(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "fadds 48(%[matrix])\n\t"
+            "flds 36(%[matrix])\n\t"
+            "fmuls 8(%[point])\n\t"
+            "flds 20(%[matrix])\n\t"
+            "fmuls 4(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "flds 4(%[matrix])\n\t"
+            "fmuls 0(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "fadds 52(%[matrix])\n\t"
+            "flds 40(%[matrix])\n\t"
+            "fmuls 8(%[point])\n\t"
+            "flds 24(%[matrix])\n\t"
+            "fmuls 4(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "flds 8(%[matrix])\n\t"
+            "fmuls 0(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "fadds 56(%[matrix])\n\t"
+            "fstps 8(%[point])\n\t"
+            "fxch %%st(1)\n\t"
+            "fstps 0(%[point])\n\t"
+            "fstps 4(%[point])"
+            :
+            : [point] "r"(part->translation), [matrix] "r"(matrix)
+            : "memory", "st", "st(1)", "st(2)", "st(3)");
+    } else {
+        __asm__ __volatile__(
+            "flds 16(%[matrix])\n\t"
+            "fmuls 4(%[point])\n\t"
+            "flds 32(%[matrix])\n\t"
+            "fmuls 8(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "flds 0(%[point])\n\t"
+            "fmuls 0(%[matrix])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "fadds 48(%[matrix])\n\t"
+            "flds 20(%[matrix])\n\t"
+            "fmuls 4(%[point])\n\t"
+            "flds 36(%[matrix])\n\t"
+            "fmuls 8(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "flds 4(%[matrix])\n\t"
+            "fmuls 0(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "fadds 52(%[matrix])\n\t"
+            "flds 24(%[matrix])\n\t"
+            "fmuls 4(%[point])\n\t"
+            "flds 40(%[matrix])\n\t"
+            "fmuls 8(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "flds 8(%[matrix])\n\t"
+            "fmuls 0(%[point])\n\t"
+            "faddp %%st, %%st(1)\n\t"
+            "fadds 56(%[matrix])\n\t"
+            "fstps 8(%[point])\n\t"
+            "fxch %%st(1)\n\t"
+            "fstps 0(%[point])\n\t"
+            "fstps 4(%[point])"
+            :
+            : [point] "r"(part->translation), [matrix] "r"(matrix)
+            : "memory", "st", "st(1)", "st(2)", "st(3)");
+    }
+#else
     vec3_t translation;
 
+    (void)path;
     dobj_compat_eval_part_load_translation(part, translation);
     DObjMatrixTransformVector43InPlace(translation, matrix);
     dobj_compat_eval_part_store_translation(part, translation);
+#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: writes matrix origin from eval translation lanes. */
@@ -240,9 +329,26 @@ static void dobj_compat_base_pose_store_origin(
 static void dobj_compat_eval_part_add_base_translation(
     DObjAnimMat *part, const vec3_t baseTranslation)
 {
+#if defined(WINDOWS_BEHAVIOR) && (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
+    /* Load the base lane first; add the binary32 pose lane before storing it. */
+    __asm__ __volatile__(
+        "flds 0(%[base])\n\t"
+        "fadds 0(%[point])\n\t"
+        "fstps 0(%[point])\n\t"
+        "flds 4(%[base])\n\t"
+        "fadds 4(%[point])\n\t"
+        "fstps 4(%[point])\n\t"
+        "flds 8(%[base])\n\t"
+        "fadds 8(%[point])\n\t"
+        "fstps 8(%[point])"
+        :
+        : [point] "r"(part->translation), [base] "r"(baseTranslation)
+        : "memory", "st");
+#else
     part->translation[0] += baseTranslation[0];
     part->translation[1] += baseTranslation[1];
     part->translation[2] += baseTranslation[2];
+#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local stack-size calculation for trace remaps. */
@@ -759,7 +865,7 @@ void DObjCalcSkel(DObj *state, const uint32_t *partBits)
                                                  globalPart) != qfalse) {
                     dobj_compat_eval_part_build_matrix(evalPart, matrix);
                     dobj_compat_eval_part_transform_translation(
-                        evalPart, parentMatrix);
+                        evalPart, parentMatrix, DOBJ_TRANSLATION_ATTACHED_ROOT);
                     dobj_compat_base_pose_store_origin(matrix, evalPart);
                 }
 
@@ -794,7 +900,7 @@ void DObjCalcSkel(DObj *state, const uint32_t *partBits)
                 dobj_compat_eval_part_add_base_translation(
                     evalPart, baseTranslations[localPart]);
                 dobj_compat_eval_part_transform_translation(
-                    evalPart, &matrices[globalPart - parentDelta]);
+                    evalPart, &matrices[globalPart - parentDelta], DOBJ_TRANSLATION_CHILD_PART);
                 dobj_compat_base_pose_store_origin(matrix, evalPart);
             }
 
