@@ -20,13 +20,14 @@ static qboolean com_vprintfOpeningConsoleLog;
 
 /* NOT_FROM_ORIGINAL_SOURCE: source factoring for the otherwise duplicated
  * Com_PrintMessage body in Com_VPrintf. The executable's inlined VPrintf copy
- * opens console_mp.log through FS_FOpenFileWrite while the callable original
- * uses FS_FOpenTextFileWrite. */
+ * opens etconsole.log through FS_FOpenFileWrite while the callable original
+ * opens console_mp.log through FS_FOpenTextFileWrite. */
 static void coduomp_com_print_message_internal(
     int32_t channel, const char *message, qboolean binaryConsoleLog,
     qboolean *openingConsoleLog)
 {
     static const char consoleLogName[] = "console_mp.log";
+    static const char vprintfLogName[] = "etconsole.log";
 
     if (com_redirectBuffer != NULL) {
         if (channel == CON_DEST_NONE)
@@ -63,7 +64,7 @@ static void coduomp_com_print_message_internal(
         const time_t now = time(NULL);
         struct tm *const localTime = localtime(&now);
         com_consoleLogFile = binaryConsoleLog != qfalse
-            ? FS_FOpenFileWrite(consoleLogName)
+            ? FS_FOpenFileWrite(vprintfLogName)
             : FS_FOpenTextFileWrite(consoleLogName);
         Com_Printf("logfile opened on %s\n", asctime(localTime));
         if (com_logfile->integer > 1)
