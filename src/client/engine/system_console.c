@@ -89,7 +89,6 @@ static HWND sysConsoleCopyButton;    /* original 0x009d595c */
 static HWND sysConsoleQuitButton;    /* original 0x009d5960 */
 static HBRUSH sysConsoleOutputBrush; /* original 0x009d5974 */
 static HBRUSH sysConsoleErrorBrush;  /* original 0x009d5978 */
-static qboolean sysConsoleClassRegistered;
 static int32_t sysConsoleWidth;      /* original 0x009d5f90 */
 static int32_t sysConsoleHeight;     /* original 0x009d5f94 */
 static WNDPROC
@@ -719,7 +718,6 @@ void Sys_CreateConsole(void)
     consoleClass.lpszClassName = consoleClassName;
     if (RegisterClassA(&consoleClass) == 0)
         return;
-    sysConsoleClassRegistered = qtrue;
 
     RECT windowRect = {
         0, 0,
@@ -747,10 +745,8 @@ void Sys_CreateConsole(void)
         (screenHeight - SYS_CONSOLE_CLIENT_HEIGHT) / 2,
         sysConsoleWidth, sysConsoleHeight,
         NULL, NULL, instance, NULL);
-    if (sysConsoleWindow == NULL) {
-        Sys_DestroyConsole();
+    if (sysConsoleWindow == NULL)
         return;
-    }
 
     HDC consoleContext = GetDC((HWND)sysConsoleWindow);
     const int32_t fontHeight = -MulDiv(
@@ -845,34 +841,8 @@ void Sys_DestroyConsole(void)
     if (sysConsoleWindow != NULL) {
         ShowWindow((HWND)sysConsoleWindow, SW_HIDE);
         CloseWindow((HWND)sysConsoleWindow);
-        if (DestroyWindow((HWND)sysConsoleWindow) == FALSE)
-            return;
+        DestroyWindow((HWND)sysConsoleWindow);
         sysConsoleWindow = NULL;
-        sysConsoleOutputWindow = NULL;
-        sysConsoleErrorWindow = NULL;
-        sysConsoleInputWindow = NULL;
-        sysConsoleClearButton = NULL;
-        sysConsoleCopyButton = NULL;
-        sysConsoleQuitButton = NULL;
-    }
-
-    /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-    if (sysConsoleFont != NULL) {
-        (void)DeleteObject((HGDIOBJ)sysConsoleFont);
-        sysConsoleFont = NULL;
-    }
-    if (sysConsoleOutputBrush != NULL) {
-        (void)DeleteObject(sysConsoleOutputBrush);
-        sysConsoleOutputBrush = NULL;
-    }
-    if (sysConsoleErrorBrush != NULL) {
-        (void)DeleteObject(sysConsoleErrorBrush);
-        sysConsoleErrorBrush = NULL;
-    }
-    if (sysConsoleClassRegistered != qfalse) {
-        (void)UnregisterClassA("CoD United Offensive WinConsole",
-                               (HINSTANCE)sysApplicationInstance);
-        sysConsoleClassRegistered = qfalse;
     }
 #endif
 }
