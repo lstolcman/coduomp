@@ -13,8 +13,9 @@ enum {
 const char xmodel_defaultName[] = "DEFAULT";
 
 /* This state is owned exclusively by the three public LOD-test accessors.
- * CoDUOMP.exe stores it at 0x008b1f60..0x008b1f9f; coduo_lnxded stores the
- * corresponding state at 0x08456980..0x084569c3. */
+ * CoDUOMP.exe uses RVA 0x78d500 for the distance override, RVA 0x78d504 for
+ * the enable byte and RVA 0x78d508 for 20-byte LOD records. coduo_lnxded uses
+ * RVA 0x40e9c0, RVA 0x40e9bc and RVA 0x40e980, respectively. */
 static qboolean xmodel_testLodsEnabled;
 static float xmodel_testLodDistanceOverride;
 static XModelLodInfo xmodel_testLodRecords[XMODEL_LOD_COUNT];

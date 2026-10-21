@@ -30,7 +30,7 @@ qboolean DObjSkelIsBoneUpToDate(const DObj *obj, int32_t boneIndex)
                : qfalse;
 }
 
-/* Sources: CoDUOMP.exe 0x00493b50 and coduo_lnxded 0x080c54da. */
+/* Sources: CoDUOMP.exe 0x00493b50 and coduo_lnxded 0x080c5562. */
 qboolean DObjChildSkipped(const DObj *obj, uint8_t modelIndex)
 {
     return (obj->collisionSkipModelMask &
