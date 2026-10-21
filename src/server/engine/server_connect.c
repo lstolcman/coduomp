@@ -60,8 +60,8 @@ void SV_DirectConnect(netadr_t from)
 
     const int32_t protocol = atoi(Info_ValueForKey(userinfo, "protocol"));
     if (protocol != SERVER_PROTOCOL_VERSION) {
-        NET_OutOfBandPrint(NS_SERVER, from, "error\n%s",
-                           "EXE_SERVER_IS_DIFFERENT_VER");
+        NET_OutOfBandPrint(NS_SERVER, from, "error\nEXE_SERVER_IS_DIFFERENT_VER\x15%s\n",
+                           "1.51");
         Com_DPrintf(
             "    rejected connect from protocol version %i (should be %i)\n",
             protocol, SERVER_PROTOCOL_VERSION);

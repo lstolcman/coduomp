@@ -63,12 +63,12 @@ void CL_CheckAutoUpdate(void)
 
     const int32_t firstServer =
         coduo_crt_randrange(0, resolvedServerCount);
-    Com_DPrintf("Resolving AutoUpdate Server... \n");
+    Com_DPrintf("Resolving AutoUpdate Server... ");
 
     if (NET_StringToAdr(resolvedServerNames[firstServer],
                         &cls.autoUpdateServer) == qfalse) {
         Com_DPrintf(
-            "Couldn't resolve first address, trying others... \n");
+            "\nCouldn't resolve first address, trying others... ");
 
         int32_t fallbackOffset;
         for (fallbackOffset = 1;
@@ -78,13 +78,13 @@ void CL_CheckAutoUpdate(void)
                 (firstServer + fallbackOffset) % resolvedServerCount;
             if (NET_StringToAdr(resolvedServerNames[serverIndex],
                                 &cls.autoUpdateServer) != qfalse) {
-                Com_DPrintf("Alternate server address resolved... \n");
+                Com_DPrintf("\nAlternate server address resolved... ");
                 break;
             }
         }
 
         if (fallbackOffset == resolvedServerCount) {
-            Com_DPrintf("Failed to resolve any Auto-update servers.\n");
+            Com_DPrintf("\nFailed to resolve any Auto-update servers.\n");
             cls_autoupdateServerResolved = qtrue;
             return;
         }
@@ -92,7 +92,7 @@ void CL_CheckAutoUpdate(void)
 
     cls.autoUpdateServer.port =
         (uint16_t)BigShort((int16_t)CL_AUTOUPDATE_SERVER_PORT);
-    Com_DPrintf("%i.%i.%i.%i:%i",
+    Com_DPrintf("%i.%i.%i.%i:%i\n",
                 cls.autoUpdateServer.ip[0],
                 cls.autoUpdateServer.ip[1],
                 cls.autoUpdateServer.ip[2],
@@ -101,7 +101,7 @@ void CL_CheckAutoUpdate(void)
                     (int16_t)cls.autoUpdateServer.port));
 
     NET_OutOfBandPrint(NS_CLIENT, cls.autoUpdateServer,
-                       "getUpdateInfo \"%s\" \"%s\"",
+                       "getUpdateInfo \"%s\" \"%s\"\n",
                        "1.51", CODUOMP_PLATFORM_TAG);
     cls_autoupdateServerResolved = qtrue;
 }
