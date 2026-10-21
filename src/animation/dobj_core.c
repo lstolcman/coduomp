@@ -95,57 +95,57 @@ static void dobj_compat_part_bit_set(uint32_t *partBits,
 static void dobj_compat_eval_part_load_quat(const DObjAnimMat *part,
                                              vec4_t quat)
 {
-    quat[0] = part->quat[0];
-    quat[1] = part->quat[1];
-    quat[2] = part->quat[2];
-    quat[3] = part->quat[3];
+    memmove(&quat[0], &part->quat[0], sizeof(quat[0]));
+    memmove(&quat[1], &part->quat[1], sizeof(quat[1]));
+    memmove(&quat[2], &part->quat[2], sizeof(quat[2]));
+    memmove(&quat[3], &part->quat[3], sizeof(quat[3]));
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: typed copy between eval-part quaternion lanes. */
 static void dobj_compat_eval_part_store_quat(DObjAnimMat *part,
                                               const vec4_t quat)
 {
-    part->quat[0] = quat[0];
-    part->quat[1] = quat[1];
-    part->quat[2] = quat[2];
-    part->quat[3] = quat[3];
+    memmove(&part->quat[0], &quat[0], sizeof(part->quat[0]));
+    memmove(&part->quat[1], &quat[1], sizeof(part->quat[1]));
+    memmove(&part->quat[2], &quat[2], sizeof(part->quat[2]));
+    memmove(&part->quat[3], &quat[3], sizeof(part->quat[3]));
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: typed copy between eval-part quaternion lanes. */
 static void dobj_compat_eval_part_copy_quat(DObjAnimMat *dest,
                                              const DObjAnimMat *source)
 {
-    dest->quat[0] = source->quat[0];
-    dest->quat[1] = source->quat[1];
-    dest->quat[2] = source->quat[2];
-    dest->quat[3] = source->quat[3];
+    memmove(&dest->quat[0], &source->quat[0], sizeof(dest->quat[0]));
+    memmove(&dest->quat[1], &source->quat[1], sizeof(dest->quat[1]));
+    memmove(&dest->quat[2], &source->quat[2], sizeof(dest->quat[2]));
+    memmove(&dest->quat[3], &source->quat[3], sizeof(dest->quat[3]));
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: typed copy between eval-part translation lanes. */
 static void dobj_compat_eval_part_load_translation(
     const DObjAnimMat *part, vec3_t translation)
 {
-    translation[0] = part->translation[0];
-    translation[1] = part->translation[1];
-    translation[2] = part->translation[2];
+    memmove(&translation[0], &part->translation[0], sizeof(translation[0]));
+    memmove(&translation[1], &part->translation[1], sizeof(translation[1]));
+    memmove(&translation[2], &part->translation[2], sizeof(translation[2]));
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: typed copy between eval-part translation lanes. */
 static void dobj_compat_eval_part_store_translation(
     DObjAnimMat *part, const vec3_t translation)
 {
-    part->translation[0] = translation[0];
-    part->translation[1] = translation[1];
-    part->translation[2] = translation[2];
+    memmove(&part->translation[0], &translation[0], sizeof(part->translation[0]));
+    memmove(&part->translation[1], &translation[1], sizeof(part->translation[1]));
+    memmove(&part->translation[2], &translation[2], sizeof(part->translation[2]));
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: typed copy between eval-part translation lanes. */
 static void dobj_compat_eval_part_copy_translation(
     DObjAnimMat *dest, const DObjAnimMat *source)
 {
-    dest->translation[0] = source->translation[0];
-    dest->translation[1] = source->translation[1];
-    dest->translation[2] = source->translation[2];
+    memmove(&dest->translation[0], &source->translation[0], sizeof(dest->translation[0]));
+    memmove(&dest->translation[1], &source->translation[1], sizeof(dest->translation[1]));
+    memmove(&dest->translation[2], &source->translation[2], sizeof(dest->translation[2]));
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: preserves the original remap-pair scan shape. */
@@ -230,9 +230,9 @@ static void dobj_compat_eval_part_transform_translation(
 static void dobj_compat_base_pose_store_origin(
     DObjSkelMat *matrix, const DObjAnimMat *part)
 {
-    matrix->origin[0] = part->translation[0];
-    matrix->origin[1] = part->translation[1];
-    matrix->origin[2] = part->translation[2];
+    memmove(&matrix->origin[0], &part->translation[0], sizeof(matrix->origin[0]));
+    memmove(&matrix->origin[1], &part->translation[1], sizeof(matrix->origin[1]));
+    memmove(&matrix->origin[2], &part->translation[2], sizeof(matrix->origin[2]));
     matrix->origin[3] = 0.0f;
 }
 
@@ -622,13 +622,14 @@ void DObjCalcSkel(DObj *state, const uint32_t *partBits)
     }
 
     DObjSkelMat *matrices = storage->matrices;
-    DObjAnimMat *evalParts = DObjGetRotTransArray(state);
+    DObjAnimMat *evalParts = (DObjAnimMat *)((unsigned char *)storage + sizeof(*storage) + (size_t)state->boneCount * sizeof(*matrices));
+    int32_t modelCount = state->modelCount;
     DObjAnimMat *evalPart = evalParts;
     int32_t globalPart = 0;
     const uint8_t *remapPair =
         traceRemap->duplicatePairs;
 
-    for (int32_t childIndex = 0; childIndex < state->modelCount;
+    for (int32_t childIndex = 0; childIndex < modelCount;
          ++childIndex) {
         dobj_compat_model_part_layout_t layout =
             dobj_compat_model_part_layout(state->models[childIndex]);
@@ -716,7 +717,7 @@ void DObjCalcSkel(DObj *state, const uint32_t *partBits)
     globalPart = 0;
     remapPair = traceRemap->duplicatePairs;
 
-    for (int32_t childIndex = 0; childIndex < state->modelCount;
+    for (int32_t childIndex = 0; childIndex < modelCount;
          ++childIndex) {
         dobj_compat_model_part_layout_t layout =
             dobj_compat_model_part_layout(state->models[childIndex]);
@@ -738,7 +739,7 @@ void DObjCalcSkel(DObj *state, const uint32_t *partBits)
                             globalPart) == qfalse) {
                         dobj_compat_eval_part_copy_translation(
                             evalPart, &evalParts[duplicatePart]);
-                        *matrix = matrices[duplicatePart];
+                        memmove(matrix, &matrices[duplicatePart], sizeof(*matrix));
                     }
                 } else {
                     dobj_compat_eval_part_build_matrix(evalPart, matrix);
@@ -786,7 +787,7 @@ void DObjCalcSkel(DObj *state, const uint32_t *partBits)
                                                  globalPart) == qfalse) {
                     dobj_compat_eval_part_copy_translation(
                         evalPart, &evalParts[duplicatePart]);
-                    *matrix = matrices[duplicatePart];
+                    memmove(matrix, &matrices[duplicatePart], sizeof(*matrix));
                 }
             } else {
                 dobj_compat_eval_part_build_matrix(evalPart, matrix);
