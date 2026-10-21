@@ -192,7 +192,7 @@ uint32_t script_loopWatchdogTick;
 int32_t script_loopWatchdogWarningFlag;
 int32_t script_memoryAllocatedBucketCount;
 int32_t script_memoryAllocatedInstanceCount;
-uint8_t *script_stringPoolBase;
+unsigned char *script_stringPoolBase;
 uint8_t *script_vectorLocalPoolBase;
 uint8_t *script_memoryArenaEnd;
 size_t script_vectorLocalPoolByteCount;
