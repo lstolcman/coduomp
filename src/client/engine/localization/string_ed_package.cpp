@@ -442,10 +442,10 @@ void CStringEdPackage::AddEntry(const char *reference)
 
 /* Source: CoDUOMP.exe 0x004725e0..0x004727c0.
  * Name/signature: same-module Mac symbol
- * CStringEdPackage::SetString(const char *, const char *, int).  A translated
- * "#same" reuses currentString unless forced or parsing English.  When debug
- * loading is enabled, the separately returned debug string preserves the
- * literal token inside brackets. */
+ * CStringEdPackage::SetString(const char *, const char *, int).  An ordinary
+ * non-English translation updates only the active text.  "#same" reuses
+ * currentString and, when debug loading is enabled, brackets the literal token.
+ * English or forced text refreshes currentString and the enabled debug text. */
 void CStringEdPackage::SetString(const char *reference, const char *newText,
                                  int32_t forceSameText)
 {
@@ -456,8 +456,11 @@ void CStringEdPackage::SetString(const char *reference, const char *newText,
         return;
 
     SE_Entry_s &entry = found->second;
-    if (forceSameText == 0 && currentLanguageIsEnglish == 0 &&
-        coduo_crt_stricmp(newText, "#same") == 0) {
+    if (forceSameText == 0 && currentLanguageIsEnglish == 0) {
+        if (coduo_crt_stricmp(newText, "#same") != 0) {
+            entry.text.assign(newText);
+            return;
+        }
         entry.text = currentString;
         if (loadDebug != 0)
             entry.debugText = "[#same]";
