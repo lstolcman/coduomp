@@ -449,9 +449,7 @@ void CStringEdPackage::AddEntry(const char *reference)
 void CStringEdPackage::SetString(const char *reference, const char *newText,
                                  int32_t forceSameText)
 {
-    const std::string fullReference(
-        va("%s_%s", currentPackage.c_str(), reference));
-    const auto found = entries.find(fullReference);
+    const auto found = entries.find(std::string(va("%s_%s", currentPackage.c_str(), reference)));
     if (found == entries.end())
         return;
 
@@ -462,8 +460,11 @@ void CStringEdPackage::SetString(const char *reference, const char *newText,
             return;
         }
         entry.text = currentString;
-        if (loadDebug != 0)
-            entry.debugText = "[#same]";
+        if (loadDebug != 0) {
+            entry.debugText.assign("[");
+            entry.debugText.append("#same");
+            entry.debugText.append("]");
+        }
         return;
     }
 
