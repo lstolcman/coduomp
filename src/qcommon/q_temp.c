@@ -20,20 +20,23 @@ enum {
 };
 
 /*
- * Complete temporary formatter/vector subsystem.  The four Windows va bodies
- * are instruction-identical apart from storage, formatter, error, and call
- * relocations; the Windows game error edge alone calls G_Error rather than
- * Com_Error.  The Linux bodies retain the same capacities, wrap boundary,
- * copy length, and returned pointer.  tv uses the same eight 12-byte slots and
- * masked cursor in every binary.
+ * Temporary formatter/vector helpers. The va entries use 32000-byte temporary
+ * and ring buffers. They pass negative lengths or lengths at least the capacity
+ * to an error provider; successful calls return a borrowed ring pointer.
+ * The Windows game error call supplies only a format argument, while the
+ * other entries also supply an error code. Windows keeps its wrap offset
+ * local. Linux publishes a cursor reset before memcpy and reloads the cursor
+ * after that call; the source caches the offset across an ordinary copy that
+ * does not reenter or mutate the cursor. tv selects one of eight 12-byte slots
+ * and advances its cursor modulo eight.
  *
  *                              va            tv
  *   CoDUOMP.exe                0x0044fab0    0x0044fb40
  *   uo_cgame_mp_x86.dll       0x3004e8a0    0x3004e930
  *   uo_ui_mp_x86.dll          0x400068d0    0x40006960
- *   uo_game_mp_x86.dll        0x200580b0    0x20058140
+ *   uo_game_mp_x86.dll        0x200580c0    0x20058150
  *   coduo_lnxded              0x08086d78    0x08086e2b
- *   game.mp.uo.i386.so        0x0004b96e    0x0004ba2f
+ *   game.mp.uo.i386.so        0x000938ff    0x000939cb
  *
  * The cgame controller body at 0x30020bf8..0x30020c29 contains an inlined
  * tv(2.0f, 0.0f, 0.0f) using this same ring; the former vehicle-private names
@@ -65,10 +68,16 @@ char *va(const char *format, ...)
     va_end(arguments);
 
 #if defined(WINDOWS_BEHAVIOR) && !defined(_WIN32)
-    /* The retained Windows formatter returns -1 when the complete result does
-     * not fit.  The distinction is observable only at the common fatal edge. */
+    enum {
+        Q_VA_FORMAT_FAILURE = -1
+    };
+
+    /* The original Windows formatter can return the capacity when output exactly
+     * fills the buffer, or -1 after a failed body write. Both select the overrun
+     * error path below. This host adaptation normalizes results at or above the
+     * capacity to -1. */
     if (length >= MAX_VA_STRING) {
-        length = -1;
+        length = Q_VA_FORMAT_FAILURE;
     }
 #endif
 
