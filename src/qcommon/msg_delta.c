@@ -1162,15 +1162,16 @@ void MSG_WriteDeltaStruct(msg_t *message, const void *from, const void *to,
     int32_t recordNumber;
 
     if (to == NULL) {
-        memcpy(&recordNumber, from, sizeof(recordNumber));
         if (cl_shownet != NULL &&
             (cl_shownet->integer >= MSG_SHOWNET_DELTA_STRUCT ||
              cl_shownet->integer == MSG_SHOWNET_ALL)) {
+            memcpy(&recordNumber, from, sizeof(recordNumber));
             Com_Printf("W|%3i: #%-3i remove\n", message->cursize,
                        recordNumber);
         }
         if (writeForceBit != qfalse)
             MSG_WriteBit1(message);
+        memcpy(&recordNumber, from, sizeof(recordNumber));
         MSG_WriteBits(message, recordNumber, numberBits);
         if (extraWriter != NULL)
             extraWriter(message, NULL);
@@ -1195,9 +1196,9 @@ void MSG_WriteDeltaStruct(msg_t *message, const void *from, const void *to,
         if (force == qfalse)
             return;
 
-        memcpy(&recordNumber, to, sizeof(recordNumber));
         if (writeForceBit != qfalse)
             MSG_WriteBit1(message);
+        memcpy(&recordNumber, to, sizeof(recordNumber));
         MSG_WriteBits(message, recordNumber, numberBits);
         if (extraWriter != NULL)
             extraWriter(message, to);
@@ -1206,9 +1207,9 @@ void MSG_WriteDeltaStruct(msg_t *message, const void *from, const void *to,
         return;
     }
 
-    memcpy(&recordNumber, to, sizeof(recordNumber));
     if (writeForceBit != qfalse)
         MSG_WriteBit1(message);
+    memcpy(&recordNumber, to, sizeof(recordNumber));
     MSG_WriteBits(message, recordNumber, numberBits);
     if (extraWriter != NULL)
         extraWriter(message, to);
