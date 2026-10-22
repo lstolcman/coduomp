@@ -316,10 +316,10 @@ void MT_Init(void)
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00480fd0_00481075.mcode. */
 qboolean MT_Realloc(size_t lhsSize, size_t rhsSize)
 {
-    return MT_GetSize(coduomp_script_memory_int32_from_size(lhsSize)) ==
-                   MT_GetSize(coduomp_script_memory_int32_from_size(rhsSize))
-               ? qtrue
-               : qfalse;
+    int32_t lhsBucket = MT_GetSize(coduomp_script_memory_int32_from_size(lhsSize));
+    int32_t rhsBucket = MT_GetSize(coduomp_script_memory_int32_from_size(rhsSize));
+
+    return lhsBucket == rhsBucket ? qtrue : qfalse;
 }
 
 /* Source: CoDUOMP.exe 0x00480d70..0x00480db1.
