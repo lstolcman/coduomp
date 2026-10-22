@@ -222,21 +222,24 @@ qboolean CParticle::UpdateOrigin()
         FX_TRACE_PASS_ENTITY_NUM = 0,
         FX_TRACE_CONTENT_MASK = CONTENTS_SOLID
     };
+    constexpr float millisecondsToSeconds = 0.0010000000474974513f;
+    constexpr float reflectionMultiplier = -2.0f;
+    constexpr float settledVerticalSpeed = 4.0f;
     UpdateVelocity();
 
-    const float frameSeconds =
-        static_cast<float>(fxFrameTime) * 0.0010000000474974513f;
-    const float halfFrameSecondsSquared =
-        frameSeconds * frameSeconds * 0.5f;
+    /* The time square uses one live product and one binary32 spill. */
+    const long double liveFrameSeconds = static_cast<long double>(fxFrameTime) * millisecondsToSeconds;
+    const float frameSeconds = static_cast<float>(liveFrameSeconds);
+    const long double halfFrameSecondsSquared = liveFrameSeconds * frameSeconds * 0.5f;
     vec3_t nextOrigin;
 
     /* 0x004a130e..0x004a1325 sums the two motion products before adding the
      * origin component last. */
     for (int component = 0; component < 3; ++component) {
-        nextOrigin[component] =
+        nextOrigin[component] = static_cast<float>(
             halfFrameSecondsSquared * acceleration[component] +
-            frameSeconds * particleVelocity[component] +
-            origin[component];
+            static_cast<long double>(frameSeconds) * particleVelocity[component] +
+            origin[component]);
     }
 
     if ((flags & FX_EFFECT_FLAG_TRACE_COLLISION) == 0U) {
@@ -254,8 +257,22 @@ qboolean CParticle::UpdateOrigin()
         if (boltOrientation == nullptr) {
             return qfalse;
         }
-        OrientationPosToWorldPos(boltOrientation, origin, traceStart);
-        OrientationPosToWorldPos(boltOrientation, nextOrigin, traceEnd);
+        /* These inlined transforms retain different addition orders for
+         * the start and end Y/Z lanes. Each lane rounds only at its store. */
+        for (int component = 0; component < 3; ++component) {
+            const long double startX = static_cast<long double>(origin[0]) * boltOrientation->axis[0][component];
+            const long double startY = static_cast<long double>(origin[1]) * boltOrientation->axis[1][component];
+            const long double startZ = static_cast<long double>(origin[2]) * boltOrientation->axis[2][component];
+            const long double endX = static_cast<long double>(nextOrigin[0]) * boltOrientation->axis[0][component];
+            const long double endY = static_cast<long double>(nextOrigin[1]) * boltOrientation->axis[1][component];
+            const long double endZ = static_cast<long double>(nextOrigin[2]) * boltOrientation->axis[2][component];
+            traceStart[component] = static_cast<float>(
+                (component == 0 ? (startZ + startX) + startY : (startZ + startY) + startX) +
+                boltOrientation->origin[component]);
+            traceEnd[component] = static_cast<float>(
+                (component == 0 ? (endZ + endX) + endY : (endX + endZ) + endY) +
+                boltOrientation->origin[component]);
+        }
     } else {
         for (int component = 0; component < 3; ++component) {
             traceStart[component] = origin[component];
@@ -292,12 +309,13 @@ qboolean CParticle::UpdateOrigin()
                                   impactResource.effectId,
                                   trace.endpos, trace.normal);
     }
-    if ((flags & FX_EFFECT_FLAG_DIE_ON_IMPACT) != 0U) {
+    const uint32_t impactFlags = flags;
+    if ((impactFlags & FX_EFFECT_FLAG_DIE_ON_IMPACT) != 0U) {
         return qfalse;
     }
 
     vec3_t collisionNormal;
-    if (boltOrientation != nullptr) {
+    if (boltFrame.frame != nullptr) {
         OrientationDirFromWorldDir(boltOrientation, trace.normal,
                                    collisionNormal);
     } else {
@@ -306,37 +324,40 @@ qboolean CParticle::UpdateOrigin()
         }
     }
 
-    const float impactSeconds = frameSeconds * trace.fraction;
-    for (int component = 0; component < 3; ++component) {
-        particleVelocity[component] +=
-            impactSeconds * acceleration[component];
-    }
+    const long double impactSeconds = static_cast<long double>(trace.fraction) * frameSeconds;
+    const long double impactVelocityX = impactSeconds * acceleration[0] + particleVelocity[0];
+    particleVelocity[0] = static_cast<float>(impactVelocityX);
+    const float impactVelocityY = static_cast<float>(impactSeconds * acceleration[1] + particleVelocity[1]);
+    const float impactVelocityZ = static_cast<float>(impactSeconds * acceleration[2] + particleVelocity[2]);
+    particleVelocity[1] = impactVelocityY;
+    particleVelocity[2] = impactVelocityZ;
 
-    float normalVelocity = 0.0f;
-    for (int component = 0; component < 3; ++component) {
-        normalVelocity +=
-            particleVelocity[component] * collisionNormal[component];
-    }
-    const float reflectionScale = -2.0f * normalVelocity;
-    for (int component = 0; component < 3; ++component) {
-        particleVelocity[component] =
-            (particleVelocity[component] +
-             reflectionScale * collisionNormal[component]) *
-            elasticity;
-    }
+    /* X keeps its live velocity and reflection factor; Y/Z use the float
+     * spills. The settling comparison consumes live Z after its store. */
+    const long double normalVelocity =
+        (static_cast<long double>(impactVelocityZ) * collisionNormal[2] +
+         static_cast<long double>(impactVelocityY) * collisionNormal[1]) +
+        impactVelocityX * collisionNormal[0];
+    const long double liveReflectionScale = normalVelocity * reflectionMultiplier;
+    const float reflectionScale = static_cast<float>(liveReflectionScale);
+    particleVelocity[0] = static_cast<float>((liveReflectionScale * collisionNormal[0] + impactVelocityX) * elasticity);
+    particleVelocity[1] = static_cast<float>((static_cast<long double>(reflectionScale) * collisionNormal[1] + impactVelocityY) * elasticity);
+    const long double bounceVelocityZ = (static_cast<long double>(reflectionScale) * collisionNormal[2] + impactVelocityZ) * elasticity;
+    particleVelocity[2] = static_cast<float>(bounceVelocityZ);
 
-    if (trace.normal[2] > 0.0f && particleVelocity[2] < 4.0f) {
-        flags &= ~(FX_EFFECT_FLAG_TRACE_COLLISION |
-                   FX_EFFECT_FLAG_PLAY_IMPACT_EFFECT);
-        for (int component = 0; component < 3; ++component) {
+    if (trace.normal[2] > 0.0f && bounceVelocityZ < settledVerticalSpeed) {
+        for (int component = 2; component >= 0; --component) {
             particleVelocity[component] = 0.0f;
+        }
+        for (int component = 2; component >= 0; --component) {
             acceleration[component] = 0.0f;
         }
+        flags = impactFlags & ~(FX_EFFECT_FLAG_TRACE_COLLISION | FX_EFFECT_FLAG_PLAY_IMPACT_EFFECT);
     }
 
     for (int component = 0; component < 3; ++component) {
-        origin[component] +=
-            (nextOrigin[component] - origin[component]) * trace.fraction;
+        origin[component] = static_cast<float>(
+            (static_cast<long double>(nextOrigin[component]) - origin[component]) * trace.fraction + origin[component]);
     }
     return qtrue;
 }

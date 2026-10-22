@@ -359,9 +359,9 @@ void CParticle::UpdateVelocity()
     }
 
     const double deltaSquared =
-        static_cast<double>(acceleration[0]) * acceleration[0] +
+        static_cast<double>(acceleration[2]) * acceleration[2] +
         static_cast<double>(acceleration[1]) * acceleration[1] +
-        static_cast<double>(acceleration[2]) * acceleration[2];
+        static_cast<double>(acceleration[0]) * acceleration[0];
     if (deltaSquared < settledDeltaSquared) {
         flags &= ~velocityGoalMask;
     }
