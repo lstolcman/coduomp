@@ -60,16 +60,11 @@
 #define TOUCH_TRIGGERS_CONTENTS_MASK MASK_TRIGGER
 #define DO_TOUCH_TRIGGERS_VEHICLE_CONTENTS_MASK CONTENTS_TRIGGER_TOUCH_VEHICLE
 #define DO_TOUCH_TRIGGERS_CLIENT_CONTENTS_MASK CONTENTS_TRIGGER_TOUCH_CLIENT
-#define DEBUG_LABEL(value) "debug-" value
 #define RUNCLIENT_FIXED_LINK_MODE 2
 #define INTERMISSION_ENTITY_FLAGS_CLEAR 0x00000002u
 #define INTERMISSION_ENTITY_FLAGS_SET 0x00000001u
 #define INTERMISSION_STANCE_FLAGS_CLEAR 0x00380000u
 #define INTERMISSION_PS_FLAGS_CLEAR 0x00020200u
-#define FOLLOW_PLAYERSTATE_COPY_SIZE offsetof(gclient_t, sessionState)
-#define FOLLOW_PLAYERSTATE_CLEAR_OFFSET offsetof(gclient_t, ps.hudCurrent)
-#define FOLLOW_PLAYERSTATE_CLEAR_SIZE \
-    sizeof(((gclient_t *)0)->ps.hudCurrent)
 #define ARCHIVE_CLIENT_NONE -1
 #define SPECTATOR_ARCHIVE_STEP_MS 50
 #define SPECTATOR_ARCHIVE_HUDELEM_UPDATE_FLAGS 2u
@@ -112,7 +107,6 @@
 #define SPECTATOR_BUTTON_FOLLOW_PREV_MASK 0x20u
 #define SPECTATOR_PM_FLAGS_ALLOWED 400
 #define SPECTATOR_PMOVE_TRACEMASK 0x800011
-#define DEBUG_ARCHIVE_THROTTLE_MS 1000
 #define SERVER_COMMAND_UNRELIABLE 0
 #define INACTIVITY_GRACE_MS 60000
 #define INACTIVITY_WARNING_MS 10000
@@ -157,10 +151,6 @@
 static int flameWeaponIndex = -1; /* DAT_000bcadc */
 
 static vmCvar_t sv_privateClients; /* DAT_000e0de0 */
-/* NOT_FROM_ORIGINAL_SOURCE: throttle for g_debugArchiveCheck diagnostics. */
-static int debugArchiveLastGetFollowLog[MAX_CLIENTS];
-/* NOT_FROM_ORIGINAL_SOURCE: throttle for g_debugArchiveCheck diagnostics. */
-static int debugArchiveLastSpectatorLog[MAX_CLIENTS];
 
 int BG_PlayerTouchesItem(gclient_t *client, gentity_t *itemEnt, int time);
 qboolean Cmd_FollowCycle_f(gentity_t *ent, int direction);
@@ -185,54 +175,6 @@ void G_CheckForPreventFriendlyFire(gentity_t *ent);
 void G_CheckForCursorHints(gentity_t *ent);
 void G_AddEvent(gentity_t *ent, int event, int eventParm);
 
-/* NOT_FROM_ORIGINAL_SOURCE: gated archive/follow diagnostic for live repros. */
-static qboolean game_compat_client_frame_should_log_archive(int minLevel, int *lastLogTime)
-{
-    if (g_debugArchiveCheck.integer < minLevel) {
-        return qfalse;
-    }
-    if (g_debugArchiveCheck.integer >= 5) {
-        return qtrue;
-    }
-    if (*lastLogTime == 0 ||
-        level.time - *lastLogTime >= DEBUG_ARCHIVE_THROTTLE_MS) {
-        *lastLogTime = level.time;
-        return qtrue;
-    }
-    return qfalse;
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: gated archive/follow diagnostic for live repros. */
-static void game_compat_client_frame_log_archive_client_state(const char *label, int clientNum,
-                                              const gclient_t *client,
-                                              int result)
-{
-    G_Printf("archive_debug %s time=%d client=%d result=%d "
-             "connected=%d session=%d psClient=%d pmType=%d "
-             "psFlags=0x%x esFlags=0x%x follow=%d archive=%d "
-             "archiveTime=%d lastCmd=%d lastUsercmd=%d "
-             "origin=(%.1f %.1f %.1f)\n",
-             label, level.time, clientNum, result,
-             client->connectedState, client->sessionState,
-             client->ps.psClientNum, client->ps.pmType,
-             client->ps.playerStateFlags, client->ps.entityStateFlags,
-             client->followClient, client->archiveClient, client->archiveTime,
-             client->ps.commandTime, client->lastUsercmdTime,
-             client->ps.psOrigin[0], client->ps.psOrigin[1],
-             client->ps.psOrigin[2]);
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: gated archive/follow diagnostic for live repros. */
-static void game_compat_client_frame_log_archive_player_state(const char *label, int clientNum,
-                                              const playerState_t *ps)
-{
-    G_Printf("archive_debug %s time=%d client=%d psClient=%d pmType=%d "
-             "psFlags=0x%x esFlags=0x%x lastCmd=%d "
-             "origin=(%.1f %.1f %.1f)\n",
-             label, level.time, clientNum, ps->psClientNum, ps->pmType,
-             ps->playerStateFlags, ps->entityStateFlags, ps->commandTime,
-             ps->psOrigin[0], ps->psOrigin[1], ps->psOrigin[2]);
-}
 void FireWeapon(gentity_t *ent);
 void FireWeaponMelee(gentity_t *ent);
 gentity_t *Drop_Weapon(gentity_t *ent, int weapon, const char *tagName);
@@ -1044,12 +986,6 @@ void SpectatorClientEndFrame(gentity_t *ent)
     playerState_t archivedPlayerState;
     clientState_t archiveMeta = { 0 };
     int archivedClient;
-    int clientNum = (int)(ent - g_entities);
-
-    if (game_compat_client_frame_should_log_archive(1,
-            &debugArchiveLastSpectatorLog[(uint32_t)clientNum])) {
-        game_compat_client_frame_log_archive_client_state(DEBUG_LABEL("spectator_begin"), clientNum, client, 0);
-    }
 
     /*
      * RECOVERED(UO-GAME-UNK-0068): spectator end-frame shares intermission-style entity
@@ -1083,14 +1019,6 @@ void SpectatorClientEndFrame(gentity_t *ent)
             int canSpectate =
                 archiveResult != 0 &&
                 G_ClientCanSpectateTeam(client, archiveMeta.team) != 0;
-            if (g_debugArchiveCheck.integer >= 5) {
-                G_Printf("archive_debug spectator_follow_probe time=%d "
-                         "client=%d follow=%d archiveTime=%d result=%d "
-                         "team=%d canSpectate=%d\n",
-                         level.time, clientNum, client->followClient,
-                         client->archiveTime, archiveResult, archiveMeta.team,
-                         canSpectate);
-            }
             if (canSpectate) {
                 goto useArchivedState;
             }
@@ -1118,13 +1046,6 @@ void SpectatorClientEndFrame(gentity_t *ent)
     int canSpectate =
         archiveResult != 0 &&
         G_ClientCanSpectateTeam(client, archiveMeta.team) != 0;
-    if (g_debugArchiveCheck.integer >= 5) {
-        G_Printf("archive_debug spectator_archive_probe time=%d client=%d "
-                 "archive=%d archiveTime=%d result=%d team=%d "
-                 "canSpectate=%d\n",
-                 level.time, clientNum, archivedClient, client->archiveTime,
-                 archiveResult, archiveMeta.team, canSpectate);
-    }
     if (archivedClient < 0 || archiveResult == 0 || canSpectate == 0) {
         StopFollowing(ent);
         client->ps.playerStateFlags &= ~SPECTATOR_CAN_FOLLOW_TEAM_FLAG;
@@ -1140,12 +1061,6 @@ void SpectatorClientEndFrame(gentity_t *ent)
 
     useArchivedState:
     {
-        if (g_debugArchiveCheck.integer >= 5) {
-            game_compat_client_frame_log_archive_player_state(
-                DEBUG_LABEL("spectator_archive_buffer"), clientNum,
-                &archivedPlayerState);
-        }
-
         uint32_t preservedPsFlags =
             (client->ps.entityStateFlags & SPECTATOR_ARCHIVE_PRESERVE_PS_FLAG) |
             (archivedPlayerState.entityStateFlags &
@@ -1168,11 +1083,6 @@ void SpectatorClientEndFrame(gentity_t *ent)
         } else {
             client->ps.playerStateFlags &= ~SPECTATOR_ARCHIVE_FLAGS_CLEAR;
         }
-
-        if (g_debugArchiveCheck.integer >= 5) {
-            game_compat_client_frame_log_archive_client_state(DEBUG_LABEL("spectator_after_archive_copy"),
-                                              clientNum, client, 1);
-        }
     }
 }
 
@@ -1188,35 +1098,22 @@ qboolean G_ClientCanSpectateTeam(gclient_t *client, int team)
 }
 
 /* 0x424ca GetFollowPlayerState */
-/* VERIFIED_DECOMPILER(0x424ca, 524ca_GetFollowPlayerState.c, VERIFY-WAVE4-CLIENT-FRAME-LOCAL-2026-06-17): DATAFLOW_VERIFIED - follow-flag gate, gclient prefix copy through +0x4503 including decompiler alignment loop, and output tail clear at +0x7f8 size 0x1e84 checked. */
-qboolean GetFollowPlayerState(int clientNum, void *playerState)
+/* VERIFIED_DECOMPILER(0x424ca, 524ca_GetFollowPlayerState.c, VERIFY-WAVE4-CLIENT-FRAME-LOCAL-2026-06-17): DATAFLOW_VERIFIED - follow-flag gate, gclient prefix copy through +0x4503 including decompiler alignment loop, and current HUD clear at +0x7f8 size 0x1e84 checked. */
+qboolean GetFollowPlayerState(int clientNum, playerState_t *playerState)
 {
     gclient_t *client = g_entities[clientNum].client;
-    qboolean result;
 
     /*
      * RECOVERED(UO-GAME-UNK-0067): the follow-player snapshot copies the leading
-     * player-state-sized client prefix, then clears a large output-only tail region.
+     * player state, then clears its current HUD while preserving the archival HUD.
      */
     if ((client->ps.playerStateFlags & PSF_ACTIVE_PLAYER) == 0) {
-        if (game_compat_client_frame_should_log_archive(1,
-                &debugArchiveLastGetFollowLog[(uint32_t)clientNum])) {
-            game_compat_client_frame_log_archive_client_state(DEBUG_LABEL("get_follow_state_blocked"),
-                                              clientNum, client, 0);
-        }
-        return 0;
+        return qfalse;
     }
 
-    memcpy(playerState, client, FOLLOW_PLAYERSTATE_COPY_SIZE);
-    memset((uint8_t *)playerState + FOLLOW_PLAYERSTATE_CLEAR_OFFSET, 0,
-           FOLLOW_PLAYERSTATE_CLEAR_SIZE);
-    result = 1;
-    if (game_compat_client_frame_should_log_archive(2,
-            &debugArchiveLastGetFollowLog[(uint32_t)clientNum])) {
-        game_compat_client_frame_log_archive_client_state(DEBUG_LABEL("get_follow_state_ok"),
-                                          clientNum, client, result);
-    }
-    return result;
+    memcpy(playerState, &client->ps, sizeof(*playerState));
+    memset(playerState->hudCurrent, 0, sizeof(playerState->hudCurrent));
+    return qtrue;
 }
 
 /* 0x4258c StuckInClient */

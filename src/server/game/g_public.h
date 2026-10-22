@@ -29,7 +29,7 @@ extern void ClientUserinfoChanged(int clientNum);
 extern void ClientDisconnect(int clientNum);
 extern void ClientCommand(int clientNum);
 extern void ClientThink(int clientNum);
-extern qboolean GetFollowPlayerState(int clientNum, void *playerState);
+extern qboolean GetFollowPlayerState(int clientNum, playerState_t *playerState);
 extern void G_RunFrame(int levelTime);
 extern void G_UpdateCvars(void);
 extern int ConsoleCommand(void);

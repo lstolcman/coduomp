@@ -132,7 +132,7 @@ intptr_t vmMain(int32_t command, intptr_t arg0, intptr_t arg1, intptr_t arg2,
         break;
 
     case GAME_GET_FOLLOW_PLAYER_STATE:
-        result = GetFollowPlayerState((int)arg0, (void *)arg1);
+        result = GetFollowPlayerState((int)arg0, (playerState_t *)arg1);
         break;
 
     case GAME_UPDATE_CVARS:
