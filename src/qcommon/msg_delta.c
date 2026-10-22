@@ -1691,16 +1691,17 @@ static void coduomp_msg_read_delta_playerstate_field(
                     (1 << MSG_DELTA_SMALL_INT_LOW_BITS);
 
             value = (float)integralValue;
+            memcpy(destination, &value, sizeof(value));
             if (print != qfalse)
                 Com_Printf("%s:%i ", field->name, integralValue);
         } else {
             const int32_t valueBits = MSG_ReadLong(message);
 
             memcpy(&value, &valueBits, sizeof(value));
+            memcpy(destination, &value, sizeof(value));
             if (print != qfalse)
                 Com_Printf("%s:%f ", field->name, (double)value);
         }
-        memcpy(destination, &value, sizeof(value));
         return;
     }
 
