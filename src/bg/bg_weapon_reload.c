@@ -209,11 +209,16 @@ qboolean PM_Weapon_AllowReload(void)
         BG_GetInfoForWeapon(ps->currentWeapon);
     const int32_t clipIndex = weaponInfo->clipIndex;
     const int32_t ammoIndex = weaponInfo->ammoIndex;
+
+    if (ps->ammo[ammoIndex] == 0) {
+        return qfalse;
+    }
+
     const int32_t clipSize = BG_GetAmmoClipSize(clipIndex);
     const int32_t clipAmmo = ps->clips[clipIndex];
     int32_t reloadAmmoAdd;
 
-    if (ps->ammo[ammoIndex] == 0 || clipAmmo >= clipSize) {
+    if (clipAmmo >= clipSize) {
         return qfalse;
     }
     if (pml.weaponInfo->reloadRequiresAddRoom == 0) {
