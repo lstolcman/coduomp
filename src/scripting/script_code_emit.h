@@ -16,6 +16,7 @@ extern int32_t script_codeStackDepth;
 extern int32_t script_codeMaxStackDepth;
 extern int32_t script_codeMaxLocalDepth;
 extern uint8_t *script_codeEmitCursor;
+/* Script compilation and animation-tree loading share this accumulator. */
 extern uint32_t script_codeChecksum;
 extern script_code_string_fixup_t *script_codeStringFixups;
 

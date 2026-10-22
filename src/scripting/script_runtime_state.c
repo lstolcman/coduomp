@@ -213,8 +213,7 @@ void Scr_AllocGameVariable(void)
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00488320_00488345.mcode. */
 void Scr_GetChecksum(uint32_t checksum[3])
 {
-    checksum[0] = script_sourceChecksum;
-    checksum[1] = script_sourceBufferOffset;
-    checksum[2] = (uint32_t)((uintptr_t)script_sourceBufferEnd -
-                             (uintptr_t)script_sourceBufferStart);
+    checksum[0] = script_codeChecksum;
+    checksum[1] = (uint32_t)script_codeSize;
+    checksum[2] = (uint32_t)((uintptr_t)script_codeEnd - (uintptr_t)script_codeBase);
 }

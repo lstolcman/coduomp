@@ -367,15 +367,15 @@ uint32_t Scr_CreateAnimationTree(uint16_t sourceHandle,
             (uint16_t)GetVariableValueAddress(propertyHandle)->payload;
     }
 
-    script_animTreeChecksum =
-        script_animTreeChecksum * SCRIPT_ANIM_HASH_MULTIPLIER + nodeIndex;
-    script_animTreeChecksum =
-        script_animTreeChecksum * SCRIPT_ANIM_HASH_MULTIPLIER +
+    script_codeChecksum =
+        script_codeChecksum * SCRIPT_ANIM_HASH_MULTIPLIER + nodeIndex;
+    script_codeChecksum =
+        script_codeChecksum * SCRIPT_ANIM_HASH_MULTIPLIER +
         firstChildIndex;
-    script_animTreeChecksum =
-        script_animTreeChecksum * SCRIPT_ANIM_HASH_MULTIPLIER + childCount;
-    script_animTreeChecksum =
-        script_animTreeChecksum * SCRIPT_ANIM_HASH_MULTIPLIER + propertyFlags;
+    script_codeChecksum =
+        script_codeChecksum * SCRIPT_ANIM_HASH_MULTIPLIER + childCount;
+    script_codeChecksum =
+        script_codeChecksum * SCRIPT_ANIM_HASH_MULTIPLIER + propertyFlags;
 
     XAnimSetParentNode(tree, (uint16_t)nodeIndex, nodeName,
                        (uint16_t)firstChildIndex, childCount, propertyFlags);
@@ -397,8 +397,8 @@ uint32_t Scr_CreateAnimationTree(uint16_t sourceHandle,
                 nextFreeNodeIndex, SL_ConvertToString(animName),
                 childNodeIndex, treeName, treeIndex);
         } else {
-            script_animTreeChecksum =
-                script_animTreeChecksum * SCRIPT_ANIM_HASH_MULTIPLIER +
+            script_codeChecksum =
+                script_codeChecksum * SCRIPT_ANIM_HASH_MULTIPLIER +
                 childNodeIndex;
             XAnimSetLeafNode(tree, (uint16_t)childNodeIndex,
                              SL_ConvertToString(animName));

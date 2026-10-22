@@ -186,9 +186,8 @@ qboolean Scr_LoadScript(const char *filename)
         return qfalse;
     }
 
-    script_sourceBufferOffset = 0;
     /* Both original loaders reset the per-script using-tree handle here:
-     * CoDUOMP.exe 0x00480271 and coduo_lnxded 0x080a23a8. Its omission from
+     * CoDUOMP.exe 0x004802b8 and coduo_lnxded 0x080a23a8. Its omission from
      * the former Linux recovery was a transcription error. */
     script_animCurrentUsingTree = 0;
     script_pendingScriptLoadCount = 0;

@@ -127,7 +127,6 @@ uint16_t script_animCurrentTreeRoot;
 uint16_t script_animCurrentUsingTree;
 const char *script_animParseStart;
 char *script_animParseState;
-uint32_t script_animTreeChecksum;
 int32_t script_animTreeCounts[SCRIPT_ANIM_SLOT_COUNT];
 uint16_t script_animTreeHandles[SCRIPT_ANIM_SLOT_COUNT]
                                [SCRIPT_ANIM_TREE_SLOT_COUNT];
@@ -225,10 +224,6 @@ int32_t script_savedSourceFileCount =
     SCRIPT_SAVED_SOURCE_FILE_COUNT_NONE;
 script_saved_source_file_t *script_savedSourceFiles;
 uint8_t *script_serializationCursor;
-uint32_t script_sourceBufferOffset;
-const uint8_t *script_sourceBufferEnd;
-const uint8_t *script_sourceBufferStart;
-uint32_t script_sourceChecksum;
 const char *script_sourceFilename;
 uint32_t script_sourceFileCapacity;
 uint32_t script_sourceFileCount;
