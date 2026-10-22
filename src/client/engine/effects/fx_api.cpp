@@ -1530,9 +1530,10 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
         FX_RandomFloatRange(primitiveTemplate->rotationAccel);
     const float rotationClamp =
         FX_RandomFloatRange(primitiveTemplate->rotationClamp);
+    /* Keep the product live through the sign test, including tiny nonzero inputs. */
     if ((primitiveTemplate->spawnFlags &
          FX_SPAWNFLAG_OPPOSITE_ROTATION) != 0 &&
-        rotationAccel * rotationDelta > 0.0f) {
+        static_cast<long double>(rotationAccel) * rotationDelta > 0.0L) {
         rotationAccel = -rotationAccel;
     }
     if ((primitiveTemplate->flags & FX_PRIMITIVE_FLAG_CLAMP_ROTATION) != 0) {
