@@ -231,9 +231,9 @@ static void coduomp_script_yy_run_reduction(int32_t rule)
     switch (rule) {
     case 1:
         coduomp_script_ast_new_script_root(
-            &script_parseRootValue, script_yyvsp[0].words[0]);
+            &script_parseRootValue, (scr_ast_list_t *)script_yyval.words[0], (scr_ast_list_t *)script_yyvsp[0].words[0]);
         script_parseRoot =
-            (scr_ast_node_t *)script_parseRootValue.words[0];
+            (scr_ast_script_root_t *)script_parseRootValue.words[0];
         break;
     case 2:
         node_pos(&local_10, script_yyval.words[1]);

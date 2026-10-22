@@ -195,15 +195,15 @@ node2_(sval_u *out,
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: typed rule-1 use of the original two-word
- * constructor, separated from node2_ so a legitimate string handle equal to
- * the root-kind value cannot be misclassified on native 64-bit builds. */
+ * constructor. Both words are list pointers: the prefix list followed by
+ * the script-entry list consumed by the compiler. */
 sval_u *coduomp_script_ast_new_script_root(
-    sval_u *out, coduo_script_yystype_word_t entries)
+    sval_u *out, scr_ast_list_t *prefixEntries, scr_ast_list_t *entries)
 {
-    scr_ast_node_t *root = coduomp_script_ast_allocate(
-        SCR_AST_KIND_SCRIPT_ROOT, AST_MEMBER_SIZE(scriptRoot));
-    root->payload.scriptRoot.entries =
-        (scr_ast_script_entry_block_t *)entries;
+    scr_ast_script_root_t *root =
+        Hunk_AllocateTempMemoryHighInternal(sizeof(*root));
+    root->prefixEntries = prefixEntries;
+    root->entries = entries;
     out->words[0] = (coduo_script_yystype_word_t)root;
     return out;
 }

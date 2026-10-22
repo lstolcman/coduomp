@@ -185,15 +185,15 @@ void *node2_(uintptr_t word0, uintptr_t word1)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: typed rule-1 use of the original pair
- * constructor. The compiler consumes the second word as scriptRoot.entries;
- * the first word is the grammar-provided root kind. */
-scr_ast_node_t *coduomp_script_ast_new_script_root(uintptr_t kind,
-                                                   uintptr_t entries)
+ * constructor. Both words are list pointers: the prefix list followed by
+ * the script-entry list consumed by the compiler. */
+scr_ast_script_root_t *coduomp_script_ast_new_script_root(scr_ast_list_t *prefixEntries,
+                                                        scr_ast_list_t *entries)
 {
-    scr_ast_node_t *root = coduomp_script_ast_allocate(
-        (scr_ast_kind_t)kind, AST_MEMBER_SIZE(scriptRoot));
-    root->payload.scriptRoot.entries =
-        (scr_ast_script_entry_block_t *)entries;
+    scr_ast_script_root_t *root =
+        Hunk_AllocateTempMemoryHighInternal(sizeof(*root));
+    root->prefixEntries = prefixEntries;
+    root->entries = entries;
     return root;
 }
 

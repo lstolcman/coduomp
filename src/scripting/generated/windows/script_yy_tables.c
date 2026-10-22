@@ -504,7 +504,7 @@ uint32_t script_yyPreviousSourcePos;
 qboolean script_yyInit = qtrue;
 script_yy_buffer_t *script_yyCurrentBuffer;
 int32_t script_yyStart;
-scr_ast_node_t *script_parseRoot;
+scr_ast_script_root_t *script_parseRoot;
 char *script_yyCBufferPosition;
 qboolean script_yyDidBufferSwitchOnEof;
 uint8_t script_yyHoldChar;
