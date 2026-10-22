@@ -1239,6 +1239,10 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
                                 const vec3_t origin, const axis_t axis,
                                 int32_t timeOffset)
 {
+    constexpr float fullRotationDegrees = 360.0f;
+    constexpr float halfRotationDegrees = 180.0f;
+    constexpr float radiansPi = 3.1415927410125732f;
+    /* Keep the float stores explicit while carrying unspilled arithmetic between them. */
     axis_t spawnAxis;
     for (int32_t row = 0; row < 3; ++row) {
         for (int32_t component = 0; component < 3; ++component)
@@ -1249,15 +1253,18 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
          FX_SPAWNFLAG_RANDOM_ROTATION_AROUND_FORWARD) != 0) {
         vec3_t rotatedRight;
         RotatePointAroundVector(rotatedRight, spawnAxis[0], spawnAxis[1],
-                                coduo_crt_randf() * 360.0f);
+                                coduo_crt_randf() * fullRotationDegrees);
         for (int32_t component = 0; component < 3; ++component)
             spawnAxis[1][component] = rotatedRight[component];
-        spawnAxis[2][0] = spawnAxis[0][1] * spawnAxis[1][2] -
-                          spawnAxis[0][2] * spawnAxis[1][1];
-        spawnAxis[2][1] = spawnAxis[0][2] * spawnAxis[1][0] -
-                          spawnAxis[0][0] * spawnAxis[1][2];
-        spawnAxis[2][2] = spawnAxis[0][0] * spawnAxis[1][1] -
-                          spawnAxis[0][1] * spawnAxis[1][0];
+        spawnAxis[2][0] = static_cast<float>(
+            static_cast<long double>(spawnAxis[0][1]) * spawnAxis[1][2] -
+            static_cast<long double>(spawnAxis[0][2]) * spawnAxis[1][1]);
+        spawnAxis[2][1] = static_cast<float>(
+            static_cast<long double>(spawnAxis[0][2]) * spawnAxis[1][0] -
+            static_cast<long double>(spawnAxis[0][0]) * spawnAxis[1][2]);
+        spawnAxis[2][2] = static_cast<float>(
+            static_cast<long double>(spawnAxis[0][0]) * spawnAxis[1][1] -
+            static_cast<long double>(spawnAxis[0][1]) * spawnAxis[1][0]);
     }
 
     vec3_t spawnOrigin;
@@ -1270,21 +1277,22 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
 
     if ((primitiveTemplate->spawnFlags &
          FX_SPAWNFLAG_ORIGIN_ON_SPHERE) != 0) {
-        const float azimuth = coduo_crt_randf() * 360.0f *
-                              3.1415927410125732f / 180.0f;
+        const float azimuth = static_cast<float>(
+            static_cast<long double>(coduo_crt_randf()) * fullRotationDegrees * radiansPi / halfRotationDegrees);
         float sinAzimuth;
         float cosAzimuth;
         coduo_x87_sincosf(azimuth, &sinAzimuth, &cosAzimuth);
-        const float polar = coduo_crt_randf() * 180.0f *
-                            3.1415927410125732f / 180.0f;
+        const float polar = static_cast<float>(
+            static_cast<long double>(coduo_crt_randf()) * halfRotationDegrees * radiansPi / halfRotationDegrees);
         float sinPolar;
         float cosPolar;
         coduo_x87_sincosf(polar, &sinPolar, &cosPolar);
         const float radius = FX_RandomFloatRange(primitiveTemplate->radius);
         const float height = FX_RandomFloatRange(primitiveTemplate->height);
+        const float equatorialRadius = radius * sinPolar;
         vec3_t radialOffset = {
-            radius * sinPolar * sinAzimuth,
-            radius * sinPolar * cosAzimuth,
+            equatorialRadius * sinAzimuth,
+            equatorialRadius * cosAzimuth,
             height * cosPolar
         };
         for (int32_t component = 0; component < 3; ++component)
@@ -1298,19 +1306,20 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
     } else if ((primitiveTemplate->spawnFlags &
                 FX_SPAWNFLAG_ORIGIN_ON_CYLINDER) != 0) {
         const float height = FX_RandomFloatRange(primitiveTemplate->height);
-        const float axialOffset =
-            (coduo_crt_randf() * 2.0f - 1.0f) * height * 0.5f;
+        const float axialOffset = static_cast<float>(
+            (static_cast<long double>(coduo_crt_randf()) * 2.0f - 1.0f) * height * 0.5f);
         const float radius = FX_RandomFloatRange(primitiveTemplate->radius);
         vec3_t unrotatedOffset;
+        for (int32_t component = 0; component < 3; ++component)
+            unrotatedOffset[component] = spawnAxis[1][component] * radius;
         for (int32_t component = 0; component < 3; ++component) {
-            unrotatedOffset[component] =
-                spawnAxis[1][component] * radius +
-                spawnAxis[0][component] * axialOffset;
+            unrotatedOffset[component] = static_cast<float>(
+                static_cast<long double>(spawnAxis[0][component]) * axialOffset + unrotatedOffset[component]);
         }
         vec3_t radialOffset;
         RotatePointAroundVector(radialOffset, spawnAxis[0],
                                 unrotatedOffset,
-                                coduo_crt_randf() * 360.0f);
+                                coduo_crt_randf() * fullRotationDegrees);
         for (int32_t component = 0; component < 3; ++component)
             spawnOrigin[component] += radialOffset[component];
 
@@ -1328,12 +1337,15 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
                               cardinal[0] * spawnAxis[0][2];
             spawnAxis[1][2] = cardinal[0] * spawnAxis[0][1] -
                               cardinal[1] * spawnAxis[0][0];
-            spawnAxis[2][0] = spawnAxis[0][1] * spawnAxis[1][2] -
-                              spawnAxis[0][2] * spawnAxis[1][1];
-            spawnAxis[2][1] = spawnAxis[0][2] * spawnAxis[1][0] -
-                              spawnAxis[0][0] * spawnAxis[1][2];
-            spawnAxis[2][2] = spawnAxis[0][0] * spawnAxis[1][1] -
-                              spawnAxis[0][1] * spawnAxis[1][0];
+            spawnAxis[2][0] = static_cast<float>(
+                static_cast<long double>(spawnAxis[0][1]) * spawnAxis[1][2] -
+                static_cast<long double>(spawnAxis[0][2]) * spawnAxis[1][1]);
+            spawnAxis[2][1] = static_cast<float>(
+                static_cast<long double>(spawnAxis[0][2]) * spawnAxis[1][0] -
+                static_cast<long double>(spawnAxis[0][0]) * spawnAxis[1][2]);
+            spawnAxis[2][2] = static_cast<float>(
+                static_cast<long double>(spawnAxis[0][0]) * spawnAxis[1][1] -
+                static_cast<long double>(spawnAxis[0][1]) * spawnAxis[1][0]);
         }
     }
 
@@ -1380,8 +1392,8 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
                 FX_RandomFloatRange(primitiveTemplate->windModifier) *
                 0.009999999776482582f;
             for (int32_t component = 0; component < 3; ++component)
-                velocity[component] +=
-                    fx_windDirection[component] * windScale;
+                velocity[component] = static_cast<float>(
+                    static_cast<long double>(windScale) * fx_windDirection[component] + velocity[component]);
         }
 
         coduomp_fx_sample_vector_range(
@@ -1394,25 +1406,25 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
             constexpr float oppositeAccelerationThreshold =
                 1.0000000116860974e-7f; /* 0x005b9f28 */
             for (int32_t component = 0; component < 3; ++component) {
-                if (velocity[component] * acceleration[component] >
+                if (static_cast<long double>(velocity[component]) * acceleration[component] >
                     oppositeAccelerationThreshold) {
                     acceleration[component] = -acceleration[component];
                 }
             }
         }
-        acceleration[2] +=
-            FX_RandomFloatRange(primitiveTemplate->gravity);
+        acceleration[2] = FX_RandomFloatRange(primitiveTemplate->gravity) + acceleration[2];
 
         if (timeOffset > 0) {
             const float elapsed = static_cast<float>(timeOffset) *
                                   0.0010000000474974513f;
-            const float positionScale =
-                elapsed * elapsed * 0.5f + elapsed;
+            const float halfElapsedSquared = static_cast<float>(static_cast<long double>(elapsed) * elapsed * 0.5f);
             for (int32_t component = 0; component < 3; ++component)
-                velocity[component] += acceleration[component] * elapsed;
+                velocity[component] = static_cast<float>(
+                    static_cast<long double>(elapsed) * acceleration[component] + velocity[component]);
+            const float positionScale = halfElapsedSquared + elapsed;
             for (int32_t component = 0; component < 3; ++component) {
-                spawnOrigin[component] +=
-                    velocity[component] * positionScale;
+                spawnOrigin[component] = static_cast<float>(
+                    static_cast<long double>(positionScale) * velocity[component] + spawnOrigin[component]);
             }
         }
     }
@@ -1422,11 +1434,11 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
         primitiveTemplate->primitiveType == FX_PRIMITIVE_TYPE_ELECTRICITY) {
         if ((primitiveTemplate->spawnFlags &
              FX_SPAWNFLAG_ORIGIN2_FROM_TRACE) != 0) {
+            constexpr float traceDistance = 16384.0f;
             vec3_t traceEnd;
             for (int32_t component = 0; component < 3; ++component) {
-                traceEnd[component] =
-                    spawnOrigin[component] +
-                    spawnAxis[0][component] * 16384.0f;
+                traceEnd[component] = static_cast<float>(
+                    static_cast<long double>(spawnAxis[0][component]) * traceDistance + spawnOrigin[component]);
             }
             if ((primitiveTemplate->spawnFlags &
                  FX_SPAWNFLAG_ORIGIN2_IS_OFFSET) != 0) {
@@ -1453,9 +1465,9 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
                 axis_t impactAxis;
                 for (int32_t component = 0; component < 3; ++component)
                     impactAxis[0][component] = trace.normal[component];
-                MakeNormalVectors(impactAxis[0], impactAxis[1],
+                MakeNormalVectors(trace.normal, impactAxis[1],
                                   impactAxis[2]);
-                PlayEntityEffectID(impactEffect, trace.endpos, impactAxis,
+                PlayEntityEffectID(impactEffect, secondOrigin, impactAxis,
                                    nullptr);
             }
         } else {
@@ -1479,16 +1491,18 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate *primitiveTemplate,
              FX_SPAWNFLAG_RGB_COMPONENT_INTERPOLATION) != 0) {
             const float fraction = coduo_crt_randf();
             for (int32_t component = 0; component < 3; ++component) {
-                colorStart[component] =
-                    (primitiveTemplate->rgb.start.end[component] -
+                colorStart[component] = static_cast<float>(
+                    (static_cast<long double>(primitiveTemplate->rgb.start.end[component]) -
                      primitiveTemplate->rgb.start.start[component]) *
                         fraction +
-                    primitiveTemplate->rgb.start.start[component];
-                colorEnd[component] =
-                    (primitiveTemplate->rgb.end.end[component] -
+                    primitiveTemplate->rgb.start.start[component]);
+            }
+            for (int32_t component = 0; component < 3; ++component) {
+                colorEnd[component] = static_cast<float>(
+                    (static_cast<long double>(primitiveTemplate->rgb.end.end[component]) -
                      primitiveTemplate->rgb.end.start[component]) *
                         fraction +
-                    primitiveTemplate->rgb.end.start[component];
+                    primitiveTemplate->rgb.end.start[component]);
             }
         } else {
             for (int32_t component = 0; component < 3; ++component) {
