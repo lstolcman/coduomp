@@ -26,6 +26,7 @@ enum {
     SCRIPT_FUNCTION_OPERAND_STACK_LIMIT = 2047,
     SCRIPT_PENDING_LOAD_COUNT_LIMIT = 2048,
     SCRIPT_PARSE_BUFFER_SIZE = 16384,
+    SCRIPT_PARSE_TRAILING_NUL_COUNT = 2,
     SCRIPT_PARSE_INITIAL_START_STATE = 3
 };
 
@@ -118,13 +119,13 @@ void CODUO_SCRIPT_CDECL Scr_BeginLoadAnimTrees(void)
 /* Source: CoDUOMP.exe 0x00493760..0x00493802.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00493760_00493803.mcode.
  *
- * The original uses a non-owning Flex buffer state and a 16384-byte scanner
- * buffer on this stack frame. Pointer fields deliberately remain native-width:
+ * The original uses a non-owning Flex buffer state with a 16384-byte scanner
+ * capacity and room for both trailing NUL markers. Pointer fields remain native-width:
  * the buffer never crosses a serialized or mixed-bitness boundary. */
 void ScriptImport_ParseSource(char *source, scr_ast_node_t **out)
 {
     script_yy_buffer_t buffer;
-    char scannerBuffer[SCRIPT_PARSE_BUFFER_SIZE];
+    char scannerBuffer[SCRIPT_PARSE_BUFFER_SIZE + SCRIPT_PARSE_TRAILING_NUL_COUNT];
 
     script_yyInputCursor = source;
     script_yyCurrentSourcePos = 0;
