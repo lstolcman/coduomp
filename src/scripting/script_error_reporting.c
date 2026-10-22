@@ -31,19 +31,14 @@ void PrintSourcePos(int32_t channel, const char *filename,
     }
 
     size_t lineLength = strlen(lineStart);
-    size_t displayedLineLength = lineLength;
-    if (displayedLineLength >= MAX_STRING_CHARS) {
-        displayedLineLength = MAX_STRING_CHARS - 1;
-    }
 
-    /* NOT_FROM_ORIGINAL_SOURCE: source diagnostics use the fixed
-     * MAX_STRING_CHARS display domain. */
-    char lineText[MAX_STRING_CHARS];
-    for (size_t index = 0; index < displayedLineLength; ++index) {
+    /* Source diagnostics retain the complete line and its marker column. */
+    char *lineText = SCRIPT_HOST_ALLOCA(lineLength + 1);
+    for (size_t index = 0; index < lineLength; ++index) {
         char ch = lineStart[index];
         lineText[index] = ch == '\t' ? ' ' : ch;
     }
-    lineText[displayedLineLength] = '\0';
+    lineText[lineLength] = '\0';
 
     const char *savegameSuffix =
         script_savedSourceFiles == NULL ? "" : " (savegame)";
@@ -53,10 +48,7 @@ void PrintSourcePos(int32_t channel, const char *filename,
     Com_PrintMessage(channel, va("%s\n", lineText));
 
     size_t markerOffset = (size_t)(sourceCursor - lineStart);
-    char marker[MAX_STRING_CHARS];
-    if (markerOffset > sizeof(marker) - 2) {
-        markerOffset = sizeof(marker) - 2;
-    }
+    char *marker = SCRIPT_HOST_ALLOCA(markerOffset + 2);
     Com_Memset(marker, ' ', markerOffset);
     marker[markerOffset] = '*';
     marker[markerOffset + 1] = '\0';
