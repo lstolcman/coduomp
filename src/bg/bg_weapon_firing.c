@@ -103,7 +103,7 @@ qboolean PM_Weapon_FinishFiring(qboolean delayExpired)
 
     if (primaryHeld == qfalse && delayExpired == qfalse) {
         if (ps->weaponState == WEAPON_STATE_FIRING) {
-            PM_ContinueWeaponAnim(0);
+            PM_ContinueWeaponAnim(PM_WEAPON_ANIM_IDLE);
         }
         ps->weaponState = WEAPON_STATE_IDLE;
         return qtrue;
@@ -333,8 +333,8 @@ void PM_Weapon_FireWeapon(qboolean delayExpired)
 void PM_Weapon_FireMelee(void)
 {
     playerState_t *ps = pm->ps;
-    const int32_t minimumTime =
-        pml.weaponInfo->meleeTime - pml.weaponInfo->meleeWindup;
+    const int32_t minimumTime = coduo_int32_from_bits(
+        (uint32_t)pml.weaponInfo->meleeTime - (uint32_t)pml.weaponInfo->meleeWindup);
 
     if (ps->weaponTime < minimumTime) {
         ps->weaponTime = minimumTime;
@@ -354,7 +354,7 @@ qboolean PM_Weapon_FinishMelee(void)
         return qtrue;
     }
     if (ps->weaponState == WEAPON_STATE_MELEE_RELAX) {
-        PM_ContinueWeaponAnim(0);
+        PM_ContinueWeaponAnim(PM_WEAPON_ANIM_IDLE);
         ps->weaponState = WEAPON_STATE_IDLE;
         return qtrue;
     }
@@ -419,6 +419,7 @@ void PM_Weapon_CheckForMelee(qboolean delayExpired)
         return;
     }
 
+    ps = pm->ps;
     ps->weaponTime = pml.weaponInfo->meleeTime;
     ps->weaponDelay = pml.weaponInfo->meleeWindup;
     ps->weaponState = WEAPON_STATE_MELEE_WINDUP;
