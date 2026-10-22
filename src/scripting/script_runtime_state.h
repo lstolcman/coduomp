@@ -19,10 +19,6 @@ extern uint8_t script_loadAnimTreesActive;
 extern uint16_t script_loadScriptHandleRoot;
 extern uint16_t script_loadScriptCodeRoot;
 extern uint16_t script_animTreeRoot;
-extern uint32_t script_sourceChecksum;
-extern uint32_t script_sourceBufferOffset;
-extern const uint8_t *script_sourceBufferEnd;
-extern const uint8_t *script_sourceBufferStart;
 extern int32_t script_loopWatchdogWarningFlag;
 
 void ScriptRuntime_ResetValueRuntime(void);

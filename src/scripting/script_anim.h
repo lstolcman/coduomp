@@ -17,7 +17,6 @@ extern uint16_t script_animCurrentTreeRoot;
 extern uint16_t script_animCurrentUsingTree;
 extern const char *script_animParseStart;
 extern char *script_animParseState;
-extern uint32_t script_animTreeChecksum;
 extern int32_t script_animTreeCounts[SCRIPT_ANIM_SLOT_COUNT];
 extern uint16_t
     script_animTreeHandles[SCRIPT_ANIM_SLOT_COUNT]

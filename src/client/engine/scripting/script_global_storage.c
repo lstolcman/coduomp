@@ -21,7 +21,7 @@ int32_t script_codeMaxLocalDepth;
 size_t script_codeTempSize;
 uint8_t *script_codeEmitCursor;
 uint8_t *script_codeLastOpcodePos;
-uint32_t script_codeChecksum;
+uint32_t script_codeChecksum; /* original 0x0389fe44 */
 uint8_t script_codeOwnsStrings;
 uint16_t script_currentFunctionRoot;
 script_code_string_fixup_t *script_codeStringFixups;
@@ -70,7 +70,6 @@ uint16_t script_animCurrentTreeRoot; /* original 0x009d65cc */
 uint16_t script_animCurrentUsingTree; /* original 0x009d67a0 */
 const char *script_animParseStart; /* original 0x009d5fb4 */
 char *script_animParseState; /* original 0x009d5fb8 */
-uint32_t script_animTreeChecksum; /* original 0x0389fe44 */
 int32_t script_animTreeCounts[SCRIPT_ANIM_SLOT_COUNT];
 XAnim *script_animTrees[SCRIPT_ANIM_SLOT_COUNT][SCRIPT_ANIM_TREE_SLOT_COUNT];
 uint16_t script_animTreeHandles[SCRIPT_ANIM_SLOT_COUNT]
@@ -79,10 +78,6 @@ int32_t script_animCommentDepth;
 uint16_t script_animTreeRoot;
 const char *script_sourcePos;
 const char *script_sourceFilename;
-uint32_t script_sourceBufferOffset;
-const uint8_t *script_sourceBufferEnd;
-const uint8_t *script_sourceBufferStart;
-uint32_t script_sourceChecksum;
 int32_t script_callStackDepth;
 uint8_t *script_callStackCodepos[32];
 int32_t script_runtimeDeveloperFlag;
