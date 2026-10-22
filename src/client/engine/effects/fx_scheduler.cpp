@@ -309,10 +309,9 @@ int32_t CFxScheduler::RegisterEffect(const char *name,
 /* Source: CoDUOMP.exe 0x004a6d30..0x004a6da5.
  * Exact source name is absent from the Mac build; the Windows register flow
  * proves a scheduler helper that validates a source effect ID, reserves a new
- * named template, deep-copies it, and returns the temporary copy. */
+ * unnamed slot, deep-copies it, and returns the temporary copy. */
 sfx_effect_template_t *CFxScheduler::CopyEffectTemplate(
-    int32_t sourceEffectId, const char *copyName,
-    int32_t *copyEffectId)
+    int32_t sourceEffectId, int32_t *copyEffectId)
 {
     if (sourceEffectId < 1 ||
         sourceEffectId >= FX_EFFECT_TEMPLATE_COUNT ||
@@ -324,7 +323,7 @@ sfx_effect_template_t *CFxScheduler::CopyEffectTemplate(
     }
 
     sfx_effect_template_t *copy =
-        GetNewEffectTemplate(copyEffectId, copyName);
+        GetNewEffectTemplate(copyEffectId, nullptr);
     if (copy == nullptr || *copyEffectId == 0) {
         *copyEffectId = 0;
         return nullptr;
@@ -334,9 +333,6 @@ sfx_effect_template_t *CFxScheduler::CopyEffectTemplate(
             &effectTemplates[sourceEffectId], copy) == qfalse) {
         copy->active = 0;
         copy->temporary = 0;
-        if (copyName != nullptr) {
-            effectIdsByName.erase(copyName);
-        }
         *copyEffectId = 0;
         return nullptr;
     }
@@ -349,11 +345,10 @@ sfx_effect_template_t *CFxScheduler::CopyEffectTemplate(
  * original map subscript lookup—therefore inserting a zero-valued entry for an
  * unknown source name—then delegates to the ID-based copy helper above. */
 sfx_effect_template_t *CFxScheduler::CopyEffectTemplate(
-    const char *sourceName, const char *copyName,
-    int32_t *copyEffectId)
+    const char *sourceName, int32_t *copyEffectId)
 {
     const int32_t sourceEffectId = effectIdsByName[sourceName];
-    return CopyEffectTemplate(sourceEffectId, copyName, copyEffectId);
+    return CopyEffectTemplate(sourceEffectId, copyEffectId);
 }
 
 /* Source: CoDUOMP.exe 0x004a6db0..0x004a6e03.

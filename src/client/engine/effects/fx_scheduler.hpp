@@ -79,11 +79,9 @@ public:
                               CPrimitiveTemplate *primitiveTemplate);
     int32_t ParseEffect(const char *name, CGPGroup *parser);
     sfx_effect_template_t *CopyEffectTemplate(
-        int32_t sourceEffectId, const char *copyName,
-        int32_t *copyEffectId);
+        int32_t sourceEffectId, int32_t *copyEffectId);
     sfx_effect_template_t *CopyEffectTemplate(
-        const char *sourceName, const char *copyName,
-        int32_t *copyEffectId);
+        const char *sourceName, int32_t *copyEffectId);
     static CPrimitiveTemplate *FindPrimitiveTemplate(
         const sfx_effect_template_t *effectTemplate,
         const char *primitiveName);
