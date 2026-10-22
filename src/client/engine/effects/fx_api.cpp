@@ -1027,10 +1027,9 @@ void CFxScheduler::PlayEntityEffectID(
             effectTemplate->primitives[primitiveIndex];
 
         if (primitiveTemplate->cullRange != 0) {
-            const float cullDistance =
-                static_cast<float>(primitiveTemplate->cullRange) *
-                    fx_cullscale->value +
-                static_cast<float>(fx_cullbias->integer);
+            const float cullDistance = static_cast<float>(
+                static_cast<long double>(static_cast<float>(primitiveTemplate->cullRange)) * fx_cullscale->value +
+                static_cast<float>(fx_cullbias->integer));
             /* 0x004a7134..0x004a7157 subtracts through EBP, which was loaded
              * from the caller's origin argument at 0x004a7078/0x004a7081.
              * Bolted effects still use effectOrientation for spawning, but
@@ -1041,10 +1040,13 @@ void CFxScheduler::PlayEntityEffectID(
             const float deltaZ = fxViewOrigin[2] - cullOrigin[2];
             const float deltaY = fxViewOrigin[1] - cullOrigin[1];
             const float deltaX = fxViewOrigin[0] - cullOrigin[0];
-            const float distanceSquared =
-                (deltaZ * deltaZ + deltaY * deltaY) + deltaX * deltaX;
+            /* The deltas are binary32 spills; both squared quantities stay
+             * live through the comparison. */
+            const long double distanceSquared =
+                (static_cast<long double>(deltaZ) * deltaZ + static_cast<long double>(deltaY) * deltaY) +
+                static_cast<long double>(deltaX) * deltaX;
             /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-            if (distanceSquared > cullDistance * cullDistance) {
+            if (distanceSquared > static_cast<long double>(cullDistance) * cullDistance) {
                 if (primitiveTemplate->temporary) {
                     delete primitiveTemplate;
                     effectTemplate->primitives[primitiveIndex] = nullptr;
@@ -1080,18 +1082,19 @@ void CFxScheduler::PlayEntityEffectID(
              spawnIndex < spawnCount;
              ++spawnIndex) {
             ++fxPrimitiveSpawnCount;
-            float spawnDelay;
+            long double spawnDelay;
             if ((primitiveTemplate->spawnFlags &
                  FX_SPAWNFLAG_EVEN_DISTRIBUTION) != 0) {
-                spawnDelay =
-                    primitiveTemplate->delay.start +
-                    static_cast<float>(spawnIndex) * evenSpawnDelay;
+                /* Only the index is rounded to binary32 before this live
+                 * product/addition reaches the integer conversion. */
+                spawnDelay = static_cast<long double>(static_cast<float>(spawnIndex)) * evenSpawnDelay +
+                             primitiveTemplate->delay.start;
             } else {
                 spawnDelay = FX_RandomFloatRange(primitiveTemplate->delay);
             }
 
             const int32_t delayMilliseconds =
-                coduo_fp_to_i32_extended((long double)spawnDelay);
+                coduo_fp_to_i32_extended(spawnDelay);
             if (delayMilliseconds < 1) {
                 CreateEffect(primitiveTemplate, boltInfo,
                              effectOrientation.origin,
