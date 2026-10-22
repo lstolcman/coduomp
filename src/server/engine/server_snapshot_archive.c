@@ -590,7 +590,29 @@ SV_GetCachedSnapshotInternal(int32_t archivedFrameIndex)
                         &message, &oldClient->playerState,
                         &newClient->playerState);
                 }
+            } else {
+                MSG_ReadDeltaClient(
+                    &message, NULL, &newClient->snapshot,
+                    clientNum);
+                newClient->playerStateValid = MSG_ReadBit(&message);
+                if (newClient->playerStateValid != qfalse) {
+                    MSG_ReadDeltaPlayerstate(
+                        &message, NULL,
+                        &newClient->playerState);
+                }
+            }
 
+            /* Publish this client before advancing the baseline cursor. */
+            ++svs.nextCachedSnapshotClients;
+            if (svs.nextCachedSnapshotClients >=
+                SV_SNAPSHOT_COUNTER_WRAP_LIMIT) {
+                Com_Error(
+                    ERR_FATAL,
+                    "\x15" "svs.nextCachedSnapshotClients wrapped");
+            }
+            ++cachedFrame->numClients;
+
+            if (oldClientNum == clientNum) {
                 ++oldClientIndex;
                 if (oldClientIndex < oldFrame->numClients) {
                     oldClient =
@@ -604,26 +626,7 @@ SV_GetCachedSnapshotInternal(int32_t archivedFrameIndex)
                     oldClient = NULL;
                     oldClientNum = SV_ARCHIVE_NO_OLD_CLIENT;
                 }
-            } else {
-                MSG_ReadDeltaClient(
-                    &message, NULL, &newClient->snapshot,
-                    clientNum);
-                newClient->playerStateValid = MSG_ReadBit(&message);
-                if (newClient->playerStateValid != qfalse) {
-                    MSG_ReadDeltaPlayerstate(
-                        &message, NULL,
-                        &newClient->playerState);
-                }
             }
-
-            ++svs.nextCachedSnapshotClients;
-            if (svs.nextCachedSnapshotClients >=
-                SV_SNAPSHOT_COUNTER_WRAP_LIMIT) {
-                Com_Error(
-                    ERR_FATAL,
-                    "\x15" "svs.nextCachedSnapshotClients wrapped");
-            }
-            ++cachedFrame->numClients;
         }
     } else {
         cachedFrame =
