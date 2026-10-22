@@ -291,10 +291,10 @@ void Scr_DumpScriptThreads(void)
 
 #if defined(__x86_64__)
         coduo_x87_truncation_control_t conversionControl;
-        int32_t variableUsageInteger = CODUO_X87_TRUNCATE_I32_FIRST(
-            &conversionControl, (long double)variableUsage);
-        int32_t endonUsageInteger = CODUO_X87_TRUNCATE_I32_NEXT(
+        int32_t endonUsageInteger = CODUO_X87_TRUNCATE_I32_FIRST(
             &conversionControl, (long double)endonUsage);
+        int32_t variableUsageInteger = CODUO_X87_TRUNCATE_I32_NEXT(
+            &conversionControl, (long double)variableUsage);
 #else
         int32_t variableUsageInteger = (int32_t)variableUsage;
         int32_t endonUsageInteger = (int32_t)endonUsage;
