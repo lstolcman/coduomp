@@ -15,6 +15,7 @@
 #define PM_WEAPON_AMMO_PER_SHOT 1
 #define PM_WEAPON_AMMO_NO_CONSUMPTION -1
 #define PM_WEAPON_FULL_ADS_FRACTION_BITS UINT32_C(0x3f800000)
+#define PM_WEAPON_TIMER_HOLD_MSEC 1
 
 /*
  * Complete firing and melee state-machine cluster shared by cgame and game.
@@ -52,19 +53,19 @@ qboolean PM_Weapon_WeaponTimeAdjust(void)
     playerState_t *ps = pm->ps;
 
     if (ps->weaponTime != 0) {
-        ps->weaponTime -= pml.msec;
-        if (ps->weaponTime < 1) {
+        ps->weaponTime = coduo_int32_from_bits((uint32_t)ps->weaponTime - (uint32_t)pml.msec);
+        if (ps->weaponTime < PM_WEAPON_TIMER_HOLD_MSEC) {
             if (pml.weaponInfo->weaponTimeHold != 0 &&
                 (pm->command.buttons & PM_BUTTON_FIRE) != 0 &&
                 ps->currentWeapon == pm->command.weapon &&
                 PM_WeaponAmmoAvailable(ps->currentWeapon) != 0) {
-                ps->weaponTime = 1;
+                ps->weaponTime = PM_WEAPON_TIMER_HOLD_MSEC;
                 if (ps->weaponState == WEAPON_STATE_RECHAMBERING) {
                     PM_Weapon_FinishRechamber();
                 } else if (ps->weaponState == WEAPON_STATE_FIRING ||
                            ps->weaponState == WEAPON_STATE_MELEE_WINDUP ||
                            ps->weaponState == WEAPON_STATE_MELEE_RELAX) {
-                    PM_ContinueWeaponAnim(0);
+                    PM_ContinueWeaponAnim(PM_WEAPON_ANIM_IDLE);
                     ps->weaponState = WEAPON_STATE_IDLE;
                 }
             } else {
@@ -77,7 +78,7 @@ qboolean PM_Weapon_WeaponTimeAdjust(void)
         return qfalse;
     }
 
-    ps->weaponDelay -= pml.msec;
+    ps->weaponDelay = coduo_int32_from_bits((uint32_t)ps->weaponDelay - (uint32_t)pml.msec);
     if (ps->weaponDelay > 0) {
         return qfalse;
     }
