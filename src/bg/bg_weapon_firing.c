@@ -9,10 +9,12 @@
 #include "qcommon/q_bits.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #define PM_WEAPON_NO_AMMO_TIME_PENALTY 500
 #define PM_WEAPON_AMMO_PER_SHOT 1
 #define PM_WEAPON_AMMO_NO_CONSUMPTION -1
+#define PM_WEAPON_FULL_ADS_FRACTION_BITS UINT32_C(0x3f800000)
 
 /*
  * Complete firing and melee state-machine cluster shared by cgame and game.
@@ -243,9 +245,18 @@ void PM_Weapon_AddFiringAimSpreadScale(void)
 {
     playerState_t *ps = pm->ps;
 
+#if defined(WINDOWS_BEHAVIOR)
+    /* The Windows gate compares the stored encoding without floating arithmetic. */
+    uint32_t adsFractionBits;
+    memcpy(&adsFractionBits, &ps->adsFraction, sizeof(adsFractionBits));
+    if (adsFractionBits == PM_WEAPON_FULL_ADS_FRACTION_BITS) {
+        return;
+    }
+#else
     if (ps->adsFraction == 1.0f) {
         return;
     }
+#endif
 
     /* Both original x87 bodies retain multiply/add through the binary32 store. */
 #if EMULATE_X87
