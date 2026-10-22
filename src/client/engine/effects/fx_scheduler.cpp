@@ -399,10 +399,10 @@ qboolean CFxScheduler_CopyEffectTemplate(
 {
     destination->temporary = true;
     strcpy(destination->name, source->name);
-    destination->primitiveCount = 0;
+    destination->primitiveCount = source->primitiveCount;
 
     for (int32_t primitiveIndex = 0;
-         primitiveIndex < source->primitiveCount;
+         primitiveIndex < destination->primitiveCount;
          ++primitiveIndex) {
         CPrimitiveTemplate *primitiveCopy = new CPrimitiveTemplate;
         /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
@@ -410,7 +410,7 @@ qboolean CFxScheduler_CopyEffectTemplate(
             SFxHelper_Print(
                 "^1FxScheduler: could not allocate temporary primitive\n");
             for (int32_t copiedIndex = 0;
-                 copiedIndex < destination->primitiveCount;
+                 copiedIndex < primitiveIndex;
                  ++copiedIndex) {
                 delete destination->primitives[copiedIndex];
                 destination->primitives[copiedIndex] = nullptr;
@@ -418,10 +418,9 @@ qboolean CFxScheduler_CopyEffectTemplate(
             destination->primitiveCount = 0;
             return qfalse;
         }
-        destination->primitives[destination->primitiveCount] = primitiveCopy;
+        destination->primitives[primitiveIndex] = primitiveCopy;
         primitiveCopy->CopyForTemporaryEffect(
             *source->primitives[primitiveIndex]);
-        ++destination->primitiveCount;
     }
     return qtrue;
 }
