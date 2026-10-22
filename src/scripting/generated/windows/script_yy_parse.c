@@ -817,7 +817,10 @@ int32_t yyparse(void)
      * registers. Local storage also eliminates GCC's -Wdangling-pointer
      * warning about retaining the initial local-stack addresses after return. */
     int16_t *script_yyssp;
-    sval_u script_yyval;
+    /* NOT_FROM_ORIGINAL_SOURCE: define the initially inactive semantic lanes.
+     * Empty rules replace the payload; the initial source-position bits never
+     * reach node arguments or the published parse root. */
+    sval_u script_yyval = {0};
     sval_u *script_yyvsp;
 
     script_yynerrs = 0;
@@ -949,7 +952,9 @@ int32_t yyparse(void)
 reduce: {
             int32_t rule = action;
             int32_t ruleLength = script_yyr2[rule];
-            script_yyval = script_yyvsp[1 - ruleLength];
+            if (ruleLength > 0) {
+                script_yyval = script_yyvsp[1 - ruleLength];
+            }
             script_yyval = coduomp_script_yy_run_reduction(rule, script_yyval,
                                                 script_yyvsp);
 
