@@ -46,8 +46,10 @@ coduo_fp_to_i32_extended(long double value)
     /* The byte-identical Windows helper first performs a nearest-mode
      * signed-qword FISTP (uo_game_mp_x86.dll 0x20069c5b) and only then corrects
      * the finite result toward zero. At +2^63-0.5 that first step is already
-     * integer-indefinite, so its low dword is zero rather than -1. */
-    if (value >= -0x1p63L && value < 0x1p63L - 0.5L) {
+     * integer-indefinite, so its low dword is zero rather than -1. The nearest
+     * result at -2^63+0.5 is INT64_MIN too, and the original returns that value
+     * before applying its residual correction. */
+    if (value > -0x1p63L + 0.5L && value < 0x1p63L - 0.5L) {
         lowBits = (uint32_t)(uint64_t)(int64_t)value;
     }
     memcpy(&result, &lowBits, sizeof(result));

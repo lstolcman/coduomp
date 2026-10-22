@@ -3,6 +3,7 @@
 #include "bg_vehicle.h"
 #include "bg_weapon.h"
 #include "compat/coduo_fp_conversion.h"
+#include "compat/coduo_int32_bits.h"
 #include "compat/coduo_native_x87.h"
 #include "compat/coduo_x87emu.h"
 #include "qcommon/q_bits.h"
@@ -10,6 +11,8 @@
 #include <stdint.h>
 
 #define PM_WEAPON_NO_AMMO_TIME_PENALTY 500
+#define PM_WEAPON_AMMO_PER_SHOT 1
+#define PM_WEAPON_AMMO_NO_CONSUMPTION -1
 
 /*
  * Complete firing and melee state-machine cluster shared by cgame and game.
@@ -130,21 +133,34 @@ void PM_Weapon_StartFiring(qboolean delayExpired)
             const float rate = pml.weaponInfo->adsFireDelayRate;
             const float adsFraction = ps->adsFraction;
 
-            /* The product remains live through the original truncating FISTP. */
+            /* The product remains live through the original integer conversion. */
 #if EMULATE_X87
-            ps->weaponDelay = x87f_store_i32_trunc(x87f_mul(
+            const x87f delay = x87f_mul(
                 x87f_div(x87f_load_f32(one), x87f_load_f32(rate)),
                 x87f_sub(x87f_load_f32(one),
-                         x87f_load_f32(adsFraction))));
+                         x87f_load_f32(adsFraction)));
+#if defined(WINDOWS_BEHAVIOR) && EMULATE_X87_BACKEND == EMU_X87_SOFTFLOAT
+            /* The qword conversion's integer-indefinite/minimum result is
+             * returned before the correction toward zero. */
+            const int64_t nearestDelay =
+                extF80_to_i64(delay, softfloat_round_near_even, false);
+            const int64_t integerDelay = nearestDelay == INT64_MIN
+                ? INT64_MIN : x87f_store_i64_trunc(delay);
+            ps->weaponDelay = coduo_int32_from_bits((uint32_t)(uint64_t)integerDelay);
+#elif defined(WINDOWS_BEHAVIOR)
+            ps->weaponDelay = coduo_fp_to_i32_extended((long double)delay);
+#else
+            ps->weaponDelay = x87f_store_i32_trunc(delay);
+#endif
+#elif defined(WINDOWS_BEHAVIOR)
+            /* Preserve the live quotient and product through the qword
+             * conversion; a float reciprocal can change the delay. */
+            ps->weaponDelay = coduo_fp_to_i32_extended(
+                ((long double)one / (long double)rate) *
+                ((long double)one - (long double)adsFraction));
 #elif defined(__x86_64__) && \
       (defined(__GNUC__) || defined(__clang__))
             ps->weaponDelay = CODUO_X87_TRUNCATE_I32(
-                ((long double)one / (long double)rate) *
-                ((long double)one - (long double)adsFraction));
-#elif defined(WINDOWS_BEHAVIOR)
-            /* Preserve the live quotient and product on hosts without x87;
-             * a float reciprocal can move the delay to the next millisecond. */
-            ps->weaponDelay = coduo_fp_to_i32_extended(
                 ((long double)one / (long double)rate) *
                 ((long double)one - (long double)adsFraction));
 #else
@@ -154,11 +170,13 @@ void PM_Weapon_StartFiring(qboolean delayExpired)
         }
 
         BG_AnimScriptEvent(ps, ANIM_EVENT_FIRE_WEAPON, qfalse, qtrue);
+        ps = pm->ps;
         if (pml.weaponInfo->raiseEnabled != 0) {
             Com_BitSet(ps->weaponRechamberBits, ps->currentWeapon);
         }
     }
 
+    ps = pm->ps;
     ps->weaponState = WEAPON_STATE_FIRING;
     PM_SetProneMovementOverride();
 }
@@ -166,7 +184,7 @@ void PM_Weapon_StartFiring(qboolean delayExpired)
 int32_t PM_Weapon_GetAmmoRequired(int32_t weapon)
 {
     (void)weapon;
-    return 1;
+    return PM_WEAPON_AMMO_PER_SHOT;
 }
 
 qboolean PM_Weapon_CheckFiringAmmo(void)
@@ -247,7 +265,6 @@ void PM_Weapon_AddFiringAimSpreadScale(void)
 void PM_Weapon_FireWeapon(qboolean delayExpired)
 {
     playerState_t *ps = pm->ps;
-    const int32_t weapon = ps->currentWeapon;
 
     if ((ps->playerStateFlags & PMF_SPRINTING) != 0) {
         return;
@@ -264,27 +281,35 @@ void PM_Weapon_FireWeapon(qboolean delayExpired)
     }
 
     PM_Weapon_StartFiring(delayExpired);
-    if (PM_Weapon_CheckFiringAmmo() == qfalse || ps->weaponDelay != 0) {
+    if (PM_Weapon_CheckFiringAmmo() == qfalse) {
         return;
     }
 
-    if (PM_WeaponAmmoAvailable(weapon) != -1 &&
+    /* Resolve the current state after firing setup and the ammo check. */
+    ps = pm->ps;
+    if (ps->weaponDelay != 0) {
+        return;
+    }
+
+    const int32_t weapon = ps->currentWeapon;
+    if (PM_WeaponAmmoAvailable(weapon) != PM_WEAPON_AMMO_NO_CONSUMPTION &&
         ((ps->entityStateFlags & EF_RESTRICTED_MASK) == 0 ||
          BG_AllowPlayerWeaponAtVehiclePos(ps->vehicleType,
                                           ps->vehiclePosition) != qfalse)) {
         PM_WeaponUseAmmo(weapon, PM_Weapon_GetAmmoRequired(weapon));
         if (pml.weaponInfo->weaponType == WEAPTYPE_GAS) {
-            PM_WeaponUseAmmo(weapon, PM_Weapon_GetAmmoRequired(weapon));
+            const int32_t gasWeapon = pm->ps->currentWeapon;
+            PM_WeaponUseAmmo(gasWeapon, PM_Weapon_GetAmmoRequired(gasWeapon));
         }
     }
 
     if (pml.weaponInfo->weaponType == WEAPTYPE_GRENADE ||
         pml.weaponInfo->weaponType == WEAPTYPE_GAS) {
-        ps->weaponTime = pml.weaponInfo->fireTime;
+        pm->ps->weaponTime = pml.weaponInfo->fireTime;
     }
 
     PM_Weapon_SetFPSFireAnim();
-    PM_AddEvent(PM_WeaponClipEmpty(weapon) != qfalse
+    PM_AddEvent(PM_WeaponClipEmpty(pm->ps->currentWeapon) != qfalse
                     ? EV_FIRE_WEAPON_LASTSHOT
                     : EV_FIRE_WEAPON);
     PM_Weapon_AddFiringAimSpreadScale();
