@@ -234,12 +234,13 @@ void SV_AddEntitiesVisibleFromPoint(
         svEntity_t *const serverEntity =
             SV_SvEntityForGentity(gentity);
 
+        /* Vehicle type and packed occupant state use the shared surface/type lane. */
         if (gentity->entityState.eType == ET_PLAYER &&
             (gentity->entityState.eFlags &
              SV_ENTITY_EFLAG_IN_VEHICLE) != 0 &&
             SV_GentityNum(gentity->ownerNum)
-                    ->entityState.eventParm == SV_HIDDEN_VEHICLE_TYPE &&
-            (gentity->entityState.eventParm &
+                    ->entityState.vehicleType == SV_HIDDEN_VEHICLE_TYPE &&
+            (gentity->entityState.vehicleAnimState &
              SV_VEHICLE_SEAT_MASK) == SV_HIDDEN_VEHICLE_SEAT) {
             continue;
         }
