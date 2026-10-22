@@ -1116,11 +1116,13 @@ void SV_ArchiveSnapshot(void)
         MSG_WriteLong(&message, deltaFrame->archivedFrameIndex);
         MSG_WriteLong(&message, svs.time);
 
+        /* Keep this merge's client limits stable across game-module calls. */
+        const int32_t numClients = sv_maxclients->integer;
+        const int32_t numOldClients = deltaFrame->numClients;
         int32_t clientNum = 0;
         int32_t oldClientIndex = 0;
-        while (clientNum < sv_maxclients->integer ||
-               oldClientIndex < deltaFrame->numClients) {
-            if (clientNum < sv_maxclients->integer &&
+        while (clientNum < numClients || oldClientIndex < numOldClients) {
+            if (clientNum < numClients &&
                 svs.clients[clientNum].state < CS_CONNECTED) {
                 ++clientNum;
                 continue;
@@ -1128,7 +1130,7 @@ void SV_ArchiveSnapshot(void)
 
             const serverCachedSnapshotClient_t *oldClient = NULL;
             int32_t oldClientNum = SV_ARCHIVE_CLIENT_SORT_END;
-            if (oldClientIndex < deltaFrame->numClients) {
+            if (oldClientIndex < numOldClients) {
                 oldClient =
                     &svs.cachedSnapshotClients[
                         (deltaFrame->firstClient +
@@ -1303,18 +1305,8 @@ void SV_ArchiveSnapshot(void)
                 continue;
             }
 
-            const int32_t stateNumber =
-                gentity->entityState.number;
-            if (stateNumber < 0 ||
-                stateNumber >= MAX_GENTITIES) {
-                Com_Error(
-                    ERR_DROP,
-                    "\x15"
-                    "SV_SvEntityForGentity: bad gEnt");
-            }
-
             svEntity_t *const serverEntity =
-                &sv_entities[stateNumber];
+                SV_SvEntityForGentity(gentity);
             if ((gentity->svFlags &
                  SVF_VISIBILITY_BYPASS_MASK) == 0 &&
                 serverEntity->numClusters == 0 &&
