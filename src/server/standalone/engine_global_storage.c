@@ -204,7 +204,7 @@ uint16_t script_animArrayHandle;
 uint16_t *script_objectIdToVariable;
 uint32_t script_parameterCount;
 int32_t script_parseErrorCount;
-scr_ast_node_t *script_parseRoot;
+scr_ast_script_root_t *script_parseRoot;
 char *script_parseSource;
 int32_t script_parseSourceDone;
 uint16_t script_pauseArrayHandle;

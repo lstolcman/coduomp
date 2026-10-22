@@ -11,7 +11,6 @@
  * or the compiler behavior, including the independently proved anim/game and
  * notify/endon identities. */
 typedef enum scr_ast_kind_e {
-    SCR_AST_KIND_SCRIPT_ROOT = 0x01,
     SCR_AST_KIND_ASSIGNMENT_STATEMENT = 0x02,
     SCR_AST_KIND_STRING_REF = 0x03,
     SCR_AST_KIND_PRIMITIVE_EXPRESSION = 0x04,
@@ -106,14 +105,10 @@ typedef struct scr_ast_statement_block_s {
     scr_ast_statement_list_t *sentinel;
 } scr_ast_statement_block_t;
 
-typedef struct scr_ast_script_entry_list_s {
-    uintptr_t *sentinelValue;
-    scr_ast_list_item_t *head;
-} scr_ast_script_entry_list_t;
-
-typedef struct scr_ast_script_entry_block_s {
-    scr_ast_script_entry_list_t *sentinel;
-} scr_ast_script_entry_block_t;
+typedef struct scr_ast_script_root_s {
+    scr_ast_list_t *prefixEntries;
+    scr_ast_list_t *entries;
+} scr_ast_script_root_t;
 
 typedef struct scr_ast_expression_entry_s {
     scr_ast_node_t *node;
@@ -169,9 +164,6 @@ struct scr_ast_node_s {
             uint32_t nameHandle;
             uint32_t sourcePos;
         } usingAnimTree;
-        struct {
-            scr_ast_script_entry_block_t *entries;
-        } scriptRoot;
         struct {
             scr_ast_list_t *list;
             uint32_t sourcePos;

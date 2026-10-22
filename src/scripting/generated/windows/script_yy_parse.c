@@ -246,9 +246,9 @@ static sval_u coduomp_script_yy_run_reduction(int32_t rule,
     case 1:
         script_parseRootValue.source.value =
             (uintptr_t)coduomp_script_ast_new_script_root(
-                script_yyval.source.value, script_yyvsp[0].source.value);
+                (scr_ast_list_t *)script_yyval.source.value, (scr_ast_list_t *)script_yyvsp[0].source.value);
         script_parseRoot =
-            (scr_ast_node_t *)script_parseRootValue.source.value;
+            (scr_ast_script_root_t *)script_parseRootValue.source.value;
         break;
     case 2:
         node_pos(&local_10, script_yyval.source.sourcePos);

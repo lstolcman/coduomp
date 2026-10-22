@@ -122,7 +122,7 @@ void CODUO_SCRIPT_CDECL Scr_BeginLoadAnimTrees(void)
  * The original uses a non-owning Flex buffer state with a 16384-byte scanner
  * capacity and room for both trailing NUL markers. Pointer fields remain native-width:
  * the buffer never crosses a serialized or mixed-bitness boundary. */
-void ScriptImport_ParseSource(char *source, scr_ast_node_t **out)
+void ScriptImport_ParseSource(char *source, scr_ast_script_root_t **out)
 {
     script_yy_buffer_t buffer;
     char scannerBuffer[SCRIPT_PARSE_BUFFER_SIZE + SCRIPT_PARSE_TRAILING_NUL_COUNT];
@@ -150,7 +150,7 @@ void ScriptImport_ParseSource(char *source, scr_ast_node_t **out)
 qboolean Scr_LoadScript(const char *filename)
 {
     char scriptPath[MAX_QPATH];
-    scr_ast_node_t *scriptNode;
+    scr_ast_script_root_t *scriptRoot;
 
     uint16_t canonicalFilename = Scr_CreateCanonicalFilename(filename);
     uint16_t scriptHandle =
@@ -193,12 +193,12 @@ qboolean Scr_LoadScript(const char *filename)
     script_animCurrentUsingTree = 0;
     script_pendingScriptLoadCount = 0;
     script_sourceFilename = scriptPath;
-    ScriptImport_ParseSource(source, &scriptNode);
+    ScriptImport_ParseSource(source, &scriptRoot);
 
     uint16_t functionRoot = GetObject(
         GetVariable(script_loadScriptHandleRoot,
                                 canonicalFilename));
-    ScriptCompile(scriptNode, functionRoot);
+    ScriptCompile(scriptRoot, functionRoot);
 
     script_sourceFilename = savedSourceFilename;
     script_sourcePos = savedSourcePos;
@@ -383,14 +383,14 @@ void EmitThread(scr_ast_node_t *node, uint32_t sourcePos)
 
 /* Source: CoDUOMP.exe 0x0047f730..0x0047f77b.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0047f730_0047f77b.mcode. */
-void EmitThreadList(scr_ast_script_entry_block_t *block)
+void EmitThreadList(scr_ast_list_t *list)
 {
-    for (scr_ast_list_item_t *item = block->sentinel->head;
+    for (scr_ast_list_item_t *item = list->head->next;
          item != NULL; item = item->next) {
         SpecifyThread(item->entry->node);
     }
 
-    for (scr_ast_list_item_t *item = block->sentinel->head;
+    for (scr_ast_list_item_t *item = list->head->next;
          item != NULL; item = item->next) {
         EmitThread(item->entry->node, item->entry->sourcePos);
     }
@@ -398,7 +398,7 @@ void EmitThreadList(scr_ast_script_entry_block_t *block)
 
 /* Source: CoDUOMP.exe 0x0047f780..0x0047f94c.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0047f780_0047f94c.mcode. */
-void ScriptCompile(scr_ast_node_t *script,
+void ScriptCompile(scr_ast_script_root_t *script,
                    uint16_t currentFunctionRoot)
 {
     script_currentFunctionRoot = currentFunctionRoot;
@@ -428,7 +428,7 @@ void ScriptCompile(scr_ast_node_t *script,
     script_pendingScriptLoadCursor = pendingLoads;
 
     EmitOpcode(SCRIPT_OPCODE_END, 0, 0);
-    EmitThreadList(script->payload.scriptRoot.entries);
+    EmitThreadList(script->entries);
     script_codeSize =
         (size_t)(TempMalloc(0) - script_codeBase);
     AdjustFunctionAddresses();

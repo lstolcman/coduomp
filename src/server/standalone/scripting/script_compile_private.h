@@ -24,7 +24,7 @@ enum {
 
 extern int32_t script_parseSourceDone;
 extern char *script_parseSource;
-extern scr_ast_node_t *script_parseRoot;
+extern scr_ast_script_root_t *script_parseRoot;
 extern const int16_t script_yyAccept[];
 extern const int16_t script_yyBase[];
 extern const int16_t script_yyChk[];
@@ -90,7 +90,7 @@ node2_(sval_u *out,
                   coduo_script_yystype_word_t word0,
                   coduo_script_yystype_word_t word1);
 sval_u *coduomp_script_ast_new_script_root(
-    sval_u *out, coduo_script_yystype_word_t entries);
+    sval_u *out, scr_ast_list_t *prefixEntries, scr_ast_list_t *entries);
 sval_u *
 node3(sval_u *out,
                    coduo_script_yystype_word_t word0,

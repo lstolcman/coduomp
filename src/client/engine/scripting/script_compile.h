@@ -53,7 +53,7 @@ extern uint32_t script_yyPreviousSourcePos;
 extern qboolean script_yyInit;
 extern script_yy_buffer_t *script_yyCurrentBuffer;
 extern int32_t script_yyStart;
-extern scr_ast_node_t *script_parseRoot;
+extern scr_ast_script_root_t *script_parseRoot;
 extern const int16_t script_yyAccept[];
 extern const int16_t script_yyBase[];
 extern const int16_t script_yyChk[];
@@ -97,8 +97,8 @@ uintptr_t *node0(uintptr_t word0);
 scr_ast_node_t *node1(uintptr_t word0, uintptr_t word1);
 scr_ast_node_t *node2(uintptr_t word0, uintptr_t word1, uintptr_t word2);
 void *node2_(uintptr_t word0, uintptr_t word1);
-scr_ast_node_t *coduomp_script_ast_new_script_root(uintptr_t kind,
-                                                   uintptr_t entries);
+scr_ast_script_root_t *coduomp_script_ast_new_script_root(scr_ast_list_t *prefixEntries,
+                                                        scr_ast_list_t *entries);
 scr_ast_node_t *node3(uintptr_t word0, uintptr_t word1, uintptr_t word2,
                       uintptr_t word3);
 uintptr_t *node3_(uintptr_t word0, uintptr_t word1, uintptr_t word2);
