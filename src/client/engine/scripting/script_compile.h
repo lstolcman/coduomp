@@ -32,8 +32,7 @@ _Static_assert(sizeof(sval_u) == 8,
 #endif
 
 scr_ast_list_t *linked_list_end(void *entry);
-scr_ast_list_item_t **prepend_node(void *entry,
-                                   scr_ast_list_item_t **headLink);
+scr_ast_list_head_t *prepend_node(void *entry, scr_ast_list_head_t *headLink);
 scr_ast_list_t *append_node(scr_ast_list_t *list, void *entry);
 scr_ast_list_t *ScriptParse_ConcatLists(scr_ast_list_t *first,
                                         const scr_ast_list_t *second);
@@ -96,7 +95,9 @@ uint32_t (node_pos)(uint32_t word);
 uintptr_t *node0(uintptr_t word0);
 scr_ast_node_t *node1(uintptr_t word0, uintptr_t word1);
 scr_ast_node_t *node2(uintptr_t word0, uintptr_t word1, uintptr_t word2);
-void *node2_(uintptr_t word0, uintptr_t word1);
+scr_ast_expression_entry_t *node2_(scr_ast_node_t *node, uint32_t sourcePos);
+scr_ast_string_entry_t *coduomp_script_ast_new_string_entry(uint32_t stringHandle, uint32_t sourcePos);
+scr_ast_list_head_t *coduomp_script_ast_new_list_head(void);
 scr_ast_script_root_t *coduomp_script_ast_new_script_root(scr_ast_list_t *prefixEntries,
                                                         scr_ast_list_t *entries);
 scr_ast_node_t *node3(uintptr_t word0, uintptr_t word1, uintptr_t word2,

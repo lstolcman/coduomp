@@ -19,11 +19,11 @@ enum {
 /* CoDUOMP.exe 0x0047ee40..0x0047ee63 and coduo_lnxded
  * 0x080a1140..0x080a1177 perform the same list walk.  The name/signature is
  * also the exact same-module Mac symbol. */
-void EmitStatementList(scr_ast_statement_block_t *block)
+void EmitStatementList(scr_ast_list_t *block)
 {
-    for (scr_ast_statement_item_t *item = block->sentinel->head;
+    for (scr_ast_list_item_t *item = block->head->next;
          item != NULL; item = item->next) {
-        EmitStatement(item->node);
+        EmitStatement(item->entry);
     }
 }
 
@@ -91,7 +91,7 @@ void Scr_TransferStatementListToDeveloperBuffer(void)
 
 /* CoDUOMP.exe 0x0047efd0..0x0047f0fd and coduo_lnxded
  * 0x080a12fe..0x080a13c2 agree on both developer-enabled paths. */
-void EmitDeveloperStatementList(scr_ast_statement_block_t *block,
+void EmitDeveloperStatementList(scr_ast_list_t *block,
                                 uint32_t sourcePos)
 {
     if (script_codegenMode != SCRIPT_CODEGEN_MODE_INTERN_STRINGS) {

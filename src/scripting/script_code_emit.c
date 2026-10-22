@@ -588,7 +588,7 @@ void EmitClearFieldVariable(scr_ast_node_t *objectNode,
 /* Source: CoDUOMP.exe 0x0047b260..0x0047b2e8.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0047b260_0047b2e8.mcode. */
 void EmitCallRef(scr_ast_node_t *nameNode,
-                 scr_ast_list_t *argsNode,
+                 scr_ast_list_head_t *argsNode,
                  uint32_t callSourcePos)
 {
     /* The third sval_u parameter is part of the original source signature but
@@ -602,7 +602,7 @@ void EmitCallRef(scr_ast_node_t *nameNode,
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0047b2f0_0047b380.mcode. */
 void EmitMethodRef(scr_ast_node_t *objectNode,
                    scr_ast_node_t *nameNode,
-                   scr_ast_list_t *argsNode,
+                   scr_ast_list_head_t *argsNode,
                    uint32_t sourcePos)
 {
     EmitMethod(objectNode, nameNode, argsNode, sourcePos, qfalse);

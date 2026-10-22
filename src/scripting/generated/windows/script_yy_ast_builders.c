@@ -104,7 +104,7 @@ scr_ast_node_t *node2(uintptr_t word0, uintptr_t word1, uintptr_t word2)
     case SCR_AST_KIND_EXPRESSION_LIST:
         node = coduomp_script_ast_allocate(
             kind, AST_MEMBER_SIZE(expressionList));
-        node->payload.expressionList.list = (scr_ast_list_t *)word1;
+        node->payload.expressionList.list = (scr_ast_list_head_t *)word1;
         node->payload.expressionList.sourcePos = (uint32_t)word2;
         break;
     case SCR_AST_KIND_RETURN_VALUE_STATEMENT:
@@ -124,7 +124,7 @@ scr_ast_node_t *node2(uintptr_t word0, uintptr_t word1, uintptr_t word2)
         node = coduomp_script_ast_allocate(
             kind, AST_MEMBER_SIZE(developerStatementBlock));
         node->payload.developerStatementBlock.block =
-            (scr_ast_statement_block_t *)word1;
+            (scr_ast_list_t *)word1;
         node->payload.developerStatementBlock.sourcePos = (uint32_t)word2;
         break;
     case SCR_AST_KIND_CASE_STATEMENT:
@@ -150,38 +150,32 @@ scr_ast_node_t *node2(uintptr_t word0, uintptr_t word1, uintptr_t word2)
 
 /* Source: CoDUOMP.exe 0x00481db0..0x00481e09.
  *
- * The original pair is two untyped 32-bit grammar words. On native 64-bit
- * hosts, list entries require either pointer/source-position or
- * string/source-position records. Select that honest typed layout here
- * instead of widening both original words indiscriminately. */
-void *node2_(uintptr_t word0, uintptr_t word1)
+ * This typed use holds an expression pointer and its source position. The
+ * grammar selects string pairs through a separate native layout below. */
+scr_ast_expression_entry_t *node2_(scr_ast_node_t *node, uint32_t sourcePos)
 {
-    void *pair;
+    scr_ast_expression_entry_t *entry = Hunk_AllocateTempMemoryHighInternal(sizeof(*entry));
+    entry->node = node;
+    entry->sourcePos = sourcePos;
+    return entry;
+}
 
-#if UINTPTR_MAX > UINT32_MAX
-    if (word0 <= UINT16_MAX) {
-        scr_ast_string_entry_t *entry =
-            Hunk_AllocateTempMemoryHighInternal(sizeof(*entry));
-        entry->stringHandle = (uint32_t)word0;
-        entry->sourcePos = (uint32_t)word1;
-        pair = entry;
-    } else {
-        scr_ast_expression_entry_t *entry =
-            Hunk_AllocateTempMemoryHighInternal(sizeof(*entry));
-        entry->node = (scr_ast_node_t *)word0;
-        entry->sourcePos = (uint32_t)word1;
-        pair = entry;
-#else
-    {
-        scr_ast_string_entry_t *entry =
-            Hunk_AllocateTempMemoryHighInternal(sizeof(*entry));
-        entry->stringHandle = (uint32_t)word0;
-        entry->sourcePos = (uint32_t)word1;
-        pair = entry;
-#endif
-    }
+/* NOT_FROM_ORIGINAL_SOURCE: typed string use of the original two-word pair.
+ * The carrier may retain upper token bits; its value does not select a layout. */
+scr_ast_string_entry_t *coduomp_script_ast_new_string_entry(uint32_t stringHandle, uint32_t sourcePos)
+{
+    scr_ast_string_entry_t *entry = Hunk_AllocateTempMemoryHighInternal(sizeof(*entry));
+    entry->stringHandle = stringHandle;
+    entry->sourcePos = sourcePos;
+    return entry;
+}
 
-    return pair;
+/* NOT_FROM_ORIGINAL_SOURCE: typed head-link use of the original node0(0). */
+scr_ast_list_head_t *coduomp_script_ast_new_list_head(void)
+{
+    scr_ast_list_head_t *head = Hunk_AllocateTempMemoryHighInternal(sizeof(*head));
+    head->head = NULL;
+    return head;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: typed rule-1 use of the original pair
@@ -222,7 +216,7 @@ scr_ast_node_t *node3(uintptr_t word0, uintptr_t word1, uintptr_t word2,
         node = coduomp_script_ast_allocate(
             kind, AST_MEMBER_SIZE(functionCallValue));
         node->payload.functionCallValue.callee = (scr_ast_node_t *)word1;
-        node->payload.functionCallValue.args = (scr_ast_list_t *)word2;
+        node->payload.functionCallValue.args = (scr_ast_list_head_t *)word2;
         node->payload.functionCallValue.callSourcePos = (uint32_t)word3;
         break;
     case SCR_AST_KIND_ASSIGNMENT_STATEMENT:
@@ -334,7 +328,7 @@ scr_ast_node_t *node4(uintptr_t word0, uintptr_t word1, uintptr_t word2,
         node->payload.functionDefinition.nameHandle = (uint32_t)word1;
         node->payload.functionDefinition.parameters = (scr_ast_list_t *)word2;
         node->payload.functionDefinition.body =
-            (scr_ast_statement_block_t *)word3;
+            (scr_ast_list_t *)word3;
         node->payload.functionDefinition.sourcePos = (uint32_t)word4;
         break;
     case SCR_AST_KIND_ENDON_STATEMENT:
@@ -343,6 +337,13 @@ scr_ast_node_t *node4(uintptr_t word0, uintptr_t word1, uintptr_t word2,
         node->payload.endonStatement.eventNode = (scr_ast_node_t *)word2;
         node->payload.endonStatement.objectSourcePos = (uint32_t)word3;
         node->payload.endonStatement.opcodeSourcePos = (uint32_t)word4;
+        break;
+    case SCR_AST_KIND_NOTIFY_STATEMENT:
+        node = coduomp_script_ast_allocate(kind, AST_MEMBER_SIZE(notifyStatement));
+        node->payload.notifyStatement.objectNode = (scr_ast_node_t *)word1;
+        node->payload.notifyStatement.list = (scr_ast_list_head_t *)word2;
+        node->payload.notifyStatement.objectSourcePos = (uint32_t)word3;
+        node->payload.notifyStatement.opcodeSourcePos = (uint32_t)word4;
         break;
     default:
         node = coduomp_script_ast_allocate(kind, AST_MEMBER_SIZE(waittillStatement));
@@ -382,7 +383,7 @@ scr_ast_node_t *node5(uintptr_t word0, uintptr_t word1, uintptr_t word2,
         node = coduomp_script_ast_allocate(kind, AST_MEMBER_SIZE(methodCallValue));
         node->payload.methodCallValue.objectNode = (scr_ast_node_t *)word1;
         node->payload.methodCallValue.callee = (scr_ast_node_t *)word2;
-        node->payload.methodCallValue.args = (scr_ast_list_t *)word3;
+        node->payload.methodCallValue.args = (scr_ast_list_head_t *)word3;
         node->payload.methodCallValue.methodSourcePos = (uint32_t)word4;
         node->payload.methodCallValue.objectSourcePos = (uint32_t)word5;
     } else {

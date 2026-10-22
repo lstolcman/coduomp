@@ -41,15 +41,14 @@ scr_ast_list_t *linked_list_end(void *entry)
 
 /* Source: CoDUOMP.exe 0x00482180..0x004821dc.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00482180_004821dd.mcode. */
-scr_ast_list_item_t **prepend_node(void *entry,
-                                   scr_ast_list_item_t **headLink)
+scr_ast_list_head_t *prepend_node(void *entry, scr_ast_list_head_t *headLink)
 {
     scr_ast_list_item_t *item =
         Hunk_AllocateTempMemoryHighInternal(sizeof(*item));
 
     item->entry = entry;
-    item->next = *headLink;
-    *headLink = item;
+    item->next = headLink->head;
+    headLink->head = item;
     return headLink;
 }
 

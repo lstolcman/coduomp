@@ -705,26 +705,26 @@ static sval_u coduomp_script_yy_run_reduction(int32_t rule,
         break;
     case 0x69:
         node_pos(&local_224, script_yyvsp[0].source.sourcePos);
-        local_220.source.value = (uintptr_t)node2_(script_yyvsp[0].source.value, local_224.source.value);
-        script_yyval.source.value = (uintptr_t)prepend_node((void *)local_220.source.value, (scr_ast_list_item_t **)script_yyval.source.value);
+        local_220.source.value = (uintptr_t)node2_((scr_ast_node_t *)script_yyvsp[0].source.value, local_224.source.value);
+        script_yyval.source.value = (uintptr_t)prepend_node((void *)local_220.source.value, (scr_ast_list_head_t *)script_yyval.source.value);
         break;
     case 0x6a:
-        local_228.source.value = (uintptr_t)node0(0);
+        local_228.source.value = (uintptr_t)coduomp_script_ast_new_list_head();
         node_pos(&local_230, script_yyval.source.sourcePos);
-        local_22c.source.value = (uintptr_t)node2_(script_yyval.source.value, local_230.source.value);
-        script_yyval.source.value = (uintptr_t)prepend_node((void *)local_22c.source.value, (scr_ast_list_item_t **)local_228.source.value);
+        local_22c.source.value = (uintptr_t)node2_((scr_ast_node_t *)script_yyval.source.value, local_230.source.value);
+        script_yyval.source.value = (uintptr_t)prepend_node((void *)local_22c.source.value, (scr_ast_list_head_t *)local_228.source.value);
         break;
     case 0x6b:
-        script_yyval.source.value = (uintptr_t)node0(0);
+        script_yyval.source.value = (uintptr_t)coduomp_script_ast_new_list_head();
         break;
     case 0x6c:
         node_pos(&local_238, script_yyvsp[0].source.sourcePos);
-        local_234.source.value = (uintptr_t)node2_(script_yyvsp[0].source.value, local_238.source.value);
+        local_234.source.value = (uintptr_t)coduomp_script_ast_new_string_entry(script_yyvsp[0].source.value, local_238.source.value);
         script_yyval.source.value = (uintptr_t)append_node((scr_ast_list_t *)script_yyval.source.value, (void *)local_234.source.value);
         break;
     case 0x6d:
         node_pos(&local_240, script_yyval.source.sourcePos);
-        local_23c.source.value = (uintptr_t)node2_(script_yyval.source.value, local_240.source.value);
+        local_23c.source.value = (uintptr_t)coduomp_script_ast_new_string_entry(script_yyval.source.value, local_240.source.value);
         local_248.source.value = (uintptr_t)node0(0);
         local_244.source.value = (uintptr_t)linked_list_end((void *)local_248.source.value);
         script_yyval.source.value = (uintptr_t)append_node((scr_ast_list_t *)local_244.source.value, (void *)local_23c.source.value);
@@ -735,38 +735,38 @@ static sval_u coduomp_script_yy_run_reduction(int32_t rule,
         break;
     case 0x6f:
         node_pos(&local_254, script_yyvsp[0].source.sourcePos);
-        local_250.source.value = (uintptr_t)node2_(script_yyvsp[0].source.value, local_254.source.value);
+        local_250.source.value = (uintptr_t)coduomp_script_ast_new_string_entry(script_yyvsp[0].source.value, local_254.source.value);
         script_yyval.source.value = (uintptr_t)append_node((scr_ast_list_t *)script_yyval.source.value, (void *)local_250.source.value);
         break;
     case 0x70:
         node_pos(&local_25c, script_yyval.source.sourcePos);
-        local_258.source.value = (uintptr_t)node2_(script_yyval.source.value, local_25c.source.value);
+        local_258.source.value = (uintptr_t)node2_((scr_ast_node_t *)script_yyval.source.value, local_25c.source.value);
         local_264.source.value = (uintptr_t)node0(0);
         local_260.source.value = (uintptr_t)linked_list_end((void *)local_264.source.value);
         script_yyval.source.value = (uintptr_t)append_node((scr_ast_list_t *)local_260.source.value, (void *)local_258.source.value);
         break;
     case 0x71:
         node_pos(&local_26c, script_yyvsp[0].source.sourcePos);
-        local_268.source.value = (uintptr_t)node2_(script_yyvsp[0].source.value, local_26c.source.value);
+        local_268.source.value = (uintptr_t)node2_((scr_ast_node_t *)script_yyvsp[0].source.value, local_26c.source.value);
         script_yyval.source.value = (uintptr_t)append_node((scr_ast_list_t *)script_yyval.source.value, (void *)local_268.source.value);
         break;
     case 0x72:
         node_pos(&local_274, script_yyval.source.sourcePos);
-        local_270.source.value = (uintptr_t)node2_(script_yyval.source.value, local_274.source.value);
+        local_270.source.value = (uintptr_t)node2_((scr_ast_node_t *)script_yyval.source.value, local_274.source.value);
         local_27c.source.value = (uintptr_t)node0(0);
         local_278.source.value = (uintptr_t)linked_list_end((void *)local_27c.source.value);
         script_yyval.source.value = (uintptr_t)append_node((scr_ast_list_t *)local_278.source.value, (void *)local_270.source.value);
         break;
     case 0x73:
         node_pos(&local_284, script_yyvsp[0].source.sourcePos);
-        local_280.source.value = (uintptr_t)node2_(script_yyvsp[0].source.value, local_284.source.value);
-        script_yyval.source.value = (uintptr_t)prepend_node((void *)local_280.source.value, (scr_ast_list_item_t **)script_yyval.source.value);
+        local_280.source.value = (uintptr_t)node2_((scr_ast_node_t *)script_yyvsp[0].source.value, local_284.source.value);
+        script_yyval.source.value = (uintptr_t)prepend_node((void *)local_280.source.value, (scr_ast_list_head_t *)script_yyval.source.value);
         break;
     case 0x74:
-        local_288.source.value = (uintptr_t)node0(0);
+        local_288.source.value = (uintptr_t)coduomp_script_ast_new_list_head();
         node_pos(&local_290, script_yyval.source.sourcePos);
-        local_28c.source.value = (uintptr_t)node2_(script_yyval.source.value, local_290.source.value);
-        script_yyval.source.value = (uintptr_t)prepend_node((void *)local_28c.source.value, (scr_ast_list_item_t **)local_288.source.value);
+        local_28c.source.value = (uintptr_t)node2_((scr_ast_node_t *)script_yyval.source.value, local_290.source.value);
+        script_yyval.source.value = (uintptr_t)prepend_node((void *)local_28c.source.value, (scr_ast_list_head_t *)local_288.source.value);
         break;
     case 0x75:
         node_pos(&local_294, script_yyval.source.sourcePos);
@@ -782,7 +782,7 @@ static sval_u coduomp_script_yy_run_reduction(int32_t rule,
         break;
     case 0x78:
         node_pos(&local_2a4, script_yyvsp[0].source.sourcePos);
-        local_2a0.source.value = (uintptr_t)node2_(script_yyvsp[0].source.value, local_2a4.source.value);
+        local_2a0.source.value = (uintptr_t)node2_((scr_ast_node_t *)script_yyvsp[0].source.value, local_2a4.source.value);
         script_yyval.source.value = (uintptr_t)append_node((scr_ast_list_t *)script_yyval.source.value, (void *)local_2a0.source.value);
         break;
     case 0x79:

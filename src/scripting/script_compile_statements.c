@@ -366,10 +366,8 @@ void EmitFormalParameterListRefInternal(scr_ast_list_item_t *listItem)
 {
     for (scr_ast_list_item_t *item = listItem->next; item != NULL;
          item = item->next) {
-        EmitSafeSetVariableField(
-                                 SCR_AST_STRING_HANDLE(
-                                     item->stringEntry->stringHandle),
-                                 item->stringEntry->sourcePos);
+        scr_ast_string_entry_t *entry = item->entry;
+        EmitSafeSetVariableField(SCR_AST_STRING_HANDLE(entry->stringHandle), entry->sourcePos);
     }
 }
 
@@ -384,9 +382,8 @@ void EmitFormalWaittillParameterListRefInternal(
 {
     for (scr_ast_list_item_t *item = listItem->next; item != NULL;
          item = item->next) {
-        EmitSafeSetWaittillVariableField(
-            SCR_AST_STRING_HANDLE(item->stringEntry->stringHandle),
-            item->stringEntry->sourcePos);
+        scr_ast_string_entry_t *entry = item->entry;
+        EmitSafeSetWaittillVariableField(SCR_AST_STRING_HANDLE(entry->stringHandle), entry->sourcePos);
     }
 }
 
@@ -403,11 +400,11 @@ void EmitWaittillStatement(scr_ast_node_t *objectNode,
     }
 
     scr_ast_list_item_t *eventItem = list->head->next;
-    EmitExpression(eventItem->entry->node);
+    EmitExpression(((scr_ast_expression_entry_t *)eventItem->entry)->node);
     EmitPrimitiveExpression(objectNode);
     EmitOpcode(SCRIPT_OPCODE_WAITTILL, -2, 0);
     AddOpcodePos(opcodeSourcePos);
-    AddOpcodePos(eventItem->entry->sourcePos);
+    AddOpcodePos(((scr_ast_expression_entry_t *)eventItem->entry)->sourcePos);
     AddOpcodePos(objectSourcePos);
     EmitFormalWaittillParameterListRefInternal(eventItem);
     EmitOpcode(SCRIPT_OPCODE_WAITTILL_END, 0, 0);
@@ -443,19 +440,19 @@ void EmitWaittillmatchStatement(scr_ast_node_t *objectNode,
 
     for (scr_ast_list_item_t *item = eventItem->next; item != NULL;
          item = item->next) {
-        EmitExpression(item->entry->node);
+        EmitExpression(((scr_ast_expression_entry_t *)item->entry)->node);
     }
 
-    EmitExpression(eventItem->entry->node);
+    EmitExpression(((scr_ast_expression_entry_t *)eventItem->entry)->node);
     EmitPrimitiveExpression(objectNode);
     EmitOpcode(SCRIPT_OPCODE_WAITTILLMATCH,
                -2 - (int32_t)matchCount, 0);
     AddOpcodePos(opcodeSourcePos);
-    AddOpcodePos(eventItem->entry->sourcePos);
+    AddOpcodePos(((scr_ast_expression_entry_t *)eventItem->entry)->sourcePos);
     AddOpcodePos(objectSourcePos);
     for (scr_ast_list_item_t *item = eventItem->next; item != NULL;
          item = item->next) {
-        AddOpcodePos(item->entry->sourcePos);
+        AddOpcodePos(((scr_ast_expression_entry_t *)item->entry)->sourcePos);
     }
     EmitByte((uint8_t)matchCount);
     EmitOpcode(SCRIPT_OPCODE_WAITTILL_END, 0, 0);
@@ -463,7 +460,7 @@ void EmitWaittillmatchStatement(scr_ast_node_t *objectNode,
 
 /* Source: CoDUOMP.exe 0x0047e2f0..0x0047e46d.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0047e2f0_0047e46d.mcode. */
-void EmitNotifyStatement(scr_ast_node_t *objectNode, scr_ast_list_t *list,
+void EmitNotifyStatement(scr_ast_node_t *objectNode, scr_ast_list_head_t *list,
                          uint32_t objectSourcePos,
                          uint32_t opcodeSourcePos)
 {
@@ -474,14 +471,14 @@ void EmitNotifyStatement(scr_ast_node_t *objectNode, scr_ast_list_t *list,
     for (scr_ast_list_item_t *item = list->head; item != NULL;
          item = item->next) {
         lastItem = item;
-        EmitExpression(item->entry->node);
+        EmitExpression(((scr_ast_expression_entry_t *)item->entry)->node);
         argumentCount++;
     }
 
     EmitPrimitiveExpression(objectNode);
     EmitOpcode(SCRIPT_OPCODE_NOTIFY, -2 - argumentCount, 0);
     AddOpcodePos(opcodeSourcePos);
-    AddOpcodePos(lastItem->entry->sourcePos);
+    AddOpcodePos(((scr_ast_expression_entry_t *)lastItem->entry)->sourcePos);
     AddOpcodePos(objectSourcePos);
 }
 

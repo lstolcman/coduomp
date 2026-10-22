@@ -86,9 +86,9 @@ node2(sval_u *out,
                    coduo_script_yystype_word_t word1,
                    coduo_script_yystype_word_t word2);
 sval_u *
-node2_(sval_u *out,
-                  coduo_script_yystype_word_t word0,
-                  coduo_script_yystype_word_t word1);
+node2_(sval_u *out, scr_ast_node_t *node, uint32_t sourcePos);
+sval_u *coduomp_script_ast_new_string_entry(sval_u *out, uint32_t stringHandle, uint32_t sourcePos);
+sval_u *coduomp_script_ast_new_list_head(sval_u *out);
 sval_u *coduomp_script_ast_new_script_root(
     sval_u *out, scr_ast_list_t *prefixEntries, scr_ast_list_t *entries);
 sval_u *
@@ -122,14 +122,9 @@ node6(sval_u *out,
                    coduo_script_yystype_word_t word5,
                    coduo_script_yystype_word_t word6);
 sval_u *
-linked_list_end(sval_u *out,
-                      coduo_script_yystype_word_t value);
+linked_list_end(sval_u *out, void *entry);
 sval_u *
-prepend_node(sval_u *out,
-                         coduo_script_yystype_word_t value,
-                         coduo_script_yystype_word_t headValue);
+prepend_node(sval_u *out, void *entry, scr_ast_list_head_t *head);
 sval_u *
-append_node(sval_u *out,
-                        coduo_script_yystype_word_t listValue,
-                        coduo_script_yystype_word_t value);
+append_node(sval_u *out, scr_ast_list_t *list, void *entry);
 #endif

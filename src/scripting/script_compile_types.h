@@ -89,21 +89,9 @@ typedef struct scr_ast_list_item_s scr_ast_list_item_t;
 /* Script string handles occupy the low word of an original parser dword. */
 #define SCR_AST_STRING_HANDLE(value) ((uint16_t)(value))
 
-typedef struct scr_ast_statement_item_s {
-    scr_ast_node_t *node;
-    struct scr_ast_statement_item_s *next;
-} scr_ast_statement_item_t;
-
-typedef struct scr_ast_statement_list_s {
-    /* Parser-allocated zero sentinel; neither compiler dereferences it. */
-    uintptr_t *sentinelValue;
-    scr_ast_statement_item_t *head;
-} scr_ast_statement_list_t;
-
-typedef struct scr_ast_statement_block_s {
-    /* Partial view of the generic head/tail list allocation. */
-    scr_ast_statement_list_t *sentinel;
-} scr_ast_statement_block_t;
+typedef struct scr_ast_list_head_s {
+    scr_ast_list_item_t *head;
+} scr_ast_list_head_t;
 
 typedef struct scr_ast_script_root_s {
     scr_ast_list_t *prefixEntries;
@@ -121,11 +109,8 @@ typedef struct scr_ast_string_entry_s {
 } scr_ast_string_entry_t;
 
 struct scr_ast_list_item_s {
-    union {
-        uintptr_t value;
-        scr_ast_expression_entry_t *entry;
-        scr_ast_string_entry_t *stringEntry;
-    };
+    /* Grammar-selected node, positioned pair, or ignored sentinel payload. */
+    void *entry;
     scr_ast_list_item_t *next;
 };
 
@@ -157,7 +142,7 @@ struct scr_ast_node_s {
         struct {
             uint32_t nameHandle;
             scr_ast_list_t *parameters;
-            scr_ast_statement_block_t *body;
+            scr_ast_list_t *body;
             uint32_t sourcePos;
         } functionDefinition;
         struct {
@@ -165,7 +150,7 @@ struct scr_ast_node_s {
             uint32_t sourcePos;
         } usingAnimTree;
         struct {
-            scr_ast_list_t *list;
+            scr_ast_list_head_t *list;
             uint32_t sourcePos;
         } expressionList;
         struct {
@@ -251,10 +236,10 @@ struct scr_ast_node_s {
             uint32_t sourcePos;
         } incDecStatement;
         struct {
-            scr_ast_statement_block_t *block;
+            scr_ast_list_t *block;
         } statementBlock;
         struct {
-            scr_ast_statement_block_t *block;
+            scr_ast_list_t *block;
             uint32_t sourcePos;
         } developerStatementBlock;
         struct {
@@ -265,7 +250,7 @@ struct scr_ast_node_s {
         } waittillStatement;
         struct {
             scr_ast_node_t *objectNode;
-            scr_ast_list_t *list;
+            scr_ast_list_head_t *list;
             uint32_t objectSourcePos;
             uint32_t opcodeSourcePos;
         } notifyStatement;
@@ -289,13 +274,13 @@ struct scr_ast_node_s {
         } sourceOnlyStatement;
         struct {
             scr_ast_node_t *callee;
-            scr_ast_list_t *args;
+            scr_ast_list_head_t *args;
             uint32_t callSourcePos;
         } functionCallValue;
         struct {
             scr_ast_node_t *objectNode;
             scr_ast_node_t *callee;
-            scr_ast_list_t *args;
+            scr_ast_list_head_t *args;
             uint32_t methodSourcePos;
             uint32_t objectSourcePos;
         } methodCallValue;
@@ -323,6 +308,9 @@ struct scr_ast_node_s {
         } call;
     } payload;
 };
+
+_Static_assert(sizeof(scr_ast_list_head_t) == sizeof(scr_ast_list_item_t *),
+               "AST list head must contain one pointer");
 
 #if UINTPTR_MAX == UINT32_MAX
 _Static_assert(offsetof(scr_ast_node_t, payload) == 4,
