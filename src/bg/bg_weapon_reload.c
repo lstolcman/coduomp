@@ -45,17 +45,18 @@ void PM_ReloadClip(void)
     const qboolean reloadStartState =
         weaponState == WEAPON_STATE_RELOAD_START ||
         weaponState == WEAPON_STATE_RELOAD_START_INTERRUPT;
+
+    if (reloadStartState != qfalse &&
+        pml.weaponInfo->reloadStartAmmoAdd == 0) {
+        return;
+    }
+
     const weaponInfo_t *const weaponInfo =
         BG_GetInfoForWeapon(ps->currentWeapon);
     const int32_t ammoIndex = weaponInfo->ammoIndex;
     const int32_t clipIndex = weaponInfo->clipIndex;
     const int32_t clipSize = BG_GetAmmoClipSize(clipIndex);
     int32_t amount;
-
-    if (reloadStartState != qfalse &&
-        pml.weaponInfo->reloadStartAmmoAdd == 0) {
-        return;
-    }
 
     amount = coduo_int32_from_bits(
         (uint32_t)clipSize - (uint32_t)ps->clips[clipIndex]);
@@ -172,7 +173,7 @@ void PM_SetReloadingState(void)
 
 void PM_BeginWeaponReload(void)
 {
-    playerState_t *const ps = pm->ps;
+    playerState_t *ps = pm->ps;
     const int32_t weaponState = ps->weaponState;
     const int32_t weapon = ps->currentWeapon;
 
@@ -194,6 +195,7 @@ void PM_BeginWeaponReload(void)
     }
 
     PM_StartWeaponAnim(PM_WEAPON_ANIM_RELOAD_START);
+    ps = pm->ps;
     ps->weaponTime = pml.weaponInfo->reloadStartTime;
     ps->weaponState = WEAPON_STATE_RELOAD_START;
     PM_AddEvent(EV_RELOAD_START);
