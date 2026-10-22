@@ -387,12 +387,14 @@ void EmitThreadList(scr_ast_list_t *list)
 {
     for (scr_ast_list_item_t *item = list->head->next;
          item != NULL; item = item->next) {
-        SpecifyThread(item->entry->node);
+        scr_ast_expression_entry_t *entry = item->entry;
+        SpecifyThread(entry->node);
     }
 
     for (scr_ast_list_item_t *item = list->head->next;
          item != NULL; item = item->next) {
-        EmitThread(item->entry->node, item->entry->sourcePos);
+        scr_ast_expression_entry_t *entry = item->entry;
+        EmitThread(entry->node, entry->sourcePos);
     }
 }
 

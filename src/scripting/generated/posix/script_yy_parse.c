@@ -682,76 +682,76 @@ static void coduomp_script_yy_run_reduction(int32_t rule)
         node1(&script_yyval, SCR_AST_KIND_DEFAULT_STATEMENT, local_218.words[0]);
         break;
     case 0x67:
-        append_node(&script_yyval, script_yyval.words[0], script_yyvsp[0].words[0]);
+        append_node(&script_yyval, (scr_ast_list_t *)script_yyval.words[0], (void *)script_yyvsp[0].words[0]);
         break;
     case 0x68:
         node0(&local_21c, 0);
-        linked_list_end(&script_yyval, local_21c.words[0]);
+        linked_list_end(&script_yyval, (void *)local_21c.words[0]);
         break;
     case 0x69:
         node_pos(&local_224, script_yyvsp[0].words[1]);
-        node2_(&local_220, script_yyvsp[0].words[0], local_224.words[0]);
-        prepend_node(&script_yyval, local_220.words[0], script_yyval.words[0]);
+        node2_(&local_220, (scr_ast_node_t *)script_yyvsp[0].words[0], local_224.words[0]);
+        prepend_node(&script_yyval, (void *)local_220.words[0], (scr_ast_list_head_t *)script_yyval.words[0]);
         break;
     case 0x6a:
-        node0(&local_228, 0);
+        coduomp_script_ast_new_list_head(&local_228);
         node_pos(&local_230, script_yyval.words[1]);
-        node2_(&local_22c, script_yyval.words[0], local_230.words[0]);
-        prepend_node(&script_yyval, local_22c.words[0], local_228.words[0]);
+        node2_(&local_22c, (scr_ast_node_t *)script_yyval.words[0], local_230.words[0]);
+        prepend_node(&script_yyval, (void *)local_22c.words[0], (scr_ast_list_head_t *)local_228.words[0]);
         break;
     case 0x6b:
-        node0(&script_yyval, 0);
+        coduomp_script_ast_new_list_head(&script_yyval);
         break;
     case 0x6c:
         node_pos(&local_238, script_yyvsp[0].words[1]);
-        node2_(&local_234, script_yyvsp[0].words[0], local_238.words[0]);
-        append_node(&script_yyval, script_yyval.words[0], local_234.words[0]);
+        coduomp_script_ast_new_string_entry(&local_234, script_yyvsp[0].words[0], local_238.words[0]);
+        append_node(&script_yyval, (scr_ast_list_t *)script_yyval.words[0], (void *)local_234.words[0]);
         break;
     case 0x6d:
         node_pos(&local_240, script_yyval.words[1]);
-        node2_(&local_23c, script_yyval.words[0], local_240.words[0]);
+        coduomp_script_ast_new_string_entry(&local_23c, script_yyval.words[0], local_240.words[0]);
         node0(&local_248, 0);
-        linked_list_end(&local_244, local_248.words[0]);
-        append_node(&script_yyval, local_244.words[0], local_23c.words[0]);
+        linked_list_end(&local_244, (void *)local_248.words[0]);
+        append_node(&script_yyval, (scr_ast_list_t *)local_244.words[0], (void *)local_23c.words[0]);
         break;
     case 0x6e:
         node0(&local_24c, 0);
-        linked_list_end(&script_yyval, local_24c.words[0]);
+        linked_list_end(&script_yyval, (void *)local_24c.words[0]);
         break;
     case 0x6f:
         node_pos(&local_254, script_yyvsp[0].words[1]);
-        node2_(&local_250, script_yyvsp[0].words[0], local_254.words[0]);
-        append_node(&script_yyval, script_yyval.words[0], local_250.words[0]);
+        coduomp_script_ast_new_string_entry(&local_250, script_yyvsp[0].words[0], local_254.words[0]);
+        append_node(&script_yyval, (scr_ast_list_t *)script_yyval.words[0], (void *)local_250.words[0]);
         break;
     case 0x70:
         node_pos(&local_25c, script_yyval.words[1]);
-        node2_(&local_258, script_yyval.words[0], local_25c.words[0]);
+        node2_(&local_258, (scr_ast_node_t *)script_yyval.words[0], local_25c.words[0]);
         node0(&local_264, 0);
-        linked_list_end(&local_260, local_264.words[0]);
-        append_node(&script_yyval, local_260.words[0], local_258.words[0]);
+        linked_list_end(&local_260, (void *)local_264.words[0]);
+        append_node(&script_yyval, (scr_ast_list_t *)local_260.words[0], (void *)local_258.words[0]);
         break;
     case 0x71:
         node_pos(&local_26c, script_yyvsp[0].words[1]);
-        node2_(&local_268, script_yyvsp[0].words[0], local_26c.words[0]);
-        append_node(&script_yyval, script_yyval.words[0], local_268.words[0]);
+        node2_(&local_268, (scr_ast_node_t *)script_yyvsp[0].words[0], local_26c.words[0]);
+        append_node(&script_yyval, (scr_ast_list_t *)script_yyval.words[0], (void *)local_268.words[0]);
         break;
     case 0x72:
         node_pos(&local_274, script_yyval.words[1]);
-        node2_(&local_270, script_yyval.words[0], local_274.words[0]);
+        node2_(&local_270, (scr_ast_node_t *)script_yyval.words[0], local_274.words[0]);
         node0(&local_27c, 0);
-        linked_list_end(&local_278, local_27c.words[0]);
-        append_node(&script_yyval, local_278.words[0], local_270.words[0]);
+        linked_list_end(&local_278, (void *)local_27c.words[0]);
+        append_node(&script_yyval, (scr_ast_list_t *)local_278.words[0], (void *)local_270.words[0]);
         break;
     case 0x73:
         node_pos(&local_284, script_yyvsp[0].words[1]);
-        node2_(&local_280, script_yyvsp[0].words[0], local_284.words[0]);
-        prepend_node(&script_yyval, local_280.words[0], script_yyval.words[0]);
+        node2_(&local_280, (scr_ast_node_t *)script_yyvsp[0].words[0], local_284.words[0]);
+        prepend_node(&script_yyval, (void *)local_280.words[0], (scr_ast_list_head_t *)script_yyval.words[0]);
         break;
     case 0x74:
-        node0(&local_288, 0);
+        coduomp_script_ast_new_list_head(&local_288);
         node_pos(&local_290, script_yyval.words[1]);
-        node2_(&local_28c, script_yyval.words[0], local_290.words[0]);
-        prepend_node(&script_yyval, local_28c.words[0], local_288.words[0]);
+        node2_(&local_28c, (scr_ast_node_t *)script_yyval.words[0], local_290.words[0]);
+        prepend_node(&script_yyval, (void *)local_28c.words[0], (scr_ast_list_head_t *)local_288.words[0]);
         break;
     case 0x75:
         node_pos(&local_294, script_yyval.words[1]);
@@ -767,22 +767,22 @@ static void coduomp_script_yy_run_reduction(int32_t rule)
         break;
     case 0x78:
         node_pos(&local_2a4, script_yyvsp[0].words[1]);
-        node2_(&local_2a0, script_yyvsp[0].words[0], local_2a4.words[0]);
-        append_node(&script_yyval, script_yyval.words[0], local_2a0.words[0]);
+        node2_(&local_2a0, (scr_ast_node_t *)script_yyvsp[0].words[0], local_2a4.words[0]);
+        append_node(&script_yyval, (scr_ast_list_t *)script_yyval.words[0], (void *)local_2a0.words[0]);
         break;
     case 0x79:
         node0(&local_2a8, 0);
-        linked_list_end(&script_yyval, local_2a8.words[0]);
+        linked_list_end(&script_yyval, (void *)local_2a8.words[0]);
         break;
     case 0x7a:
         node0(&script_yyval, 0);
         break;
     case 0x7b:
-        append_node(&script_yyval, script_yyval.words[0], script_yyvsp[-1].words[0]);
+        append_node(&script_yyval, (scr_ast_list_t *)script_yyval.words[0], (void *)script_yyvsp[-1].words[0]);
         break;
     case 0x7c:
         node0(&local_2ac, 0);
-        linked_list_end(&script_yyval, local_2ac.words[0]);
+        linked_list_end(&script_yyval, (void *)local_2ac.words[0]);
     }
 }
 

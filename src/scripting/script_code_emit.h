@@ -97,11 +97,11 @@ void EmitClearFieldVariable(scr_ast_node_t *objectNode,
                             uint32_t objectSourcePos,
                             uint32_t opcodeSourcePos);
 void EmitCallRef(scr_ast_node_t *nameNode,
-                 scr_ast_list_t *argsNode,
+                 scr_ast_list_head_t *argsNode,
                  uint32_t callSourcePos);
 void EmitMethodRef(scr_ast_node_t *objectNode,
                    scr_ast_node_t *nameNode,
-                   scr_ast_list_t *argsNode,
+                   scr_ast_list_head_t *argsNode,
                    uint32_t sourcePos);
 void EmitDecTop(void);
 void EmitCastFieldObject(uint32_t sourcePos);

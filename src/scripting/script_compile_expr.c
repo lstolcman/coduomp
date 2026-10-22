@@ -119,13 +119,13 @@ void EmitVariableExpression(scr_ast_node_t *node)
 
 /* Source: CoDUOMP.exe 0x0047b560..0x0047b58a.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0047b560_0047b58a.mcode. */
-int32_t EmitExpressionList(scr_ast_list_t *list)
+int32_t EmitExpressionList(scr_ast_list_head_t *list)
 {
     int32_t count = 0;
 
     for (scr_ast_list_item_t *item = list->head; item != NULL;
          item = item->next) {
-        EmitExpression(item->entry->node);
+        EmitExpression(((scr_ast_expression_entry_t *)item->entry)->node);
         count++;
     }
 
@@ -134,7 +134,7 @@ int32_t EmitExpressionList(scr_ast_list_t *list)
 
 /* Source: CoDUOMP.exe 0x0047b590..0x0047b5a9.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0047b590_0047b5a9.mcode. */
-scr_ast_list_item_t *GetSingleParameter(scr_ast_list_t *list)
+scr_ast_list_item_t *GetSingleParameter(scr_ast_list_head_t *list)
 {
     scr_ast_list_item_t *item = list->head;
 
@@ -147,7 +147,7 @@ scr_ast_list_item_t *GetSingleParameter(scr_ast_list_t *list)
 
 /* Source: CoDUOMP.exe 0x0047b5b0..0x0047b5db.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0047b5b0_0047b5db.mcode. */
-void AddExpressionListOpcodePos(scr_ast_list_t *list)
+void AddExpressionListOpcodePos(scr_ast_list_head_t *list)
 {
     if (script_runtimeDebugReportFlag == qfalse) {
         return;
@@ -155,7 +155,7 @@ void AddExpressionListOpcodePos(scr_ast_list_t *list)
 
     for (scr_ast_list_item_t *item = list->head; item != NULL;
          item = item->next) {
-        AddOpcodePos(item->entry->sourcePos);
+        AddOpcodePos(((scr_ast_expression_entry_t *)item->entry)->sourcePos);
     }
 }
 
@@ -472,7 +472,7 @@ uint16_t GetBuiltin(scr_ast_node_t *call)
  * Name/signature: exact same-module Mac symbol EmitCall(sval_u, sval_u, bool).
  * The Windows compiler inlines GetBuiltin, the bytecode operand emitters, and
  * the pre/post script-call dispatchers recovered above. */
-void EmitCall(scr_ast_node_t *call, scr_ast_list_t *arguments,
+void EmitCall(scr_ast_node_t *call, scr_ast_list_head_t *arguments,
               qboolean isStatement)
 {
     const uint16_t builtinName = GetBuiltin(call);
@@ -570,7 +570,7 @@ void EmitCall(scr_ast_node_t *call, scr_ast_list_t *arguments,
  * The first AST value is the receiver expression; the second is the same
  * function-call descriptor consumed by GetBuiltin and EmitPostFunctionCall. */
 void EmitMethod(scr_ast_node_t *object, scr_ast_node_t *call,
-                scr_ast_list_t *arguments, uint32_t objectSourcePos,
+                scr_ast_list_head_t *arguments, uint32_t objectSourcePos,
                 qboolean isStatement)
 {
     const uint16_t builtinName = GetBuiltin(call);
@@ -876,14 +876,14 @@ void EmitCallExpressionFieldObject(scr_ast_node_t *node)
 
 /* Source: CoDUOMP.exe 0x0047c800..0x0047c889.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0047c800_0047c889.mcode. */
-void EmitArrayExpressionListRef(scr_ast_list_t *list,
+void EmitArrayExpressionListRef(scr_ast_list_head_t *list,
                                 uint32_t sourcePos)
 {
     scr_ast_list_item_t *item = GetSingleParameter(list);
 
     if (item != NULL) {
-        EmitArrayPrimitiveExpressionRef(item->entry->node,
-                                        item->entry->sourcePos);
+        scr_ast_expression_entry_t *entry = item->entry;
+        EmitArrayPrimitiveExpressionRef(entry->node, entry->sourcePos);
         return;
     }
 
@@ -904,14 +904,14 @@ void EmitArrayExpressionListRef(scr_ast_list_t *list,
  * EmitPrimitiveExpressionFieldObject; Linux 0x0809f30a calls its wrapper at
  * 0x0809faa6. The former Linux recovery's direct inner-dispatch call was a
  * transcription error. */
-void EmitExpressionListFieldObject(scr_ast_list_t *list,
+void EmitExpressionListFieldObject(scr_ast_list_head_t *list,
                                    uint32_t sourcePos)
 {
     scr_ast_list_item_t *item = GetSingleParameter(list);
 
     if (item != NULL) {
-        EmitPrimitiveExpressionFieldObject(item->entry->node,
-                                           item->entry->sourcePos);
+        scr_ast_expression_entry_t *entry = item->entry;
+        EmitPrimitiveExpressionFieldObject(entry->node, entry->sourcePos);
         return;
     }
 
@@ -921,7 +921,7 @@ void EmitExpressionListFieldObject(scr_ast_list_t *list,
 
 /* Source: CoDUOMP.exe 0x0047c7a0..0x0047c7fb.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0047c7a0_0047c7fb.mcode. */
-void EmitPrimitiveExpressionList(scr_ast_list_t *list,
+void EmitPrimitiveExpressionList(scr_ast_list_head_t *list,
                                  uint32_t sourcePos)
 {
     int32_t count = EmitExpressionList(list);

@@ -59,7 +59,7 @@ void EmitWaittillmatchStatement(scr_ast_node_t *objectNode,
                                 uint32_t objectSourcePos,
                                 uint32_t opcodeSourcePos);
 void EmitNotifyStatement(scr_ast_node_t *objectNode,
-                         scr_ast_list_t *list,
+                         scr_ast_list_head_t *list,
                          uint32_t objectSourcePos,
                          uint32_t opcodeSourcePos);
 void EmitEndOnStatement(scr_ast_node_t *objectNode,

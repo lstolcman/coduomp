@@ -20,9 +20,9 @@ void EmitClearArrayVariable(scr_ast_node_t *objectNode,
                             uint32_t objectSourcePos,
                             uint32_t indexSourcePos);
 void EmitVariableExpression(scr_ast_node_t *node);
-int32_t EmitExpressionList(scr_ast_list_t *list);
-scr_ast_list_item_t *GetSingleParameter(scr_ast_list_t *list);
-void AddExpressionListOpcodePos(scr_ast_list_t *list);
+int32_t EmitExpressionList(scr_ast_list_head_t *list);
+scr_ast_list_item_t *GetSingleParameter(scr_ast_list_head_t *list);
+void AddExpressionListOpcodePos(scr_ast_list_head_t *list);
 uint16_t AddFilePrecache(uint16_t filename, uint32_t sourcePos);
 void EmitFunction(scr_ast_node_t *node, uint32_t sourcePos);
 
@@ -57,10 +57,10 @@ void EmitPostFunctionCall(scr_ast_node_t *call,
                           int32_t argumentCount,
                           qboolean hasMethodContext);
 uint16_t GetBuiltin(scr_ast_node_t *call);
-void EmitCall(scr_ast_node_t *call, scr_ast_list_t *arguments,
+void EmitCall(scr_ast_node_t *call, scr_ast_list_head_t *arguments,
               qboolean isStatement);
 void EmitMethod(scr_ast_node_t *object, scr_ast_node_t *call,
-                scr_ast_list_t *arguments, uint32_t objectSourcePos,
+                scr_ast_list_head_t *arguments, uint32_t objectSourcePos,
                 qboolean isStatement);
 
 void AdjustFunctionAddresses(void);
@@ -75,11 +75,11 @@ void EmitSize(scr_ast_node_t *node, uint32_t sourcePos);
 void EmitCallExpression(scr_ast_node_t *node, qboolean emitDropTop);
 void EmitCallExpressionRef(scr_ast_node_t *node);
 void EmitCallExpressionFieldObject(scr_ast_node_t *node);
-void EmitArrayExpressionListRef(scr_ast_list_t *list,
+void EmitArrayExpressionListRef(scr_ast_list_head_t *list,
                                 uint32_t sourcePos);
-void EmitExpressionListFieldObject(scr_ast_list_t *list,
+void EmitExpressionListFieldObject(scr_ast_list_head_t *list,
                                    uint32_t sourcePos);
-void EmitPrimitiveExpressionList(scr_ast_list_t *list,
+void EmitPrimitiveExpressionList(scr_ast_list_head_t *list,
                                  uint32_t sourcePos);
 void EmitPrimitiveExpression(scr_ast_node_t *node);
 void EmitBoolOrExpression(scr_ast_node_t *leftNode,
