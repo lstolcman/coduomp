@@ -1017,6 +1017,7 @@ void MSG_ReadDeltaUsercmdKey(msg_t *message, uint32_t key,
 void MSG_WriteDeltaField(msg_t *message, const void *from, const void *to,
                          const netField_t *field)
 {
+    const uint8_t *source = (const uint8_t *)to + field->offset;
     int32_t oldValue;
     int32_t newValue;
 
@@ -1024,8 +1025,7 @@ void MSG_WriteDeltaField(msg_t *message, const void *from, const void *to,
      * every described field is a four-byte scalar at a byte offset. */
     memcpy(&oldValue, (const uint8_t *)from + field->offset,
            sizeof(oldValue));
-    memcpy(&newValue, (const uint8_t *)to + field->offset,
-           sizeof(newValue));
+    memcpy(&newValue, source, sizeof(newValue));
 
     if (oldValue == newValue) {
         MSG_WriteBit0(message);
@@ -1033,6 +1033,8 @@ void MSG_WriteDeltaField(msg_t *message, const void *from, const void *to,
     }
 
     MSG_WriteBit1(message);
+    /* Payload reads follow the flag writes that precede their encoding. */
+    memcpy(&newValue, source, sizeof(newValue));
     if (field->bits == MSG_DELTA_DEFAULT_FLOAT_BITS) {
         float newFloat;
         int32_t rounded;
@@ -1067,6 +1069,7 @@ void MSG_WriteDeltaField(msg_t *message, const void *from, const void *to,
             MSG_WriteByte(message, biased >> MSG_DELTA_SMALL_INT_LOW_BITS);
         } else {
             MSG_WriteBit1(message);
+            memcpy(&newValue, source, sizeof(newValue));
             MSG_WriteLong(message, newValue);
         }
         return;
@@ -1080,8 +1083,8 @@ void MSG_WriteDeltaField(msg_t *message, const void *from, const void *to,
             return;
         }
 
-        memcpy(&newFloat, &newValue, sizeof(newFloat));
         MSG_WriteBit1(message);
+        memcpy(&newFloat, source, sizeof(newFloat));
         MSG_WriteAngle16(message, newFloat);
         return;
     }
@@ -1098,7 +1101,9 @@ void MSG_WriteDeltaField(msg_t *message, const void *from, const void *to,
             : (uint32_t)field->bits;
         uint32_t remaining = bitCount;
         const uint32_t lowBits = bitCount & MSG_DELTA_BYTE_BIT_MASK;
-        int32_t value = newValue;
+        int32_t value;
+
+        memcpy(&value, source, sizeof(value));
 
         if (lowBits != 0) {
             MSG_WriteBits(message, value, (int32_t)lowBits);
