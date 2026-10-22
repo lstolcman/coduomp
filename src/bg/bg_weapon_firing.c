@@ -211,8 +211,10 @@ qboolean PM_Weapon_CheckFiringAmmo(void)
     if (reserveHasAmmo != qfalse) {
         PM_BeginWeaponReload();
     } else {
-        PM_ContinueWeaponAnim(0);
-        ps->weaponTime += PM_WEAPON_NO_AMMO_TIME_PENALTY;
+        PM_ContinueWeaponAnim(PM_WEAPON_ANIM_IDLE);
+        ps = pm->ps;
+        ps->weaponTime = coduo_int32_from_bits(
+            (uint32_t)ps->weaponTime + PM_WEAPON_NO_AMMO_TIME_PENALTY);
     }
 
     return qfalse;
