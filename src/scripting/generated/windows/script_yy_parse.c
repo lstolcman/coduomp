@@ -10,7 +10,7 @@
  * table probes, stack operations, and helper arguments remain authoritative. */
 
 enum {
-    SCRIPT_YY_EMPTY_LOOKAHEAD = -1,
+    SCRIPT_YY_EMPTY_LOOKAHEAD = -2,
     SCRIPT_YY_EOF_TOKEN = 0,
     SCRIPT_YY_ERROR_TOKEN = 0x100,
     SCRIPT_YY_INITIAL_STATE = 0,
@@ -41,20 +41,20 @@ static void __yy_memcpy(void *destination, const void *source,
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: readable bounds check for generated yytable probes. */
-static qboolean ScriptYyTableIndexIsValid(int32_t tableIndex)
+static qboolean coduomp_script_yy_table_index_is_valid(int32_t tableIndex)
 {
     return tableIndex >= 0 && tableIndex <= SCRIPT_YYTABLE_INDEX_MAX;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: names the generated yycheck table probe. */
-static qboolean ScriptYyCheckMatches(int32_t tableIndex, int32_t value)
+static qboolean coduomp_script_yy_check_matches(int32_t tableIndex, int32_t value)
 {
-    return ScriptYyTableIndexIsValid(tableIndex) != qfalse &&
+    return coduomp_script_yy_table_index_is_valid(tableIndex) != qfalse &&
            script_yycheck[tableIndex] == value;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: names the generated state/value stack push. */
-static void ScriptYyPushValue(int16_t **stateStackCursor,
+static void coduomp_script_yy_push_value(int16_t **stateStackCursor,
                               sval_u **valueStackCursor,
                               int16_t state,
                               sval_u value,
@@ -68,7 +68,7 @@ static void ScriptYyPushValue(int16_t **stateStackCursor,
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: factors generated yacc reduction actions from yyparse. */
-static sval_u ScriptYyRunReduction(int32_t rule,
+static sval_u coduomp_script_yy_run_reduction(int32_t rule,
                                    sval_u script_yyval,
                                    const sval_u *script_yyvsp)
 {
@@ -826,7 +826,7 @@ int32_t yyparse(void)
     script_yyvsp = valueStackBase;
     stateStackBase[0] = SCRIPT_YY_INITIAL_STATE;
 
-#define SCRIPT_YY_ENSURE_PUSHABLE()                                      \
+#define SCRIPT_YY_GROW_FULL_STACK()                                      \
     do {                                                                  \
         if (script_yyssp >= &stateStackBase[stackCapacity - 1]) {          \
             if (stackCapacity >= SCRIPT_YYSTACK_MAX_COUNT) {              \
@@ -855,6 +855,9 @@ int32_t yyparse(void)
     } while (0)
 
     for (;;) {
+        /* The current state and value are already pushed before growth or
+         * overflow handling, which precedes the next state-table lookup. */
+        SCRIPT_YY_GROW_FULL_STACK();
         int32_t action = script_yypact[state];
 
         if (action != SCRIPT_YYPACT_NINF) {
@@ -873,19 +876,20 @@ int32_t yyparse(void)
             }
 
             int32_t tableIndex = action + token;
-            if (ScriptYyCheckMatches(tableIndex, token) != qfalse) {
+            if (coduomp_script_yy_check_matches(tableIndex, token) != qfalse) {
                 action = script_yytable[tableIndex];
                 if (action > 0) {
                     if (action == SCRIPT_YY_FINAL_STATE) {
                         return SCRIPT_YY_PARSE_ACCEPT;
                     }
 
-                    SCRIPT_YY_ENSURE_PUSHABLE();
+                    if (script_yychar != SCRIPT_YY_EOF_TOKEN) {
+                        script_yychar = SCRIPT_YY_EMPTY_LOOKAHEAD;
+                    }
                     state = action;
-                    ScriptYyPushValue(&script_yyssp, &script_yyvsp,
+                    coduomp_script_yy_push_value(&script_yyssp, &script_yyvsp,
                                       (int16_t)state, script_yylval,
                                       script_yylval.source.sourcePos);
-                    script_yychar = SCRIPT_YY_EMPTY_LOOKAHEAD;
                     if (errorStatus > 0) {
                         errorStatus--;
                     }
@@ -905,8 +909,8 @@ int32_t yyparse(void)
         }
 
         if (errorStatus == 0) {
-            yyerror();
             script_yynerrs++;
+            yyerror();
         }
 
         if (errorStatus == 3) {
@@ -922,13 +926,12 @@ int32_t yyparse(void)
             int32_t errorIndex =
                 script_yypact[*script_yyssp] +
                 SCRIPT_YY_ERROR_TRANSLATED_TOKEN;
-            if (ScriptYyCheckMatches(
+            if (coduomp_script_yy_check_matches(
                     errorIndex, SCRIPT_YY_ERROR_TRANSLATED_TOKEN) != qfalse) {
                 int32_t errorState = script_yytable[errorIndex];
                 if (errorState > 0) {
-                    SCRIPT_YY_ENSURE_PUSHABLE();
                     state = errorState;
-                    ScriptYyPushValue(&script_yyssp, &script_yyvsp,
+                    coduomp_script_yy_push_value(&script_yyssp, &script_yyvsp,
                                       (int16_t)state, script_yylval,
                                       script_yylval.source.sourcePos);
                     break;
@@ -947,7 +950,7 @@ reduce: {
             int32_t rule = action;
             int32_t ruleLength = script_yyr2[rule];
             script_yyval = script_yyvsp[1 - ruleLength];
-            script_yyval = ScriptYyRunReduction(rule, script_yyval,
+            script_yyval = coduomp_script_yy_run_reduction(rule, script_yyval,
                                                 script_yyvsp);
 
             script_yyssp -= ruleLength;
@@ -957,18 +960,17 @@ reduce: {
             int32_t nonterminal = lhs - SCRIPT_YY_FIRST_NONTERMINAL;
             state = *script_yyssp;
             int32_t gotoIndex = script_yypgoto[nonterminal] + state;
-            if (ScriptYyCheckMatches(gotoIndex, state) != qfalse) {
+            if (coduomp_script_yy_check_matches(gotoIndex, state) != qfalse) {
                 state = script_yytable[gotoIndex];
             } else {
                 state = script_yydefgoto[nonterminal];
             }
 
-            SCRIPT_YY_ENSURE_PUSHABLE();
-            ScriptYyPushValue(&script_yyssp, &script_yyvsp,
+            coduomp_script_yy_push_value(&script_yyssp, &script_yyvsp,
                               (int16_t)state, script_yyval,
                               script_yyval.source.sourcePos);
         }
     }
 
-#undef SCRIPT_YY_ENSURE_PUSHABLE
+#undef SCRIPT_YY_GROW_FULL_STACK
 }
