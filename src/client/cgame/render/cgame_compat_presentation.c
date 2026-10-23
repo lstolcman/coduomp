@@ -422,17 +422,13 @@ void client_ui_compat_end_item_paint(itemDef_t *item, float offset)
  * edge while scaleOverTime runs) - so a filling or draining bar can never
  * change presentation class mid-animation.  Classifying by the live span did
  * exactly that: the HQ radio meter fill snapped left the moment its receding
- * right edge cleared the left band.  Use the outer thirds near the top and
- * bottom, but only the outer fifths through the middle, leaving more room for
- * centered menu and meter compositions there.  cg_wideHudElems 0 pins every
- * element to the centered canvas. */
+ * right edge cleared the left band.  Use the outer screen quarters at every
+ * height, leaving centered compositions whose anchors lie between x=160 and
+ * x=480 on the centered canvas.  cg_wideHudElems 0 pins every element to the
+ * centered canvas. */
 enum {
-    CGAME_COMPAT_HUD_LEFT_BAND_MAX = 213,
-    CGAME_COMPAT_HUD_RIGHT_BAND_MIN = 427,
-    CGAME_COMPAT_HUD_MID_LEFT_BAND_MAX = 128,
-    CGAME_COMPAT_HUD_MID_RIGHT_BAND_MIN = 512,
-    CGAME_COMPAT_HUD_TOP_BAND_MAX = 72,
-    CGAME_COMPAT_HUD_BOTTOM_BAND_MIN = 408
+    CGAME_COMPAT_HUD_LEFT_BAND_MAX = 160,
+    CGAME_COMPAT_HUD_RIGHT_BAND_MIN = 480
 };
 
 /* NOT_FROM_ORIGINAL_SOURCE: recover the alignment anchor from the completed
@@ -452,7 +448,7 @@ static float cgame_compat_hud_alignment_anchor(float position, float length, hud
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: translate the complete server HUD item according
- * to its alignment anchor's region on the stock 640x480 canvas. */
+ * to its horizontal alignment anchor on the stock 640x480 canvas. */
 void cgame_compat_project_server_hud_item(cgAlignedDrawItem *item, const hudElem_t *elem)
 {
     /* An element's presentation class follows its alignment anchor, never
@@ -474,19 +470,10 @@ void cgame_compat_project_server_hud_item(cgAlignedDrawItem *item, const hudElem
     }
 
     const float anchorX = cgame_compat_hud_alignment_anchor(item->x, item->width, elem->alignX);
-    const float anchorY = cgame_compat_hud_alignment_anchor(item->y, item->height, elem->alignY);
-    float leftBandMax = (float)CGAME_COMPAT_HUD_LEFT_BAND_MAX;
-    float rightBandMin = (float)CGAME_COMPAT_HUD_RIGHT_BAND_MIN;
 
-    if (anchorY > (float)CGAME_COMPAT_HUD_TOP_BAND_MAX &&
-        anchorY < (float)CGAME_COMPAT_HUD_BOTTOM_BAND_MIN) {
-        leftBandMax = (float)CGAME_COMPAT_HUD_MID_LEFT_BAND_MAX;
-        rightBandMin = (float)CGAME_COMPAT_HUD_MID_RIGHT_BAND_MIN;
-    }
-
-    if (anchorX <= leftBandMax) {
+    if (anchorX <= (float)CGAME_COMPAT_HUD_LEFT_BAND_MAX) {
         item->x += cgame_compat_hud_anchor_offset(CGAME_COMPAT_HUD_ANCHOR_LEFT);
-    } else if (anchorX >= rightBandMin) {
+    } else if (anchorX >= (float)CGAME_COMPAT_HUD_RIGHT_BAND_MIN) {
         item->x += cgame_compat_hud_anchor_offset(CGAME_COMPAT_HUD_ANCHOR_RIGHT);
     }
 }
