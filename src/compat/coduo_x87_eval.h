@@ -9,9 +9,9 @@
  * and double rounding points remain in the arithmetic body. Select this by
  * compiler profile, not CPU: modern float evaluation can narrow too early. */
 #if defined(CODUO_ORIGINAL_COMPILER) && CODUO_ORIGINAL_COMPILER
-#define CODUO_X87_EVAL_TYPE float
+#define WIDE_FLOAT float
 #else
-#define CODUO_X87_EVAL_TYPE long double
+#define WIDE_FLOAT long double
 #endif
 
 #endif /* CODUO_X87_EVAL_H */
