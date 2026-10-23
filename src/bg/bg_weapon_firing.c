@@ -89,23 +89,19 @@ qboolean PM_Weapon_WeaponTimeAdjust(void)
 
 qboolean PM_Weapon_FinishFiring(qboolean delayExpired)
 {
-    playerState_t *ps = pm->ps;
-    const qboolean primaryHeld =
-        (pm->command.buttons & PM_BUTTON_FIRE) != 0 ? qtrue : qfalse;
-
-    if (primaryHeld == qfalse &&
+    if ((pm->command.buttons & PM_BUTTON_FIRE) == 0 &&
         pml.weaponInfo->weaponType == WEAPTYPE_GRENADE &&
         pml.weaponInfo->specialTimeEnabled != 0 &&
-        ps->grenadeTimeLeft < pml.weaponInfo->specialTimeThreshold &&
-        ps->grenadeTimeLeft != 0) {
+        pm->ps->grenadeTimeLeft < pml.weaponInfo->specialTimeThreshold &&
+        pm->ps->grenadeTimeLeft != 0) {
         return qfalse;
     }
 
-    if (primaryHeld == qfalse && delayExpired == qfalse) {
-        if (ps->weaponState == WEAPON_STATE_FIRING) {
+    if ((pm->command.buttons & PM_BUTTON_FIRE) == 0 && delayExpired == qfalse) {
+        if (pm->ps->weaponState == WEAPON_STATE_FIRING) {
             PM_ContinueWeaponAnim(PM_WEAPON_ANIM_IDLE);
         }
-        ps->weaponState = WEAPON_STATE_IDLE;
+        pm->ps->weaponState = WEAPON_STATE_IDLE;
         return qtrue;
     }
 
@@ -226,15 +222,14 @@ qboolean PM_Weapon_CheckFiringAmmo(void)
 void PM_Weapon_SetFPSFireAnim(void)
 {
     playerState_t *ps = pm->ps;
-    const qboolean clipEmpty = PM_WeaponClipEmpty(ps->currentWeapon);
     pmWeaponAnim_t animation;
 
     if (ps->adsFraction > PM_WEAPON_ADS_RAISE_THRESHOLD) {
-        animation = clipEmpty != qfalse
+        animation = PM_WeaponClipEmpty(ps->currentWeapon) != qfalse
                         ? PM_WEAPON_ANIM_ADS_FIRE_LASTSHOT
                         : PM_WEAPON_ANIM_ADS_FIRE;
     } else {
-        animation = clipEmpty != qfalse
+        animation = PM_WeaponClipEmpty(ps->currentWeapon) != qfalse
                         ? PM_WEAPON_ANIM_FIRE_LASTSHOT
                         : PM_WEAPON_ANIM_FIRE;
     }
@@ -279,6 +274,7 @@ void PM_Weapon_AddFiringAimSpreadScale(void)
 void PM_Weapon_FireWeapon(qboolean delayExpired)
 {
     playerState_t *ps = pm->ps;
+    int32_t weapon;
 
     if ((ps->playerStateFlags & PMF_SPRINTING) != 0) {
         return;
@@ -305,7 +301,7 @@ void PM_Weapon_FireWeapon(qboolean delayExpired)
         return;
     }
 
-    const int32_t weapon = ps->currentWeapon;
+    weapon = ps->currentWeapon;
     if (PM_WeaponAmmoAvailable(weapon) != PM_WEAPON_AMMO_NO_CONSUMPTION &&
         ((ps->entityStateFlags & EF_RESTRICTED_MASK) == 0 ||
          BG_AllowPlayerWeaponAtVehiclePos(ps->vehicleType,
@@ -332,30 +328,28 @@ void PM_Weapon_FireWeapon(qboolean delayExpired)
 
 void PM_Weapon_FireMelee(void)
 {
-    playerState_t *ps = pm->ps;
     const int32_t minimumTime = coduo_int32_from_bits(
         (uint32_t)pml.weaponInfo->meleeTime - (uint32_t)pml.weaponInfo->meleeWindup);
+    pmove_t *move = pm;
 
-    if (ps->weaponTime < minimumTime) {
-        ps->weaponTime = minimumTime;
+    if (move->ps->weaponTime < minimumTime) {
+        move->ps->weaponTime = minimumTime;
     }
 
     PM_AddEvent(EV_FIRE_MELEE);
-    ps->weaponState = WEAPON_STATE_MELEE_RELAX;
+    move->ps->weaponState = WEAPON_STATE_MELEE_RELAX;
     PM_SetProneMovementOverride();
 }
 
 qboolean PM_Weapon_FinishMelee(void)
 {
-    playerState_t *ps = pm->ps;
-
-    if (ps->weaponState == WEAPON_STATE_MELEE_WINDUP) {
+    if (pm->ps->weaponState == WEAPON_STATE_MELEE_WINDUP) {
         PM_Weapon_FireMelee();
         return qtrue;
     }
-    if (ps->weaponState == WEAPON_STATE_MELEE_RELAX) {
+    if (pm->ps->weaponState == WEAPON_STATE_MELEE_RELAX) {
         PM_ContinueWeaponAnim(PM_WEAPON_ANIM_IDLE);
-        ps->weaponState = WEAPON_STATE_IDLE;
+        pm->ps->weaponState = WEAPON_STATE_IDLE;
         return qtrue;
     }
     return qfalse;

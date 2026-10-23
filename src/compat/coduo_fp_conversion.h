@@ -49,13 +49,13 @@ coduo_fp_to_i32_extended(long double value)
      * integer-indefinite, so its low dword is zero rather than -1. The nearest
      * result at -2^63+0.5 is INT64_MIN too, and the original returns that value
      * before applying its residual correction. */
-    if (value > -0x1p63L + 0.5L && value < 0x1p63L - 0.5L) {
+    if (value > -9223372036854775808.0L + 0.5L && value < 9223372036854775808.0L - 0.5L) {
         lowBits = (uint32_t)(uint64_t)(int64_t)value;
     }
     memcpy(&result, &lowBits, sizeof(result));
     return result;
 #else
-    if (!(value >= -0x1p31L && value < 0x1p31L)) {
+    if (!(value >= -2147483648.0L && value < 2147483648.0L)) {
         return INT32_MIN;
     }
     return (int32_t)value;
