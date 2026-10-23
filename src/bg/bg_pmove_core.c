@@ -74,7 +74,7 @@ void PM_AddTouchEnt(int32_t entityNum)
     pm->numtouch = coduo_int32_from_bits((uint32_t)pm->numtouch + 1u);
 }
 
-#if defined(WINDOWS_BEHAVIOR)
+#if defined(WINDOWS_BEHAVIOR) && !(defined(_MSC_VER) && _MSC_VER == 1310 && defined(_M_IX86) && !EMULATE_X87)
 void PM_ClipVelocity(const vec3_t input, const vec3_t normal, vec3_t output,
                      float overbounce)
 {
@@ -128,8 +128,11 @@ void PM_ClipVelocity(const vec3_t input, const vec3_t normal, vec3_t output,
     float backoff;
     int32_t index;
 
-    /* Linux accumulates X, Y, Z, stores backoff as binary32 before the branch,
-     * and stores each normal*backoff product before subtracting it. */
+    /* The plain float body uses the original compiler's x87 evaluation.
+     * GCC 3.2.3 accumulates X, Y, Z, stores backoff as binary32 before the
+     * branch, and stores each normal*backoff product before subtracting it.
+     * VC7.1 accumulates Y, Z, X and keeps those intermediates live; modern
+     * Windows compilers use the explicit precision adaptation above. */
 #if EMULATE_X87
     backoff = x87f_store_f32(x87f_add(
         x87f_add(x87f_mul(x87f_load_f32(input[0]),
