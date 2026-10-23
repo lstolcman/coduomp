@@ -1,13 +1,16 @@
 #ifndef CODUO_X87_EVAL_H
 #define CODUO_X87_EVAL_H
 
-/* NOT_FROM_ORIGINAL_SOURCE: native x87 evaluation carrier, never an ABI or
- * stored-data type. Modern x87 builds use long double so compiler spills keep
- * the register format. An optimized x87 compiler configuration verified to
- * retain float intermediates may select CODUO_X87_EVAL_TYPE=float; the original
- * Win32 compiler uses this setting. Binary32 rounding points still use float,
- * and non-x87 targets continue to use the software-x87 implementation. */
-#ifndef CODUO_X87_EVAL_TYPE
+/* NOT_FROM_ORIGINAL_SOURCE: carrier for a live x87 intermediate, never an ABI
+ * or stored-data type. The original-compiler build profile uses float where
+ * its generated code has been verified to retain the live x87 value. Modern
+ * builds use long double to retain native x87 precision where available and
+ * the widest standard native floating-point type elsewhere. Explicit float
+ * and double rounding points remain in the arithmetic body. Select this by
+ * compiler profile, not CPU: modern float evaluation can narrow too early. */
+#if defined(CODUO_ORIGINAL_COMPILER) && CODUO_ORIGINAL_COMPILER
+#define CODUO_X87_EVAL_TYPE float
+#else
 #define CODUO_X87_EVAL_TYPE long double
 #endif
 
