@@ -2,6 +2,7 @@
 
 #include "bg_player_state.h"
 #include "compat/coduo_int32_bits.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h"
 
 #include <stddef.h>
@@ -80,7 +81,7 @@ void PM_ClipVelocity(const vec3_t input, const vec3_t normal, vec3_t output,
 {
     /* Both Windows modules accumulate Y, Z, X and retain the x87 value through
      * the scale and three output expressions.  The original process control
-     * word supplies PC=53; long double remains the source-level x87 carrier. */
+     * word supplies PC=53; the native intermediate must retain x87 precision. */
 #if EMULATE_X87
     x87f backoff = x87f_add(
         x87f_add(x87f_mul(x87f_load_f32(input[1]),
@@ -105,10 +106,10 @@ void PM_ClipVelocity(const vec3_t input, const vec3_t normal, vec3_t output,
         x87f_load_f32(input[2]),
         x87f_mul(backoff, x87f_load_f32(normal[2]))));
 #else
-    long double backoff =
-        (long double)input[1] * normal[1] +
-        (long double)normal[2] * input[2] +
-        (long double)input[0] * normal[0];
+    CODUO_X87_EVAL_TYPE backoff =
+        (CODUO_X87_EVAL_TYPE)input[1] * normal[1] +
+        (CODUO_X87_EVAL_TYPE)normal[2] * input[2] +
+        (CODUO_X87_EVAL_TYPE)input[0] * normal[0];
 
     if (backoff < 0.0f) {
         backoff *= overbounce;
