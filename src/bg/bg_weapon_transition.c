@@ -224,37 +224,37 @@ qboolean PM_Weapon_FinishWeaponChange(void)
 qboolean PM_Weapon_FinishWeaponRaise(void)
 {
     playerState_t *ps = pm->ps;
-    qboolean handled = ps->weaponState == WEAPON_STATE_RAISING;
 
-    if (handled != qfalse) {
+    if (ps->weaponState == WEAPON_STATE_RAISING) {
         ps->weaponState = WEAPON_STATE_IDLE;
         PM_StartWeaponAnim(PM_WEAPON_ANIM_IDLE);
+        return qtrue;
     }
-    return handled;
+    return qfalse;
 }
 
 qboolean PM_Weapon_FinishWeaponDeploy(void)
 {
     playerState_t *ps = pm->ps;
-    qboolean handled = ps->weaponState == WEAPON_STATE_DEPLOYING;
 
-    if (handled != qfalse) {
+    if (ps->weaponState == WEAPON_STATE_DEPLOYING) {
         ps->weaponState = WEAPON_STATE_IDLE;
         PM_StartWeaponAnim(PM_WEAPON_ANIM_IDLE);
+        return qtrue;
     }
-    return handled;
+    return qfalse;
 }
 
 qboolean PM_Weapon_FinishWeaponBreakdown(void)
 {
     playerState_t *ps = pm->ps;
-    qboolean handled = ps->weaponState == WEAPON_STATE_BREAKING_DOWN;
 
-    if (handled != qfalse) {
+    if (ps->weaponState == WEAPON_STATE_BREAKING_DOWN) {
         ps->weaponState = WEAPON_STATE_IDLE;
         PM_StartWeaponAnim(PM_WEAPON_ANIM_IDLE);
+        return qtrue;
     }
-    return handled;
+    return qfalse;
 }
 
 void PM_Weapon_CheckForDeployBreakdown(void)
