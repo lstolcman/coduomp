@@ -416,32 +416,49 @@ void client_ui_compat_end_item_paint(itemDef_t *item, float offset)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: server/mod hudElem_t content has no declared menu
- * group.  Snap the element by its authored alignX ANCHOR POINT - the fixed
+ * group.  Snap the element by its alignment anchor - the fixed
  * point of hudElem size animations (a left-aligned meter fill keeps its left
  * edge, a center-aligned element its center, a right-aligned one its right
  * edge while scaleOverTime runs) - so a filling or draining bar can never
  * change presentation class mid-animation.  Classifying by the live span did
  * exactly that: the HQ radio meter fill snapped left the moment its receding
- * right edge cleared the left band.  The bands are the outer screen QUARTERS
- * (anchor <= 160 left, >= 480 right), biased center-ward so a centered meter
- * composition whose backdrop begins near x=176 stays on the centered canvas
- * with its fill.  cg_wideHudElems 0 pins every element to the centered
- * canvas. */
+ * right edge cleared the left band.  Use the outer thirds near the top and
+ * bottom, but only the outer fifths through the middle, leaving more room for
+ * centered menu and meter compositions there.  cg_wideHudElems 0 pins every
+ * element to the centered canvas. */
 enum {
-    CGAME_COMPAT_HUD_LEFT_BAND_MAX = 160,
-    CGAME_COMPAT_HUD_RIGHT_BAND_MIN = 480
+    CGAME_COMPAT_HUD_LEFT_BAND_MAX = 213,
+    CGAME_COMPAT_HUD_RIGHT_BAND_MIN = 427,
+    CGAME_COMPAT_HUD_MID_LEFT_BAND_MAX = 128,
+    CGAME_COMPAT_HUD_MID_RIGHT_BAND_MIN = 512,
+    CGAME_COMPAT_HUD_TOP_BAND_MAX = 72,
+    CGAME_COMPAT_HUD_BOTTOM_BAND_MIN = 408
 };
 
-void cgame_compat_project_server_hud_item(
-    cgAlignedDrawItem *item, const hudElem_t *elem)
+/* NOT_FROM_ORIGINAL_SOURCE: recover the alignment anchor from the completed
+ * item. CG_HudElemX/Y subtracted half or all of the dimension for CENTER/END;
+ * adding it back cancels size animation. Position animation still moves the
+ * anchor and can carry it across a region boundary. */
+static float cgame_compat_hud_alignment_anchor(float position, float length, hudElemAlign_t alignment)
 {
-    float anchor;
+    if (length >= 0.0f) {
+        if (alignment == HUDELEM_ALIGN_CENTER)
+            return position + length * 0.5f;
+        if (alignment == HUDELEM_ALIGN_END)
+            return position + length;
+    }
 
-    /* An element's presentation class is a function of its authored,
-     * animation-invariant geometry only - never of transient screen state or
-     * animated extents.  (An earlier scoreboard-showing gate here made every
-     * persistent snapped element jump when the scoreboard opened; the span
-     * classifier made animated meters jump as they drained.) */
+    return position;
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: translate the complete server HUD item according
+ * to its alignment anchor's region on the stock 640x480 canvas. */
+void cgame_compat_project_server_hud_item(cgAlignedDrawItem *item, const hudElem_t *elem)
+{
+    /* An element's presentation class follows its alignment anchor, never
+     * transient screen state or animated extents. (An earlier scoreboard gate
+     * made every persistent snapped element jump when the scoreboard opened;
+     * the span classifier made animated meters jump as they drained.) */
     if (item == NULL || elem == NULL ||
         cgameCompatWideHudElems.integer == 0) {
         return;
@@ -456,23 +473,21 @@ void cgame_compat_project_server_hud_item(
         return;
     }
 
-    /* Recover the authored anchor from the completed item: CG_HudElemX
-     * subtracted width/2 or width for the HALF/FULL alignments, so adding it
-     * back yields the animation-stable authored coordinate. */
-    anchor = item->x;
-    if (item->width >= 0.0f) {
-        if (elem->alignX == HUDELEM_ALIGN_CENTER)
-            anchor += item->width * 0.5f;
-        else if (elem->alignX == HUDELEM_ALIGN_END)
-            anchor += item->width;
+    const float anchorX = cgame_compat_hud_alignment_anchor(item->x, item->width, elem->alignX);
+    const float anchorY = cgame_compat_hud_alignment_anchor(item->y, item->height, elem->alignY);
+    float leftBandMax = (float)CGAME_COMPAT_HUD_LEFT_BAND_MAX;
+    float rightBandMin = (float)CGAME_COMPAT_HUD_RIGHT_BAND_MIN;
+
+    if (anchorY > (float)CGAME_COMPAT_HUD_TOP_BAND_MAX &&
+        anchorY < (float)CGAME_COMPAT_HUD_BOTTOM_BAND_MIN) {
+        leftBandMax = (float)CGAME_COMPAT_HUD_MID_LEFT_BAND_MAX;
+        rightBandMin = (float)CGAME_COMPAT_HUD_MID_RIGHT_BAND_MIN;
     }
 
-    if (anchor <= (float)CGAME_COMPAT_HUD_LEFT_BAND_MAX) {
-        item->x += cgame_compat_hud_anchor_offset(
-            CGAME_COMPAT_HUD_ANCHOR_LEFT);
-    } else if (anchor >= (float)CGAME_COMPAT_HUD_RIGHT_BAND_MIN) {
-        item->x += cgame_compat_hud_anchor_offset(
-            CGAME_COMPAT_HUD_ANCHOR_RIGHT);
+    if (anchorX <= leftBandMax) {
+        item->x += cgame_compat_hud_anchor_offset(CGAME_COMPAT_HUD_ANCHOR_LEFT);
+    } else if (anchorX >= rightBandMin) {
+        item->x += cgame_compat_hud_anchor_offset(CGAME_COMPAT_HUD_ANCHOR_RIGHT);
     }
 }
 
