@@ -481,6 +481,7 @@ void MatchTeam(gentity_t *ent, int moverState, int time);
 #define TRIGGER_SVFLAGS 0x00000001u
 #define TRIGGER_ENTITY_STATE_FLAG 0x00000002u
 #define TRIGGER_FREE_DELAY_MS 100
+#define TRIGGER_DURATION_SCALE 1000.0f
 #define TRIGGER_SPAWNFLAG_NO_PLAYER 0x08u
 #define TRIGGER_SPAWNFLAG_SENTIENT_1 0x01u
 #define TRIGGER_SPAWNFLAG_SENTIENT_2 0x02u
@@ -678,31 +679,36 @@ void multi_trigger(gentity_t *ent, gentity_t *activator)
 
     if (ent->itemWait > 0.0f) {
         ent->think = multi_wait;
-        /* Apply a signed normalized sample to itemRandom, then preserve the
-         * remaining wait and millisecond conversion in the x87 carrier. */
-#if EMULATE_X87
+        /* Keep the random product and wait sum wide. Windows truncates the
+         * negated milliseconds to a signed qword and subtracts its low dword;
+         * Linux truncates positive milliseconds to a signed dword. */
+#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
         {
             x87f randSigned =
                 x87f_load_f64(coduo_server_rand_signed_unit());
             ent->nextthink =
-                level.time +
-                x87f_store_i32_trunc(x87f_mul(
+                coduo_int32_from_bits((uint32_t)level.time +
+                (uint32_t)x87f_store_i32_trunc(x87f_mul(
                     x87f_add(x87f_load_f32(ent->itemWait),
                              x87f_mul(randSigned,
                                       x87f_load_f32(ent->itemRandom))),
-                    x87f_load_f32(1000.0f)));
+                    x87f_load_f32(TRIGGER_DURATION_SCALE))));
         }
 #else
-        ent->nextthink = level.time +
-            game_compat_int32_from_long_double_trunc(
-                ((long double)ent->itemWait +
-                 (long double)coduo_server_rand_signed_unit() *
-                     (long double)ent->itemRandom) *
-                1000.0f);
+        volatile WIDE_FLOAT randomOffset =
+            (WIDE_FLOAT)coduo_server_rand_signed_unit() * ent->itemRandom;
+        WIDE_FLOAT waitSeconds = randomOffset + (WIDE_FLOAT)ent->itemWait;
+#if defined(WINDOWS_BEHAVIOR)
+        ent->nextthink = coduo_int32_from_bits((uint32_t)level.time -
+            coduo_fp_to_u32_extended(waitSeconds * -TRIGGER_DURATION_SCALE));
+#else
+        ent->nextthink = coduo_int32_from_bits((uint32_t)level.time +
+            coduo_fp_to_u32_extended(waitSeconds * TRIGGER_DURATION_SCALE));
+#endif
 #endif
     } else {
         ent->touch = NULL;
-        ent->nextthink = level.time + TRIGGER_FREE_DELAY_MS;
+        ent->nextthink = coduo_int32_from_bits((uint32_t)level.time + TRIGGER_FREE_DELAY_MS);
         ent->think = G_FreeEntity;
     }
 }

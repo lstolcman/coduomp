@@ -150,9 +150,9 @@ void hurt_touch(gentity_t *ent, gentity_t *other, int traceMode)
     G_Trigger(ent, other);
 
     if ((ent->spawnflags & TRIGGER_HURT_SPAWNFLAG_SLOW) == 0) {
-        ent->dynaSinkEndTime = level.time + TRIGGER_HURT_REPEAT_MS;
+        ent->dynaSinkEndTime = coduo_int32_from_bits((uint32_t)level.time + TRIGGER_HURT_REPEAT_MS);
     } else {
-        ent->dynaSinkEndTime = level.time + TRIGGER_HURT_SLOW_REPEAT_MS;
+        ent->dynaSinkEndTime = coduo_int32_from_bits((uint32_t)level.time + TRIGGER_HURT_SLOW_REPEAT_MS);
     }
 
     if ((ent->spawnflags & TRIGGER_HURT_SPAWNFLAG_SILENT) == 0) {
@@ -181,11 +181,11 @@ void hurt_touch(gentity_t *ent, gentity_t *other, int traceMode)
 void hurt_think(gentity_t *ent)
 {
     /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-    ent->nextthink = level.time + TRIGGER_HURT_REPEAT_MS;
+    ent->nextthink = coduo_int32_from_bits((uint32_t)level.time + TRIGGER_HURT_REPEAT_MS);
 
     /* 0x768b2: fild level.time — the integer time is compared in extended
      * precision, never rounded to float. */
-    if (*game_compat_trigger_hurt_end_time(ent) < level.time) {
+    if ((WIDE_FLOAT)*game_compat_trigger_hurt_end_time(ent) < (WIDE_FLOAT)level.time) {
         G_FreeEntity(ent);
     }
 }
@@ -208,13 +208,13 @@ void hurt_use(gentity_t *ent, gentity_t *other, gentity_t *activator)
 
     if (*game_compat_trigger_hurt_duration_seconds(ent) != 0.0f) {
         /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-        ent->nextthink = level.time + TRIGGER_HURT_TIMER_THINK_MS;
+        ent->nextthink = coduo_int32_from_bits((uint32_t)level.time + TRIGGER_HURT_TIMER_THINK_MS);
         ent->think = hurt_think;
         /* 0x7695f..0x76978: fild level.time joins the 80-bit chain directly;
          * the only rounding is the final store to the end-time slot. */
-        *game_compat_trigger_hurt_end_time(ent) =
-            *game_compat_trigger_hurt_duration_seconds(ent) * TRIGGER_HURT_DURATION_SCALE +
-            level.time;
+        volatile WIDE_FLOAT durationMs =
+            (WIDE_FLOAT)*game_compat_trigger_hurt_duration_seconds(ent) * TRIGGER_HURT_DURATION_SCALE;
+        *game_compat_trigger_hurt_end_time(ent) = (float)(durationMs + (WIDE_FLOAT)level.time);
     }
 }
 
@@ -616,7 +616,7 @@ void explosive_indicator_think(gentity_t *ent)
     }
 
     /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-    ent->nextthink = level.time + EXPLOSIVE_INDICATOR_THINK_MS;
+    ent->nextthink = coduo_int32_from_bits((uint32_t)level.time + EXPLOSIVE_INDICATOR_THINK_MS);
 }
 
 /* ------------------------------------------------------------------ */
