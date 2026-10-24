@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include "recovered_game.h"
 #include "game_globals.h"
+#include "compat/coduo_x87_eval.h"
 
 /*
  * Script VM function prototypes.
@@ -199,7 +200,9 @@ extern void Scr_PlayerDamage(gentity_t *target, gentity_t *inflictor,
 extern void Scr_PlayerKilled(gentity_t *self, gentity_t *inflictor,
                              gentity_t *attacker, int damage, int mod,
                              int weapon, const float *dir, int hitLocation);
-extern float Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
+/* NOT_FROM_ORIGINAL_SOURCE: internal carrier preserves the live Windows x87
+ * return through integer damage conversion. Linux rounds inside the callee. */
+extern WIDE_FLOAT Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
                                      gentity_t *inflictor, const float *point,
                                      int mod);
 extern void Scr_Vehicle_Pain(gentity_t *ent, gentity_t *attacker, int damage,

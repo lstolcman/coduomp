@@ -266,7 +266,11 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_DAMAGE_SCALE_RADIUS_BLEND  0.7f
 #define VEH_DAMAGE_SCALE_GRENADE_HEIGHT 10.0f
 #define VEH_DAMAGE_SCALE_GRENADE_RADIUS_MULT 0.8f
+#if defined(WINDOWS_BEHAVIOR)
+#define VEH_DAMAGE_SCALE_ANGLE_RADIANS ((double)0.34906587f) /* 20 degrees, rounded to binary32 before cos. */
+#else
 #define VEH_DAMAGE_SCALE_ANGLE_RADIANS 0.3490658503988659 /* 20 degrees; original double64 0x3fd657184ae74487 */
+#endif
 #define VEH_PUSH_AWAY_STEP             4.0f
 #define VEH_PUSH_AWAY_PLAYER_RADIUS    32.0f
 #define VEH_BOUNDS_EXPANSION_SCALE     1.2f
@@ -3684,8 +3688,10 @@ void VEH_InitPhysics(gentity_t *ent)
 /*  0x8ccad  Scr_Vehicle_DamageScale                                  */
 /* ------------------------------------------------------------------ */
 
-/* VERIFIED_DECOMPILER(0x8ccad, 9ccad_Scr_Vehicle_DamageScale.c, VERIFY-VEHICLE-SETUP-LIFECYCLE-2026-06-17): DATAFLOW_VERIFIED; MOD set, axis dominance, grenade override, directional scale blend, and bullet multiplier checked. */
-float Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
+/* Direction dots and percentage scales have explicit binary32 boundaries.
+ * Windows retains the final scale through the caller's integer multiplication;
+ * Linux rounds the return to binary32 first. Keep both boundaries explicit. */
+WIDE_FLOAT Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
                               gentity_t *inflictor, const float *point,
                               int mod)
 {
@@ -3702,6 +3708,12 @@ float Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
     float bulletScale = 1.0f;
     float dominantDot = 0.0f;
     int dominantAxis = -1;
+    WIDE_FLOAT scale;
+#if defined(WINDOWS_BEHAVIOR)
+    float storedForwardDot = 0.0f;
+#else
+    volatile float roundedScale;
+#endif
 
     (void)attacker;
 
@@ -3713,10 +3725,15 @@ float Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
     VectorNormalize(delta);
 
     for (int axisIndex = 0; axisIndex < 2; axisIndex++) {
-        const float dot =
-            delta[0] * axis[axisIndex][0] +
-            delta[1] * axis[axisIndex][1] +
-            delta[2] * axis[axisIndex][2];
+        const float dot = (float)(
+            (WIDE_FLOAT)delta[0] * (WIDE_FLOAT)axis[axisIndex][0] +
+            (WIDE_FLOAT)delta[1] * (WIDE_FLOAT)axis[axisIndex][1] +
+            (WIDE_FLOAT)delta[2] * (WIDE_FLOAT)axis[axisIndex][2]);
+#if defined(WINDOWS_BEHAVIOR)
+        if (axisIndex == 0) {
+            storedForwardDot = dot;
+        }
+#endif
 
         if (dominantAxis < 0 || fabsf(dominantDot) < fabsf(dot)) {
             dominantAxis = axisIndex;
@@ -3736,6 +3753,7 @@ float Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
             float weaponScale = 1.0f;
             const float radius =
                 vehicle->maxs[1] * VEH_DAMAGE_SCALE_GRENADE_RADIUS_MULT;
+            const float height = vehicle->maxs[2] * 0.5f;
             const float distanceSq =
                 VectorDistanceSquared(point, vehicleState->origin);
 
@@ -3757,17 +3775,24 @@ float Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
                 }
             }
 
-            if (!(vehicleState->origin[2] + vehicle->maxs[2] * 0.5f >
-                  point[2] - VEH_DAMAGE_SCALE_GRENADE_HEIGHT)) {
-                return bulletScale * weaponScale;
+            if (!((WIDE_FLOAT)vehicleState->origin[2] + (WIDE_FLOAT)height >
+                  (WIDE_FLOAT)point[2] - (WIDE_FLOAT)VEH_DAMAGE_SCALE_GRENADE_HEIGHT)) {
+                scale = (WIDE_FLOAT)bulletScale * (WIDE_FLOAT)weaponScale;
+                goto return_scale;
             }
-            if (!(radius * radius > distanceSq)) {
-                return bulletScale * weaponScale;
+            if (!((WIDE_FLOAT)radius * (WIDE_FLOAT)radius > (WIDE_FLOAT)distanceSq)) {
+                scale = (WIDE_FLOAT)bulletScale * (WIDE_FLOAT)weaponScale;
+                goto return_scale;
             }
 
-            return bulletScale * VEH_DAMAGE_SCALE_PERCENT *
-                   vehicleInfo->damageScaleTop *
-                   weaponScale;
+#if defined(WINDOWS_BEHAVIOR)
+            scale = (WIDE_FLOAT)weaponScale * (WIDE_FLOAT)vehicleInfo->damageScaleTop *
+                    (WIDE_FLOAT)bulletScale * (WIDE_FLOAT)VEH_DAMAGE_SCALE_PERCENT;
+#else
+            scale = (WIDE_FLOAT)bulletScale * (WIDE_FLOAT)VEH_DAMAGE_SCALE_PERCENT *
+                    (WIDE_FLOAT)vehicleInfo->damageScaleTop * (WIDE_FLOAT)weaponScale;
+#endif
+            goto return_scale;
         }
 
         if (dominantAxis == 0) {
@@ -3779,10 +3804,16 @@ float Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
             blendScale =
                 vehicleInfo->damageScaleSide * VEH_DAMAGE_SCALE_PERCENT;
         } else if (dominantAxis == 1) {
-            const long double forwardDot =
-                (long double)delta[0] * (long double)axis[0][0] +
-                (long double)delta[1] * (long double)axis[0][1] +
-                (long double)delta[2] * (long double)axis[0][2];
+            /* Windows reuses the first stored dot; Linux evaluates the sign
+             * from the live expression without that binary32 narrowing. */
+#if defined(WINDOWS_BEHAVIOR)
+            const WIDE_FLOAT forwardDot = (WIDE_FLOAT)storedForwardDot;
+#else
+            const WIDE_FLOAT forwardDot =
+                (WIDE_FLOAT)delta[0] * (WIDE_FLOAT)axis[0][0] +
+                (WIDE_FLOAT)delta[1] * (WIDE_FLOAT)axis[0][1] +
+                (WIDE_FLOAT)delta[2] * (WIDE_FLOAT)axis[0][2];
+#endif
 
             directScale =
                 vehicleInfo->damageScaleSide * VEH_DAMAGE_SCALE_PERCENT;
@@ -3793,32 +3824,44 @@ float Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
                 VEH_DAMAGE_SCALE_PERCENT;
         }
 
-        return ((1.0f - fabsf(dominantDot)) * blendScale +
-                directScale * fabsf(dominantDot)) *
-               bulletScale * VEH_DAMAGE_SCALE_RADIUS_BLEND;
+        dominantDot = fabsf(dominantDot);
+        scale = (((WIDE_FLOAT)1.0f - (WIDE_FLOAT)dominantDot) * (WIDE_FLOAT)blendScale +
+                 (WIDE_FLOAT)directScale * (WIDE_FLOAT)dominantDot) *
+                (WIDE_FLOAT)bulletScale * (WIDE_FLOAT)VEH_DAMAGE_SCALE_RADIUS_BLEND;
+        goto return_scale;
     }
 
     if (dominantAxis == 0) {
         if (dominantDot < 0.0f) {
             if (-dominantDot < damageDirectionCosine) {
-                return bulletScale * VEH_DAMAGE_SCALE_PERCENT *
-                       vehicleInfo->damageScaleSide;
+                scale = vehicleInfo->damageScaleSide;
+            } else {
+                scale = vehicleInfo->damageScaleRear;
             }
-
-            return bulletScale * VEH_DAMAGE_SCALE_PERCENT *
-                   vehicleInfo->damageScaleRear;
+        } else {
+            scale = vehicleInfo->damageScaleFront;
         }
-
-        return bulletScale * VEH_DAMAGE_SCALE_PERCENT *
-               vehicleInfo->damageScaleFront;
+    } else if (dominantAxis == 1) {
+        scale = vehicleInfo->damageScaleSide;
+    } else {
+        scale = 0.0f;
+        goto return_scale;
     }
 
-    if (dominantAxis == 1) {
-        return bulletScale * VEH_DAMAGE_SCALE_PERCENT *
-               vehicleInfo->damageScaleSide;
-    }
+    /* The profiles multiply these three operands in different orders. */
+#if defined(WINDOWS_BEHAVIOR)
+    scale = (WIDE_FLOAT)bulletScale * scale * (WIDE_FLOAT)VEH_DAMAGE_SCALE_PERCENT;
+#else
+    scale = (WIDE_FLOAT)bulletScale * (WIDE_FLOAT)VEH_DAMAGE_SCALE_PERCENT * scale;
+#endif
 
-    return 0.0f;
+return_scale:
+#if defined(LINUX_BEHAVIOR)
+    roundedScale = (float)scale;
+    return (WIDE_FLOAT)roundedScale;
+#else
+    return scale;
+#endif
 }
 
 /* ------------------------------------------------------------------ */
