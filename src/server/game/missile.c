@@ -44,6 +44,11 @@ void G_MissileImpact(gentity_t *ent, trace_t *trace, float *dir);
 #define MISSILE_SPLASH_TRACE_OFFSET 10.0f
 #define MISSILE_IMPACT_TRACE_OFFSET 4.0f
 #define MISSILE_BOUNCE_EVENT_SPEED_DELTA 100.0f
+#define MISSILE_ANGLE_SHORT_SCALE 182.04445f
+#define MISSILE_ANGLE_SHORT_HALF_TURN 32768.0f
+#define MISSILE_ANGLE_SHORT_MASK 65535u
+#define MISSILE_ANGLE_SHORT_TO_DEGREES 0.0054931640625f
+#define GRENADE_LAUNCH_PITCH_ADJUSTMENT 120.0f
 #define GENTITY_OVERLAP_LINKED_ENTITY_FLAG 0x10000u
 #define GRENADE_DEFAULT_FUSE_MS 2500
 #define GRENADE_OWNER_LEAVE_DELAY_MS 500
@@ -492,7 +497,15 @@ void G_MissileLandAngles(gentity_t *ent, trace_t *trace, float *angles,
         angles[0] = AngleNormalize180(angles[0]);
         if (forceAngles != 0 || pitchDeltaAbs < 45.0f) {
             if (fabsf(angles[0]) > 90.0f) {
+#if defined(WINDOWS_BEHAVIOR)
+                /* The Windows half-turn adjustment follows the wide pitch
+                 * scale in packed-angle units, before truncation and masking. */
+                volatile WIDE_FLOAT scaledPitch = (WIDE_FLOAT)landPitch * MISSILE_ANGLE_SHORT_SCALE;
+                uint32_t packedPitch = coduo_fp_to_u32_extended(scaledPitch + MISSILE_ANGLE_SHORT_HALF_TURN) & MISSILE_ANGLE_SHORT_MASK;
+                angles[0] = (float)packedPitch * MISSILE_ANGLE_SHORT_TO_DEGREES;
+#else
                 angles[0] = AngleNormalize360(landPitch + 180.0f);
+#endif
             } else {
                 angles[0] = AngleNormalize360(landPitch);
             }
@@ -1296,7 +1309,15 @@ gentity_t *fire_grenade(gentity_t *self, float *start, float *dir, int weapon)
     grenade->s.apos.trType = TR_LINEAR;
     grenade->s.apos.trTime = level.time;
     vectoangles(dir, grenade->s.apos.trBase);
-    grenade->s.apos.trBase[0] = AngleNormalize360(grenade->s.apos.trBase[0] - 120.0f);
+#if defined(WINDOWS_BEHAVIOR)
+    /* The Windows launch-pitch subtraction remains wide through angle packing;
+     * Linux stores the adjusted angle as float before normalization. */
+    volatile WIDE_FLOAT adjustedPitch = (WIDE_FLOAT)grenade->s.apos.trBase[0] - GRENADE_LAUNCH_PITCH_ADJUSTMENT;
+    uint32_t packedPitch = coduo_fp_to_u32_extended(adjustedPitch * MISSILE_ANGLE_SHORT_SCALE) & MISSILE_ANGLE_SHORT_MASK;
+    grenade->s.apos.trBase[0] = (float)packedPitch * MISSILE_ANGLE_SHORT_TO_DEGREES;
+#else
+    grenade->s.apos.trBase[0] = AngleNormalize360(grenade->s.apos.trBase[0] - GRENADE_LAUNCH_PITCH_ADJUSTMENT);
+#endif
     grenade->s.apos.trDelta[0] = 720.0f + flrand(-45.0f, 45.0f);
     grenade->s.apos.trDelta[1] = 0.0f;
     grenade->s.apos.trDelta[2] = 360.0f + flrand(-45.0f, 45.0f);
