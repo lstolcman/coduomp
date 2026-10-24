@@ -86,13 +86,14 @@ static void game_compat_script_player_open_menu(uint32_t entityNum, const char *
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     if (ent->client->connectedState == CON_CONNECTED) {
@@ -146,13 +147,14 @@ static void game_compat_script_player_say(uint32_t entityNum, int mode)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     char message[MAX_STRING_CHARS];
 
@@ -220,9 +222,7 @@ static void game_compat_script_player_auto_client_command(
 {
     if (entityNum > ENTITYNUM_NONE) {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    if (g_entities[entityNum].client == NULL) {
+    } else if (g_entities[entityNum].client == NULL) {
         Scr_Error(va("entity %i is not a player", (int)entityNum));
     }
 
@@ -241,13 +241,14 @@ static void game_compat_script_player_add_button_pressed(uint32_t entityNum, uin
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     Scr_AddInt((ent->client->currentButtons & mask) != 0);
@@ -258,13 +259,14 @@ void PlayerCmd_giveWeapon(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int weapon = BG_GetWeaponIndexForName(Scr_GetString(0)) & 0xff;
     int alreadyOwned = Com_BitCheck(ent->client->ps.weaponBits, weapon);
@@ -291,13 +293,14 @@ void PlayerCmd_takeWeapon(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int weapon = BG_GetWeaponIndexForName(Scr_GetString(0)) & 0xff;
     gclient_t *client = ent->client;
@@ -315,13 +318,14 @@ void PlayerCmd_takeAllWeapons(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     ent->client->ps.currentWeapon = 0;
 
@@ -342,13 +346,14 @@ void PlayerCmd_getCurrentWeapon(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     if (ent->client->ps.currentWeapon < 1) {
         Scr_AddString(PLAYER_NO_WEAPON_NAME);
@@ -364,13 +369,14 @@ void PlayerCmd_hasWeapon(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int weapon = BG_GetWeaponIndexForName(Scr_GetString(0)) & 0xff;
 
@@ -382,13 +388,14 @@ void PlayerCmd_switchToWeapon(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int weapon = BG_GetWeaponIndexForName(Scr_GetString(0)) & 0xff;
 
@@ -407,13 +414,14 @@ void PlayerCmd_giveClipAmmo(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     const char *weaponName = Scr_GetString(0);
     int clipCount = Scr_GetInt(1);
@@ -439,13 +447,14 @@ void PlayerCmd_giveStartAmmo(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int weapon = BG_GetWeaponIndexForName(Scr_GetString(0)) & 0xff;
 
@@ -468,13 +477,14 @@ void PlayerCmd_giveMaxAmmo(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int weapon = BG_GetWeaponIndexForName(Scr_GetString(0)) & 0xff;
 
@@ -498,13 +508,14 @@ void PlayerCmd_getFractionStartAmmo(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int weapon = BG_GetWeaponIndexForName(Scr_GetString(0)) & 0xff;
 
@@ -548,13 +559,14 @@ void PlayerCmd_getFractionMaxAmmo(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int weapon = BG_GetWeaponIndexForName(Scr_GetString(0)) & 0xff;
 
@@ -607,13 +619,14 @@ void PlayerCmd_setOrigin(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     vec3_t origin;
 
@@ -628,13 +641,14 @@ void PlayerCmd_setAngles(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     vec3_t angles;
 
@@ -665,13 +679,14 @@ void PlayerCmd_isAds(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     Scr_AddInt((ent->client->ps.playerStateFlags & PMF_ADS) != 0);
@@ -682,13 +697,14 @@ void PlayerCmd_isInVehicle(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     Scr_AddInt((ent->s.eFlags & ENTITY_FLAG_VEHICLE_OCCUPANT) != 0);
@@ -699,13 +715,14 @@ void PlayerCmd_isOnGround(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     Scr_AddInt(ent->client->ps.groundEntityNum != ENTITYNUM_NONE);
@@ -716,13 +733,14 @@ void PlayerCmd_pingPlayer(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     ent->client->ps.entityStateFlags |= PLAYER_PS_FLAG_PING;
@@ -735,13 +753,14 @@ void PlayerCmd_SetViewmodel(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     int modelIndex = G_ModelIndex(Scr_GetString(0));
@@ -754,13 +773,14 @@ void PlayerCmd_GetViewmodel(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     Scr_AddString(G_ModelName(ent->client->viewModelIndex));
@@ -771,13 +791,14 @@ void PlayerCmd_allowComplaint(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     gentity_t *target = Scr_GetEntity(0);
 
@@ -808,13 +829,14 @@ void PlayerCmd_showScoreboard(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     Cmd_Score_f(ent);
@@ -825,13 +847,14 @@ void PlayerCmd_setSpawnWeapon(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int weapon = BG_GetWeaponIndexForName(Scr_GetString(0)) & 0xff;
 
@@ -846,13 +869,14 @@ void PlayerCmd_dropItem(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     const char *itemName = Scr_GetString(0);
     int weapon = BG_GetWeaponIndexForName(itemName) & 0xff;
@@ -884,13 +908,14 @@ void PlayerCmd_finishPlayerDamage(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     gentity_t *world = &g_entities[ENTITYNUM_WORLD];
     gentity_t *inflictor = world;
@@ -1134,13 +1159,14 @@ void PlayerCmd_Suicide(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     ent->flags &= ~ENTITY_FLAG_GODMODE;
@@ -1174,13 +1200,14 @@ void PlayerCmd_GetWeaponSlotWeapon(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     if (WeaponSlotsNotValid(ent) != 0) {
         Scr_AddConstString(scr_const_none);
@@ -1203,13 +1230,14 @@ void PlayerCmd_SetWeaponSlotWeapon(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int movePrimaryToPrimaryB = 0;
     int slot = game_compat_script_player_parse_weapon_slot(0);
@@ -1271,13 +1299,14 @@ void PlayerCmd_GetWeaponSlotAmmo(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     if (WeaponSlotsNotValid(ent) != 0) {
         Scr_AddInt(0);
@@ -1308,13 +1337,14 @@ void PlayerCmd_SetWeaponSlotAmmo(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int slot = game_compat_script_player_parse_weapon_slot(0);
     int amount = Scr_GetInt(1);
@@ -1354,13 +1384,14 @@ void PlayerCmd_GetWeaponSlotClipAmmo(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     if (WeaponSlotsNotValid(ent) != 0) {
         Scr_AddInt(0);
@@ -1389,13 +1420,14 @@ void PlayerCmd_SetWeaponSlotClipAmmo(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     int slot = game_compat_script_player_parse_weapon_slot(0);
     int amount = Scr_GetInt(1);
@@ -1491,13 +1523,14 @@ void PlayerCmd_ClonePlayer(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     gclient_t *client = ent->client;
     gentity_t *clone = G_SpawnPlayerClone();
@@ -1567,9 +1600,7 @@ void PlayerCmd_SetClientCvar(uint32_t entityNum)
 
     if (entityNum > ENTITYNUM_NONE) {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    if (g_entities[entityNum].client == NULL) {
+    } else if (g_entities[entityNum].client == NULL) {
         Scr_Error(va("entity %i is not a player", (int)entityNum));
     }
 
@@ -1594,18 +1625,25 @@ void PlayerCmd_FreezeControls(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
+        ent = NULL;
     }
 
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
-    }
-
+    /* Windows fetches the argument before selecting the current client. */
+#if defined(WINDOWS_BEHAVIOR)
+    int controlsFrozen = Scr_GetBool(0);
+    ent->client->controlsFrozen = controlsFrozen;
+#else
     gclient_t *client = ent->client;
 
     client->controlsFrozen = Scr_GetBool(0);
+#endif
 }
 
 /* VERIFIED_DECOMPILER(0x490e6, 590e6_script_method_player_disableweapon.c, VERIFY-P1-SCRIPTPLAYER-2026-06-17): DATAFLOW_VERIFIED - entity validation prologue and OR of PMF_WEAPON_DISABLED into playerStateFlags checked against current decompiler output. */
@@ -1613,13 +1651,14 @@ void PlayerCmd_DisableWeapon(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     ent->client->ps.playerStateFlags |= PMF_WEAPON_DISABLED;
@@ -1630,13 +1669,14 @@ void PlayerCmd_EnableWeapon(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     ent->client->ps.playerStateFlags &= ~PMF_WEAPON_DISABLED;
@@ -1652,9 +1692,7 @@ void PlayerCmd_SetReverb(uint32_t entityNum)
 
     if (entityNum > ENTITYNUM_NONE) {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    if (g_entities[entityNum].client == NULL) {
+    } else if (g_entities[entityNum].client == NULL) {
         Scr_Error(va("entity %i is not a player", (int)entityNum));
     }
 
@@ -1684,16 +1722,23 @@ void ScrCmd_IsLookingAt(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
+        ent = NULL;
     }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
-    }
+    /* Linux retains the client across argument lookup; Windows reloads it. */
+#if defined(WINDOWS_BEHAVIOR)
+    gentity_t *target = Scr_GetEntity(0);
+    gclient_t *client = ent->client;
+#else
     gclient_t *client = ent->client;
     gentity_t *target = Scr_GetEntity(0);
+#endif
 
     Scr_AddInt(client->lookAtEntity == target);
 }
@@ -1706,9 +1751,7 @@ void ScrCmd_PlayLocalSound(uint32_t entityNum)
 
     if (entityNum > ENTITYNUM_NONE) {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    if (g_entities[entityNum].client == NULL) {
+    } else if (g_entities[entityNum].client == NULL) {
         Scr_Error(va("entity %i is not a player", (int)entityNum));
     }
 
@@ -1725,9 +1768,7 @@ void ScrCmd_PlayLocalAnnouncerSound(uint32_t entityNum)
 
     if (entityNum > ENTITYNUM_NONE) {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    if (g_entities[entityNum].client == NULL) {
+    } else if (g_entities[entityNum].client == NULL) {
         Scr_Error(va("entity %i is not a player", (int)entityNum));
     }
 
@@ -1759,13 +1800,14 @@ void PlayerCmd_AllowSpectateTeam(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     uint16_t teamName = Scr_GetConstString(0);
     uint32_t denyMask = game_compat_script_player_spectate_team_deny_mask(teamName);
@@ -1782,9 +1824,7 @@ void PlayerCmd_GetGuid(uint32_t entityNum)
 {
     if (entityNum > ENTITYNUM_NONE) {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    if (g_entities[entityNum].client == NULL) {
+    } else if (g_entities[entityNum].client == NULL) {
         Scr_Error(va("entity %i is not a player", (int)entityNum));
     }
 
@@ -1800,13 +1840,14 @@ void PlayerCmd_GetFatigue(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
 
     if (Scr_GetNumParam() != 0) {
@@ -1821,13 +1862,14 @@ void PlayerCmd_SetFatigue(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
-    }
-
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
+        ent = NULL;
     }
     float fatigue;
 
