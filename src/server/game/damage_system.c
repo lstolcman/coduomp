@@ -92,7 +92,7 @@ void G_Damage(gentity_t *target, gentity_t *inflictor, gentity_t *attacker,
          * store before the scaling call in the Linux binary. */
         volatile float roundedDamage = (float)damage;
 #endif
-        float scale = Scr_Vehicle_DamageScale(target, attacker, inflictor, point, mod);
+        WIDE_FLOAT scale = Scr_Vehicle_DamageScale(target, attacker, inflictor, point, mod);
         /* Windows multiplies integer damage directly; Linux first stores it
          * as binary32. Preserve that boundary and each platform's conversion. */
 #if defined(WINDOWS_BEHAVIOR)
