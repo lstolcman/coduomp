@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "compat/coduo_x87_eval.h"
 #include "qcommon/q_collision_types.h"
 #include "q_matrix_types.h"
 #include "qcommon/q_shared_types.h"
@@ -45,7 +46,8 @@ float Q_acos(float value);
 float _DotProduct(const vec3_t left, const vec3_t right);
 float _VectorLength(const vec3_t vector);
 float VectorDistance(const vec3_t first, const vec3_t second);
-float VectorDistanceSquared(const vec3_t first, const vec3_t second);
+/* The original returns a live x87 sum; callers select any float store. */
+WIDE_FLOAT VectorDistanceSquared(const vec3_t first, const vec3_t second);
 float VectorDistance2D(const vec3_t first, const vec3_t second);
 float VectorDistanceSquared2D(const vec3_t first, const vec3_t second);
 float VectorMax(const vec3_t vector);
