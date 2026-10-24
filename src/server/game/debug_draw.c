@@ -14,11 +14,21 @@
 #include "recovered_game.h"
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
+#include "compat/coduo_x87_eval.h"
 
 #define DEBUG_CIRCLE_SEGMENTS 16
+#if defined(WINDOWS_BEHAVIOR)
+#define DEBUG_CIRCLE_STEP_RADIANS 0.39269908169872414f /* original float 0x3ec90fdb */
+#define DEBUG_PI 3.141592653589793f /* original float 0x40490fdb */
+#define DEBUG_DEGREES_PER_HALF_CIRCLE 180.0f
+#define DEBUG_ARC_INTERVAL_SCALE 0.06666667f /* original float 0x3d888889 */
+#define DEBUG_ARC_DEGREE_SCALE 0.0055555557f /* original float 0x3bb60b61 */
+#else
 #define DEBUG_CIRCLE_STEP_RADIANS 0.39269908169872414 /* original double 0x3fd921fb54442d18 */
 #define DEBUG_PI 3.141592653589793 /* original double 0x400921fb54442d18 */
 #define DEBUG_DEGREES_PER_HALF_CIRCLE 180.0 /* original double 0x4066800000000000 */
+#endif
+#define DEBUG_DEGREES_PER_CIRCLE 360.0f
 
 void trap_AddDebugLine(const float *start, const float *end, const float *color,
                               int depthTest, int duration);
@@ -109,23 +119,23 @@ void G_DebugCircleEx(const float *center, float radius, const float *normal,
     for (int index = 0; index < DEBUG_CIRCLE_SEGMENTS; index++) {
         float sine;
         float cosine;
-        /* 0x514e3: fild(index) * STEP_RADIANS(QWORD double), one float store. */
+        /* The angle rounds to float before sin/cos. Windows uses a float
+         * step; Linux (0x514e3) uses the double step. */
 #if EMULATE_X87
         float radians = x87f_store_f32(x87f_mul(
             x87f_load_i32(index),
             x87f_load_f64(DEBUG_CIRCLE_STEP_RADIANS)));
 #else
-        float radians = (float)((long double)index *
-                                (long double)DEBUG_CIRCLE_STEP_RADIANS);
+        float radians = (float)((WIDE_FLOAT)index * DEBUG_CIRCLE_STEP_RADIANS);
 #endif
 
         DebugSinCos(radians, &sine, &cosine);
         sine *= radius;
         cosine *= radius;
 
-        /* 0x51554..0x51697: stock stores center+bitangent*sine to the point
-         * (one float rounding per component), then adds tangent*cosine in a
-         * second rounding (two VectorMA passes) -> MA shims. */
+        /* Linux (0x51554..0x51697) stores center+bitangent*sine before
+         * adding tangent*cosine. Windows combines tangent*cosine and
+         * bitangent*sine, adds center, then performs the single float store. */
 #if EMULATE_X87
         for (int c = 0; c < 3; c++) {
             points[index][c] = x87f_store_f32(x87f_add(
@@ -136,12 +146,18 @@ void G_DebugCircleEx(const float *center, float radius, const float *normal,
                 x87f_load_f32(points[index][c])));
         }
 #else
-        points[index][0] = center[0] + bitangent[0] * sine;
-        points[index][1] = center[1] + bitangent[1] * sine;
-        points[index][2] = center[2] + bitangent[2] * sine;
-        points[index][0] += tangent[0] * cosine;
-        points[index][1] += tangent[1] * cosine;
-        points[index][2] += tangent[2] * cosine;
+#if defined(WINDOWS_BEHAVIOR)
+        points[index][0] = (float)(((WIDE_FLOAT)tangent[0] * cosine + (WIDE_FLOAT)bitangent[0] * sine) + center[0]);
+        points[index][1] = (float)(((WIDE_FLOAT)tangent[1] * cosine + (WIDE_FLOAT)bitangent[1] * sine) + center[1]);
+        points[index][2] = (float)(((WIDE_FLOAT)tangent[2] * cosine + (WIDE_FLOAT)bitangent[2] * sine) + center[2]);
+#else
+        points[index][0] = (float)((WIDE_FLOAT)center[0] + (WIDE_FLOAT)bitangent[0] * sine);
+        points[index][1] = (float)((WIDE_FLOAT)center[1] + (WIDE_FLOAT)bitangent[1] * sine);
+        points[index][2] = (float)((WIDE_FLOAT)center[2] + (WIDE_FLOAT)bitangent[2] * sine);
+        points[index][0] = (float)((WIDE_FLOAT)points[index][0] + (WIDE_FLOAT)tangent[0] * cosine);
+        points[index][1] = (float)((WIDE_FLOAT)points[index][1] + (WIDE_FLOAT)tangent[1] * cosine);
+        points[index][2] = (float)((WIDE_FLOAT)points[index][2] + (WIDE_FLOAT)tangent[2] * cosine);
+#endif
 #endif
     }
 
@@ -179,32 +195,44 @@ void G_DebugArc(const float *center, float radius, float startAngle, float endAn
                 const float *color, int depthTest, int duration)
 {
     vec3_t points[DEBUG_CIRCLE_SEGMENTS];
-    /* 0x5173a: (endAngle - startAngle) / 15.0f kept 80-bit, one store -> shim;
-     * startAngle -= 360.0f is a single sub (native). */
+    /* Linux divides the live angle difference by 15 and stores the step.
+     * Windows multiplies by the float reciprocal and compares the live
+     * result before reloading the float step for point generation. */
+#if defined(WINDOWS_BEHAVIOR) && !EMULATE_X87
+    WIDE_FLOAT stepForSign = ((WIDE_FLOAT)endAngle - startAngle) * DEBUG_ARC_INTERVAL_SCALE;
+    float step = (float)stepForSign;
+#else
 #if EMULATE_X87
     float step = x87f_store_f32(x87f_div(
         x87f_sub(x87f_load_f32(endAngle), x87f_load_f32(startAngle)),
         x87f_load_f32(15.0f)));
 #else
-    float step = (endAngle - startAngle) / 15.0f;
+    float step = (float)(((WIDE_FLOAT)endAngle - startAngle) / (DEBUG_CIRCLE_SEGMENTS - 1));
+#endif
+    WIDE_FLOAT stepForSign = step;
 #endif
 
-    if (step < 0.0f) {
-        startAngle -= 360.0f;
+    if (stepForSign < 0.0f) {
+        startAngle -= DEBUG_DEGREES_PER_CIRCLE;
 #if EMULATE_X87
         step = x87f_store_f32(x87f_div(
             x87f_sub(x87f_load_f32(endAngle), x87f_load_f32(startAngle)),
             x87f_load_f32(15.0f)));
 #else
-        step = (endAngle - startAngle) / 15.0f;
+#if defined(WINDOWS_BEHAVIOR)
+        step = (float)(((WIDE_FLOAT)endAngle - startAngle) * DEBUG_ARC_INTERVAL_SCALE);
+#else
+        step = (float)(((WIDE_FLOAT)endAngle - startAngle) / (DEBUG_CIRCLE_SEGMENTS - 1));
+#endif
 #endif
     }
 
     for (int index = 0; index < DEBUG_CIRCLE_SEGMENTS; index++) {
         float sine;
         float cosine;
-        /* 0x5179d..0x517bc: (fild(index)*step + startAngle) * PI(QWORD double)
-         * / DEGREES(QWORD double) kept 80-bit, one float store. */
+        /* Linux (0x5179d..0x517bc) uses double pi and division by 180.
+         * Windows uses float pi followed by the float reciprocal of 180.
+         * Both retain intermediates through the final float angle store. */
 #if EMULATE_X87
         float radians = x87f_store_f32(x87f_div(
             x87f_mul(
@@ -213,14 +241,16 @@ void G_DebugArc(const float *center, float radius, float startAngle, float endAn
                 x87f_load_f64(DEBUG_PI)),
             x87f_load_f64(DEBUG_DEGREES_PER_HALF_CIRCLE)));
 #else
-        float radians = (float)((((long double)index * (long double)step +
-                                  (long double)startAngle) *
-                                 (long double)DEBUG_PI) /
-                                (long double)DEBUG_DEGREES_PER_HALF_CIRCLE);
+#if defined(WINDOWS_BEHAVIOR)
+        float radians = (float)((((WIDE_FLOAT)index * step + startAngle) * DEBUG_PI) * DEBUG_ARC_DEGREE_SCALE);
+#else
+        float radians = (float)((((WIDE_FLOAT)index * step + startAngle) * DEBUG_PI) / DEBUG_DEGREES_PER_HALF_CIRCLE);
+#endif
 #endif
 
         DebugSinCos(radians, &sine, &cosine);
-        /* center[k] + trig*radius MA, one store -> shim. */
+        /* Both platforms retain trig*radius through the center addition,
+         * then store the completed coordinate as float. */
 #if EMULATE_X87
         points[index][0] = x87f_store_f32(x87f_add(
             x87f_mul(x87f_load_f32(cosine), x87f_load_f32(radius)),
@@ -229,8 +259,8 @@ void G_DebugArc(const float *center, float radius, float startAngle, float endAn
             x87f_mul(x87f_load_f32(sine), x87f_load_f32(radius)),
             x87f_load_f32(center[1])));
 #else
-        points[index][0] = center[0] + cosine * radius;
-        points[index][1] = center[1] + sine * radius;
+        points[index][0] = (float)((WIDE_FLOAT)center[0] + (WIDE_FLOAT)cosine * radius);
+        points[index][1] = (float)((WIDE_FLOAT)center[1] + (WIDE_FLOAT)sine * radius);
 #endif
         points[index][2] = center[2];
     }
