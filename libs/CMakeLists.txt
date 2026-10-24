@@ -94,10 +94,10 @@ set(SDL_SHARED OFF CACHE BOOL "Build SDL2 shared library" FORCE)
 set(SDL_STATIC ON CACHE BOOL "Build SDL2 static library" FORCE)
 set(SDL_TEST OFF CACHE BOOL "Build SDL2 tests" FORCE)
 set(SDL_TESTS OFF CACHE BOOL "Build SDL2 tests" FORCE)
-# SDL's Direct3D renderer defines a global MatrixMultiply that collides with the
-# engine's recovered math symbol. The client only needs the window/GL layer.
-set(SDL_RENDER_D3D OFF CACHE BOOL "Build the SDL Direct3D renderer" FORCE)
-set(SDL_RENDER_D3D11 OFF CACHE BOOL "Build the SDL Direct3D 11 renderer" FORCE)
+# The engine owns its renderer and uses SDL's window/GL layer. Exclude SDL's
+# unused 2D renderers, including the Direct3D MatrixMultiply symbol that
+# collides with the engine's recovered math symbol.
+set(SDL_RENDER OFF CACHE BOOL "Build the SDL 2D renderer subsystem" FORCE)
 # SDL2 2.30.9
 coduomp_bundled_fetch(sdl2
 	"https://github.com/libsdl-org/SDL/archive/c98c4fbff6d8f3016a3ce6685bf8f43433c3efcc.zip"
