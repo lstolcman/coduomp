@@ -124,7 +124,7 @@ void BG_CalculateView_Velocity(bg_view_angle_state_t *state,
     angles[0] = x87f_store_f32(x87f_sub(
         x87f_load_f32(angles[0]), x87f_load_f32(bob)));
 #else
-    bob = adsFraction * bobScale * bob;
+    bob = (WIDE_FLOAT)adsFraction * bobScale * bob;
     angles[0] -= bob;
 #endif
 
@@ -138,7 +138,7 @@ void BG_CalculateView_Velocity(bg_view_angle_state_t *state,
     angles[1] = x87f_store_f32(x87f_sub(
         x87f_load_f32(angles[1]), x87f_load_f32(bob)));
 #else
-    bob = adsFraction * bobScale * bob;
+    bob = (WIDE_FLOAT)adsFraction * bobScale * bob;
     angles[1] -= bob;
 #endif
 #endif
