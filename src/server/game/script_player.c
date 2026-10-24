@@ -608,7 +608,7 @@ void PlayerCmd_getFractionMaxAmmo(uint32_t entityNum)
     x87f reserveValue = x87f_load_f32(reserveAmmoForDivide);
 #endif
     Scr_AddFloat(x87f_store_f32(x87f_div(
-        reserveValue, x87f_load_i32(maxAmmo)));
+        reserveValue, x87f_load_i32(maxAmmo))));
 #else
     Scr_AddFloat((float)((WIDE_FLOAT)reserveAmmoForDivide / (WIDE_FLOAT)maxAmmo));
 #endif
