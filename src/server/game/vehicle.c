@@ -6897,7 +6897,6 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
     vec3_t lengthAxis;
     vec3_t groundNormal;
     float planeDistance;
-    vec3_t projectedAxis;
     vec3_t targetAngles;
 
     /*
@@ -7024,9 +7023,10 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
         }
     }
 
-    CrossProduct(groundNormal, axis.axis[0], projectedAxis);
-    VectorNormalize(projectedAxis);
-    CrossProduct(projectedAxis, groundNormal, axis.axis[0]);
+    /* Keep both corrected axes in the matrix used to derive target angles. */
+    CrossProduct(groundNormal, axis.axis[0], axis.axis[1]);
+    VectorNormalize(axis.axis[1]);
+    CrossProduct(axis.axis[1], groundNormal, axis.axis[0]);
     VectorNormalize(axis.axis[0]);
     AxisToAngles((const vec_t (*)[3])axis.axis, targetAngles);
 
