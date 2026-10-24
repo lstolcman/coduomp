@@ -129,8 +129,9 @@ void PM_ClipVelocity(const vec3_t input, const vec3_t normal, vec3_t output,
     float backoff;
     int32_t index;
 
-    /* Linux accumulates X, Y, Z, stores backoff as binary32 before the branch,
-     * and stores each normal*backoff product before subtracting it. */
+    /* Linux accumulates X, Y, Z at wide precision, stores the complete backoff
+     * as binary32 before the branch, and stores each normal*backoff product
+     * before subtracting it. */
 #if EMULATE_X87
     backoff = x87f_store_f32(x87f_add(
         x87f_add(x87f_mul(x87f_load_f32(input[0]),
@@ -146,8 +147,9 @@ void PM_ClipVelocity(const vec3_t input, const vec3_t normal, vec3_t output,
             x87f_div(x87f_load_f32(backoff), x87f_load_f32(overbounce)));
     }
 #else
-    backoff = input[0] * normal[0] + input[1] * normal[1] +
-              input[2] * normal[2];
+    backoff = (float)(
+        ((WIDE_FLOAT)input[0] * normal[0] + (WIDE_FLOAT)input[1] * normal[1]) +
+        (WIDE_FLOAT)input[2] * normal[2]);
     if (backoff < 0.0f) {
         backoff *= overbounce;
     } else {
