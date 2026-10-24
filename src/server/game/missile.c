@@ -214,11 +214,6 @@ void G_RunMissile(gentity_t *ent)
     gentity_t *tempEnt;
     int byteDir;
 
-    /* Save current origin */
-    startOrigin[0] = ent->currentOrigin[0];
-    startOrigin[1] = ent->currentOrigin[1];
-    startOrigin[2] = ent->currentOrigin[2];
-
     /* Pre-trace: adjust Z down by 1.5 and check for immediate collision */
     if (ent->s.pos.trType == TR_STATIONARY &&
         ent->s.groundEntityNum != ENTITYNUM_WORLD) {
@@ -231,9 +226,10 @@ void G_RunMissile(gentity_t *ent)
             ent->s.pos.trType = TR_GRAVITY;
             ent->s.pos.trTime = level.time;
             ent->s.pos.trDuration = 0;
-            ent->s.pos.trBase[0] = startOrigin[0];
-            ent->s.pos.trBase[1] = startOrigin[1];
-            ent->s.pos.trBase[2] = startOrigin[2];
+            /* The trajectory reset reads the origin after the trace returns. */
+            ent->s.pos.trBase[0] = ent->currentOrigin[0];
+            ent->s.pos.trBase[1] = ent->currentOrigin[1];
+            ent->s.pos.trBase[2] = ent->currentOrigin[2];
             ent->s.pos.trDelta[0] = 0.0f;
             ent->s.pos.trDelta[1] = 0.0f;
             ent->s.pos.trDelta[2] = 0.0f;
@@ -355,7 +351,8 @@ void G_RunMissile(gentity_t *ent)
                                   x87f_load_f32(1.5f)),
                          x87f_load_f32(ent->currentOrigin[2]))));
 #else
-            ent->s.pos.trBase[2] += (trace.endpos[2] + 1.5f) - ent->currentOrigin[2];
+            /* Keep the height adjustment live until the trajectory-base store. */
+            ent->s.pos.trBase[2] += ((WIDE_FLOAT)trace.endpos[2] + 1.5f) - ent->currentOrigin[2];
 #endif
             ent->currentOrigin[0] = trace.endpos[0];
             ent->currentOrigin[1] = trace.endpos[1];
@@ -385,8 +382,14 @@ void G_RunMissile(gentity_t *ent)
             }
         }
     } else {
-        float velocityMag;
-#if EMULATE_X87
+        WIDE_FLOAT velocityMag;
+#if defined(WINDOWS_BEHAVIOR)
+        /* The native square root and zero comparison consume the live sum. */
+        volatile WIDE_FLOAT squareX = (WIDE_FLOAT)ent->s.pos.trDelta[0] * ent->s.pos.trDelta[0];
+        volatile WIDE_FLOAT squareY = (WIDE_FLOAT)ent->s.pos.trDelta[1] * ent->s.pos.trDelta[1];
+        volatile WIDE_FLOAT squareZ = (WIDE_FLOAT)ent->s.pos.trDelta[2] * ent->s.pos.trDelta[2];
+        velocityMag = coduo_x87_sqrtl((squareX + squareY) + squareZ);
+#elif EMULATE_X87
         velocityMag = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
             x87f_add(x87f_mul(x87f_load_f32(ent->s.pos.trDelta[0]),
                               x87f_load_f32(ent->s.pos.trDelta[0])),
@@ -395,12 +398,13 @@ void G_RunMissile(gentity_t *ent)
             x87f_mul(x87f_load_f32(ent->s.pos.trDelta[2]),
                      x87f_load_f32(ent->s.pos.trDelta[2])))));
 #else
-        velocityMag = (float)CoduoLibm_Sqrt((double)(ent->s.pos.trDelta[0] *
-                                           ent->s.pos.trDelta[0] +
-                                           ent->s.pos.trDelta[1] *
-                                           ent->s.pos.trDelta[1] +
-                                           ent->s.pos.trDelta[2] *
-                                           ent->s.pos.trDelta[2]));
+        /* Linux stores the sum as double for libm, then rounds its result to float. */
+        volatile WIDE_FLOAT squareX = (WIDE_FLOAT)ent->s.pos.trDelta[0] * ent->s.pos.trDelta[0];
+        volatile WIDE_FLOAT squareY = (WIDE_FLOAT)ent->s.pos.trDelta[1] * ent->s.pos.trDelta[1];
+        volatile WIDE_FLOAT squareZ = (WIDE_FLOAT)ent->s.pos.trDelta[2] * ent->s.pos.trDelta[2];
+        volatile double squaredSpeed = (squareX + squareY) + squareZ;
+        volatile float storedSpeed = CoduoLibm_Sqrt(squaredSpeed);
+        velocityMag = storedSpeed;
 #endif
         if (velocityMag != 0.0f) {
             ent->s.groundEntityNum = ENTITYNUM_NONE;
