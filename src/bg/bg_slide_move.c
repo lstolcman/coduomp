@@ -8,6 +8,7 @@
 #include "compat/libm/coduo_libm.h"
 #endif
 #include "compat/coduo_native_x87.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
@@ -612,7 +613,7 @@ int32_t PM_SlideMove(int32_t gravity)
                     continue;
                 }
                 /* This dot is compared UNROUNDED on the x87 stack (no float
-                 * store before the FCOMP 0.1 double) — keep it inline. */
+                 * store before the FCOMP 0.1 double); retain the wide intermediate. */
 #if EMULATE_X87
                 const x87f secondPlaneDot = x87f_add(
                     x87f_add(
@@ -626,11 +627,11 @@ int32_t PM_SlideMove(int32_t gravity)
                         x87f_load_f64(PM_SLIDEMOVE_INTO_PLANE_EPS),
                         secondPlaneDot)) {
 #else
-                long double secondPlaneDot =
-                    ((long double)clipVelocity[0] * (long double)planes[j][0]
-                     + (long double)clipVelocity[1] * (long double)planes[j][1])
-                    + (long double)clipVelocity[2] * (long double)planes[j][2];
-                if (secondPlaneDot >= (long double)PM_SLIDEMOVE_INTO_PLANE_EPS) {
+                WIDE_FLOAT secondPlaneDot =
+                    ((WIDE_FLOAT)clipVelocity[0] * (WIDE_FLOAT)planes[j][0]
+                     + (WIDE_FLOAT)clipVelocity[1] * (WIDE_FLOAT)planes[j][1])
+                    + (WIDE_FLOAT)clipVelocity[2] * (WIDE_FLOAT)planes[j][2];
+                if (secondPlaneDot >= PM_SLIDEMOVE_INTO_PLANE_EPS) {
 #endif
                     continue;                             /* still ok against plane j */
                 }
@@ -865,7 +866,7 @@ int32_t PM_SlideMove(int32_t gravity)
                         continue;
                     }
                     /* Compared UNROUNDED (no float store before the FCOMP 0.1
-                     * double at 0x3000f0a4) — keep the dot inline. */
+                     * double at 0x3000f0a4); retain the wide intermediate. */
 #if EMULATE_X87
                     const x87f thirdPlaneDot = x87f_add(
                         x87f_add(
@@ -880,12 +881,12 @@ int32_t PM_SlideMove(int32_t gravity)
                             x87f_load_f64(PM_SLIDEMOVE_INTO_PLANE_EPS),
                             thirdPlaneDot)) {
 #else
-                    long double thirdPlaneDot =
-                        ((long double)clipVelocity[0] * (long double)planes[k][0]
-                         + (long double)clipVelocity[1] * (long double)planes[k][1])
-                        + (long double)clipVelocity[2] * (long double)planes[k][2];
+                    WIDE_FLOAT thirdPlaneDot =
+                        ((WIDE_FLOAT)clipVelocity[0] * (WIDE_FLOAT)planes[k][0]
+                         + (WIDE_FLOAT)clipVelocity[1] * (WIDE_FLOAT)planes[k][1])
+                        + (WIDE_FLOAT)clipVelocity[2] * (WIDE_FLOAT)planes[k][2];
                     /* TEST AH,1 again accepts below and unordered. */
-                    if (!(thirdPlaneDot >= (long double)PM_SLIDEMOVE_INTO_PLANE_EPS)) {
+                    if (!(thirdPlaneDot >= PM_SLIDEMOVE_INTO_PLANE_EPS)) {
 #endif
                         ps = (playerState_t *)move->ps;
                         ps->velocity[2] = 0.0f;
