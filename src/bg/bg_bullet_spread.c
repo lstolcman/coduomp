@@ -20,6 +20,12 @@ enum {
 
 #define BG_BULLET_TRACE_DISTANCE 10000.0f
 
+#if defined(LINUX_BEHAVIOR)
+/* Widen this binary64 operand for evaluation; an L-suffixed decimal has a
+ * different value on hosts with an extended long double. */
+static const double BG_BULLET_PI = 3.141592653589793;
+#endif
+
 /*
  * Complete random bullet-spread subsystem.  The Windows cgame/game bodies are
  * instruction-identical after relocating constants, calls, and data:
@@ -104,12 +110,12 @@ void gunrandom(float *x, float *y)
         x87f_load_i32(radiusSample), x87f_load_f32(2147483648.0f)));
     radians = x87f_store_f32(x87f_div(
         x87f_mul(x87f_load_f32(angleDegrees),
-                 x87f_load_f64(3.141592653589793)),
+                 x87f_load_f64(BG_BULLET_PI)),
         x87f_load_f64(180.0)));
 #else
     radius = (float)((long double)radiusSample / 2147483648.0f);
     radians = (float)(((long double)angleDegrees *
-                       3.141592653589793L) /
+                       BG_BULLET_PI) /
                       180.0L);
 #endif
 
@@ -216,11 +222,11 @@ void BG_Bullet_Endpos(float spread, vec3_t end,
 #if EMULATE_X87
     tangentArgument = x87f_store_f64(x87f_div(
         x87f_mul(x87f_load_f32(spread),
-                 x87f_load_f64(3.141592653589793)),
+                 x87f_load_f64(BG_BULLET_PI)),
         x87f_load_f64(180.0)));
 #else
     tangentArgument = (double)(((long double)spread *
-                                3.141592653589793L) /
+                                BG_BULLET_PI) /
                                180.0L);
 #endif
     tangent = (float)tan(tangentArgument);
