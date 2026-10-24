@@ -14,6 +14,8 @@
 #include "scr_vm.h"
 #include "g_syscalls.h"
 #include "game_functions.h"
+#include "compat/coduo_fp_conversion.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #define ENTITY_FLAG_HIDDEN 0x00001000u
@@ -67,19 +69,29 @@ static void game_compat_script_entity_add_abs_bounds(gentity_t *ent, vec3_t mins
     maxs[2] = ent->currentOrigin[2] + ent->maxs[2];
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
+/* NOT_FROM_ORIGINAL_SOURCE: preserve the strict bounds comparisons and their
+ * stored operands. Windows keeps the second box's X maximum wide until the
+ * first comparison; Linux rounds all six translated bounds to float. */
 static qboolean game_compat_script_entity_contents_bounds_touch(const vec3_t aMins,
                                                  const vec3_t aMaxs,
                                                  gentity_t *b)
 {
     vec3_t bMins;
-    vec3_t bMaxs;
 
-    game_compat_script_entity_add_abs_bounds(b, bMins, bMaxs);
+    bMins[0] = b->currentOrigin[0] + b->mins[0];
+    bMins[1] = b->currentOrigin[1] + b->mins[1];
+    bMins[2] = b->currentOrigin[2] + b->mins[2];
+#if defined(WINDOWS_BEHAVIOR)
+    WIDE_FLOAT bMaxX = (WIDE_FLOAT)b->maxs[0] + (WIDE_FLOAT)b->currentOrigin[0];
+#else
+    float bMaxX = b->currentOrigin[0] + b->maxs[0];
+#endif
+    float bMaxY = b->currentOrigin[1] + b->maxs[1];
+    float bMaxZ = b->currentOrigin[2] + b->maxs[2];
 
-    return aMins[0] < bMaxs[0] ||
-           aMins[1] < bMaxs[1] ||
-           aMins[2] < bMaxs[2] ||
+    return aMins[0] < bMaxX ||
+           aMins[1] < bMaxY ||
+           aMins[2] < bMaxZ ||
            bMins[0] < aMaxs[0] ||
            bMins[1] < aMaxs[1] ||
            bMins[2] < aMaxs[2];
@@ -326,13 +338,15 @@ void ScrCmd_PlaySound(uint32_t scriptObject)
     G_PlaySoundAlias(ent, (uint8_t)soundAlias);
 }
 
-/* VERIFIED_DECOMPILER(0x68b2e, 78b2e_script_method_scriptbuiltin_playloopsound.c, VERIFY-SCRIPT-ENTITY-METHODS-PACKET-2026-06-17): DATAFLOW_VERIFIED - sound string lookup, -1 soundTime store, byte-masked clientSound store checked against current decompiler output. */
+/* Resolve the script argument and sound alias before changing the entity's
+ * looping-sound state; either lookup can report an error. */
 void ScrCmd_PlayLoopSound(uint32_t scriptObject)
 {
     gentity_t *ent = script_object_to_gentity(scriptObject);
+    int soundAlias = G_SoundAliasIndex(Scr_GetString(0));
 
     ent->soundTime = -1;
-    ent->s.clientSound = G_SoundAliasIndex(Scr_GetString(0)) & 0xff;
+    ent->s.clientSound = soundAlias;
 }
 
 /* VERIFIED_DECOMPILER(0x68b8d, 78b8d_script_method_scriptbuiltin_stoploopsound.c, VERIFY-SCRIPT-ENTITY-METHODS-PACKET-2026-06-17): DATAFLOW_VERIFIED - level.time+300 soundTime store and clientSound clear checked against current decompiler output. */
@@ -401,26 +415,28 @@ void ScrCmd_SetNormalHealth(uint32_t scriptObject)
         value = 1.0f;
     }
 
-    /* fild maxHealth/normalMaxHealth * value(float), fistp-direct truncate. */
+    /* Keep the integer scale exact and the product wide until conversion.
+     * Windows consumes the low dword of its qword conversion; Linux uses
+     * signed-dword truncation. */
     if (ent->client == 0) {
         if (ent->maxHealth == 0) {
-            health = game_compat_int32_from_float_trunc(value);
+            health = coduo_fp_to_i32_extended((WIDE_FLOAT)value);
         } else {
-#if EMULATE_X87
+#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
             health = x87f_store_i32_trunc(x87f_mul(
                 x87f_load_i32(ent->maxHealth), x87f_load_f32(value)));
 #else
-            health = game_compat_int32_from_long_double_trunc(
-                (long double)ent->maxHealth * (long double)value);
+            health = coduo_fp_to_i32_extended(
+                (WIDE_FLOAT)ent->maxHealth * (WIDE_FLOAT)value);
 #endif
         }
     } else {
-#if EMULATE_X87
+#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
         health = x87f_store_i32_trunc(x87f_mul(
             x87f_load_i32(ent->client->normalMaxHealth), x87f_load_f32(value)));
 #else
-        health = game_compat_int32_from_long_double_trunc(
-            (long double)ent->client->normalMaxHealth * (long double)value);
+        health = coduo_fp_to_i32_extended(
+            (WIDE_FLOAT)ent->client->normalMaxHealth * (WIDE_FLOAT)value);
 #endif
     }
 
@@ -465,7 +481,7 @@ void ScrCmd_DoDamage(uint32_t scriptObject)
     }
 
     G_Damage(target, inflictor, attacker, dirPtr, point,
-             game_compat_int32_from_float_trunc(damageAmount),
+             coduo_fp_to_i32_extended((WIDE_FLOAT)damageAmount),
              0, meansOfDeath, 0);
 }
 
@@ -495,7 +511,7 @@ void ScrCmd_DoDamageMod(uint32_t scriptObject)
     meansOfDeath = G_IndexForMeansOfDeath(Scr_GetString(2));
 
     G_Damage(target, 0, 0, dirPtr, point,
-             game_compat_int32_from_float_trunc(damageAmount),
+             coduo_fp_to_i32_extended((WIDE_FLOAT)damageAmount),
              0, meansOfDeath, 0);
 }
 
@@ -561,21 +577,38 @@ void ScrCmd_VerifyPosition(uint32_t scriptObject)
          * 0x6933b..0x693f4: all six components are scaled by 1.2f in place
          * (rounded to float), then the origin is added in place (rounded
          * again), then mins[2] alone gets the 32.0f bottom adjust as a third
-         * separate rounding.
+         * separate rounding on Linux. Windows retains the X/Y minimum products
+         * until their origin additions, and retains the Z minimum's origin
+         * addition until its bottom adjustment. All other products and sums
+         * retain their binary32 stores.
          */
+#if defined(WINDOWS_BEHAVIOR)
+        WIDE_FLOAT scaledMinX = (WIDE_FLOAT)mins[0] * VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
+        WIDE_FLOAT scaledMinY = (WIDE_FLOAT)mins[1] * VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
+#else
         mins[0] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         mins[1] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
+#endif
         mins[2] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         maxs[0] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         maxs[1] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         maxs[2] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
+#if defined(WINDOWS_BEHAVIOR)
+        mins[0] = (float)(scaledMinX + (WIDE_FLOAT)ent->currentOrigin[0]);
+        mins[1] = (float)(scaledMinY + (WIDE_FLOAT)ent->currentOrigin[1]);
+#else
         mins[0] += ent->currentOrigin[0];
         mins[1] += ent->currentOrigin[1];
         mins[2] += ent->currentOrigin[2];
+#endif
         maxs[0] += ent->currentOrigin[0];
         maxs[1] += ent->currentOrigin[1];
         maxs[2] += ent->currentOrigin[2];
+#if defined(WINDOWS_BEHAVIOR)
+        mins[2] = (float)(((WIDE_FLOAT)mins[2] + (WIDE_FLOAT)ent->currentOrigin[2]) - VERIFYPOSITION_VEHICLE_BOTTOM_ADJUST);
+#else
         mins[2] -= VERIFYPOSITION_VEHICLE_BOTTOM_ADJUST;
+#endif
 
         count = trap_EntitiesInBox(mins, maxs, entityNumbers,
                                    VERIFYPOSITION_MAX_ENTITIES,
