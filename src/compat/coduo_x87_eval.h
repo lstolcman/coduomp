@@ -1,8 +1,9 @@
 #ifndef CODUO_X87_EVAL_H
 #define CODUO_X87_EVAL_H
 
-/* NOT_FROM_ORIGINAL_SOURCE: carrier for a live x87 intermediate, never an ABI
- * or stored-data type. The original-compiler build profile uses float where
+/* NOT_FROM_ORIGINAL_SOURCE: carrier for a live x87 intermediate, never a fixed
+ * external ABI or stored-data layout type. Internal call boundaries may use it
+ * with matching declarations and consumers. The original-compiler profile uses float where
  * its generated code has been verified to retain the live x87 value. Modern
  * builds use long double to retain native x87 precision where available and
  * the widest standard native floating-point type elsewhere. Explicit float
