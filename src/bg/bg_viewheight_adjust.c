@@ -386,7 +386,7 @@ void PM_ViewHeightAdjust(void)
                         originAdjust - pm->ps->viewHeightLerpPosAdj;
                     if (fabsl((long double)pm->ps->viewHeightLerpPosAdj -
                               (long double)originAdjust) >
-                        (long double)0.05) {
+                        (long double)0.05f) {
                         vec3_t savedVelocity;
                         vec3_t movementDirection;
 
