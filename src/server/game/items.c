@@ -20,6 +20,8 @@
 #include "game_functions.h"
 #include "qcommon/info.h"
 #include "compat/crt/qsort_compat.h"
+#include "compat/coduo_fp_conversion.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
 
@@ -1900,11 +1902,11 @@ static void game_compat_touch_item_schedule_respawn(gentity_t *itemEnt, int resp
 #if EMULATE_X87
         respawnSeconds =
             x87f_store_i32_trunc(x87f_load_f32(wait));
-#elif defined(__x86_64__)
-        respawnSeconds =
-            CODUO_X87_TRUNCATE_I32((long double)wait);
 #else
-        respawnSeconds = (int32_t)wait;
+        /* Windows consumes a signed-qword conversion's low dword; Linux
+         * truncates directly to a signed dword. Preserve that distinction
+         * for both the wait value and the live random product below. */
+        respawnSeconds = coduo_fp_to_i32_extended((WIDE_FLOAT)wait);
 #endif
     }
 
@@ -1914,13 +1916,9 @@ static void game_compat_touch_item_schedule_respawn(gentity_t *itemEnt, int resp
             x87f_mul(x87f_load_f64(
                          coduo_server_rand_signed_unit()),
                      x87f_load_f32(random)));
-#elif defined(__x86_64__)
-        respawnSeconds += CODUO_X87_TRUNCATE_I32(
-            (long double)coduo_server_rand_signed_unit() *
-            (long double)random);
 #else
-        respawnSeconds += (int32_t)(
-            (long double)coduo_server_rand_signed_unit() * random);
+        respawnSeconds += coduo_fp_to_i32_extended(
+            (WIDE_FLOAT)coduo_server_rand_signed_unit() * (WIDE_FLOAT)random);
 #endif
         if (respawnSeconds < 1) {
             respawnSeconds = 1;
