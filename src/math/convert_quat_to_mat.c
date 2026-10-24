@@ -242,8 +242,9 @@ void ConvertQuatToMat(float quaternionAndMatrix[9])
     xx = quaternionAndMatrix[0] * quaternionAndMatrix[0];
     yy = quaternionAndMatrix[1] * quaternionAndMatrix[1];
     zz = quaternionAndMatrix[2] * quaternionAndMatrix[2];
-    scale = ((xx + yy) + zz) +
-            quaternionAndMatrix[3] * quaternionAndMatrix[3];
+    /* The squared lanes round separately; the complete magnitude stays wide
+     * until its own float store. */
+    scale = (float)((((WIDE_FLOAT)xx + yy) + zz) + (WIDE_FLOAT)quaternionAndMatrix[3] * quaternionAndMatrix[3]);
 
     if (scale != 0.0f) {
         scale = 2.0f / scale;
@@ -257,17 +258,18 @@ void ConvertQuatToMat(float quaternionAndMatrix[9])
         quaternionAndMatrix[1] *= scale;
         yz = quaternionAndMatrix[1] * quaternionAndMatrix[2];
         yw = quaternionAndMatrix[1] * quaternionAndMatrix[3];
-        zw = quaternionAndMatrix[2] * quaternionAndMatrix[3] * scale;
+        zw = (float)((WIDE_FLOAT)quaternionAndMatrix[2] * quaternionAndMatrix[3] * scale);
 
-        quaternionAndMatrix[0] = 1.0f - (yy + zz);
+        /* The diagonal sum remains wide through subtraction from one. */
+        quaternionAndMatrix[0] = (float)(1.0f - ((WIDE_FLOAT)yy + zz));
         quaternionAndMatrix[1] = xy + zw;
         quaternionAndMatrix[2] = xz - yw;
         quaternionAndMatrix[3] = xy - zw;
-        quaternionAndMatrix[4] = 1.0f - (xx + zz);
+        quaternionAndMatrix[4] = (float)(1.0f - ((WIDE_FLOAT)xx + zz));
         quaternionAndMatrix[5] = yz + xw;
         quaternionAndMatrix[6] = xz + yw;
         quaternionAndMatrix[7] = yz - xw;
-        quaternionAndMatrix[8] = 1.0f - (xx + yy);
+        quaternionAndMatrix[8] = (float)(1.0f - ((WIDE_FLOAT)xx + yy));
     } else {
 #endif
         quaternionAndMatrix[0] = 1.0f;
