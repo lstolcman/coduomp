@@ -1,6 +1,5 @@
 #include "q_math.h"
 
-#include "compat/coduo_native_x87.h"
 #include "compat/coduo_x87emu.h"
 
 #include <stdint.h>
@@ -67,7 +66,7 @@ void VectorRotateAngles(const vec3_t input, const vec3_t angles,
                 (long double)3.141592653589793 / 180.0L);
 #endif
 #endif
-            coduo_x87_sincos(radians, &sine, &cosine);
+            CG_SinCos(radians, &sine, &cosine);
 
             const int32_t first = componentPairs[axis][0];
             const int32_t second = componentPairs[axis][1];
