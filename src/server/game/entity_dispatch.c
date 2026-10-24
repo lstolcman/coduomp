@@ -20,6 +20,7 @@
 #include "scr_vm.h"
 #include "compat/crt/atof_compat.h"
 #include "compat/coduo_fp_conversion.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
 #include "compat/libm/coduo_libm.h"
@@ -1088,12 +1089,13 @@ static int game_compat_g_mover_push_bounds_overlap(const gentity_t *ent,
                                     const float *mins,
                                     const float *maxs)
 {
-    return ent->absMin[0] < maxs[0] &&
-           ent->absMin[1] < maxs[1] &&
-           ent->absMin[2] < maxs[2] &&
-           mins[0] < ent->absMax[0] &&
-           mins[1] < ent->absMax[1] &&
-           mins[2] < ent->absMax[2];
+    /* Only ordered disjoint comparisons reject a candidate. */
+    return !(ent->absMin[0] >= maxs[0] ||
+             ent->absMin[1] >= maxs[1] ||
+             ent->absMin[2] >= maxs[2] ||
+             ent->absMax[0] <= mins[0] ||
+             ent->absMax[1] <= mins[1] ||
+             ent->absMax[2] <= mins[2]);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: pushed stack record writer; extracted during reconstruction of 0x60c1b. */
@@ -1138,8 +1140,19 @@ int G_MoverPush(gentity_t *mover, float *posDelta, float *angDelta,
         float radius = RadiusFromBounds(mover->mins, mover->maxs);
 
         for (int axis = 0; axis < 3; axis++) {
-            finalMins[axis] = mover->currentOrigin[axis] - radius + posDelta[axis];
-            finalMaxs[axis] = mover->currentOrigin[axis] + radius + posDelta[axis];
+            /* Keep each two-operation expression wide until its bounds store.
+             * Windows adds the translation before the other positive term;
+             * Linux adds the radius to the origin first. */
+            finalMins[axis] = (float)(((WIDE_FLOAT)mover->currentOrigin[axis] - radius) + posDelta[axis]);
+#if defined(WINDOWS_BEHAVIOR)
+            if (axis == 1) {
+                finalMaxs[axis] = (float)(((WIDE_FLOAT)radius + posDelta[axis]) + mover->currentOrigin[axis]);
+            } else {
+                finalMaxs[axis] = (float)(((WIDE_FLOAT)mover->currentOrigin[axis] + posDelta[axis]) + radius);
+            }
+#else
+            finalMaxs[axis] = (float)(((WIDE_FLOAT)mover->currentOrigin[axis] + radius) + posDelta[axis]);
+#endif
             queryMins[axis] = mover->currentOrigin[axis] - radius;
             queryMaxs[axis] = mover->currentOrigin[axis] + radius;
         }
@@ -1228,6 +1241,7 @@ void G_MoverTeam(gentity_t *ent)
 {
     gentity_t *blocker;
     gentity_t *current;
+    mover_push_record_t *record;
     vec3_t posEval;
     vec3_t angEval;
     vec3_t posDelta;
@@ -1276,12 +1290,11 @@ void G_MoverTeam(gentity_t *ent)
         current = current->teamChain;
     }
 
-    while (moverPushStackCursor > pushed) {
-        mover_push_record_t *record;
+    /* Roll back the saved records without changing the shared push cursor. */
+    for (record = moverPushStackCursor; record > pushed;) {
         gentity_t *pushed;
 
-        moverPushStackCursor--;
-        record = moverPushStackCursor;
+        --record;
         pushed = record->ent;
 
         pushed->currentOrigin[0] = record->origin[0];
