@@ -12,6 +12,8 @@
 /* The common BG source uses one role name for the module-owned prone-debug
  * cvar.  The cgame binary's original registration keeps its cg_ spelling. */
 #define bg_debugProneCheck cg_debugProneCheck
+/* NOT_FROM_ORIGINAL_SOURCE: cgame suppresses the invalid fall-height warning. */
+#define BG_PM_FALL_DAMAGE_WARNING(...) ((void)0)
 #define BG_PM_WEAPON_INFO(weaponIndex) (bg_weaponInfos[(weaponIndex)])
 
 /*

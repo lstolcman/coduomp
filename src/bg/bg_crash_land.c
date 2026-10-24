@@ -15,6 +15,7 @@
 #include "bg_pmove.h"
 
 #include "bg_player_state.h"
+#include "bg_pmove_services.h"
 
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_native_x87.h"
@@ -172,60 +173,61 @@ void PM_CrashLand(void)
 
     /*
      * 0x30009de2..0x30009e87: map the configured [min,max] fall-height envelope
-     * to integer damage [0,100]. Invalid thresholds, excluded pmTypes, or the
-     * no-fall-damage state suppress the result.
+     * to integer damage [0,100]. The game module also warns for invalid thresholds;
+     * excluded pmTypes and the no-fall-damage state suppress the result.
      */
     float maxHeight = bg_fallDamageMaxHeight.value;
     float minHeightForRange = bg_fallDamageMinHeight.value;
-    if (!(maxHeight <= minHeightForRange)) {
-        float minHeightForSign = bg_fallDamageMinHeight.value;
-        if (!(minHeightForSign < 0.0f)) {
-            float minHeightForFall = bg_fallDamageMinHeight.value;
-            if (!(fallHeight <= minHeightForFall) &&
-                ((uint8_t)pml.groundTrace.surfaceFlags &
-                 SURF_NODAMAGE) == 0) {
-                playerState_t *damagePs = move->ps;
-                if (damagePs->pmType < PM_TYPE_DEAD) {
-                    float maxHeightForCap = bg_fallDamageMaxHeight.value;
-                    if (fallHeight >= maxHeightForCap) {
-                        fallDamage = 100;
-                    } else {
-                        float minHeightForNumerator = bg_fallDamageMinHeight.value;
+    if (maxHeight <= minHeightForRange || bg_fallDamageMinHeight.value < 0.0f) {
+        BG_PM_FALL_DAMAGE_WARNING("bg_fallDamageMaxHeight and bg_fallDamageMinHeight "
+                                  "have bad values\n");
+        move = pm;
+    } else {
+        float minHeightForFall = bg_fallDamageMinHeight.value;
+        if (!(fallHeight <= minHeightForFall) &&
+            ((uint8_t)pml.groundTrace.surfaceFlags &
+             SURF_NODAMAGE) == 0) {
+            playerState_t *damagePs = move->ps;
+            if (damagePs->pmType < PM_TYPE_DEAD) {
+                float maxHeightForCap = bg_fallDamageMaxHeight.value;
+                if (fallHeight >= maxHeightForCap) {
+                    fallDamage = 100;
+                } else {
+                    float minHeightForNumerator = bg_fallDamageMinHeight.value;
 #if !EMULATE_X87
-                        long double numerator =
-                            (long double)fallHeight - minHeightForNumerator;
+                    long double numerator =
+                        (long double)fallHeight - minHeightForNumerator;
 #endif
-                        float maxHeightForDenominator =
-                            bg_fallDamageMaxHeight.value;
-                        float minHeightForDenominator =
-                            bg_fallDamageMinHeight.value;
+                    float maxHeightForDenominator =
+                        bg_fallDamageMaxHeight.value;
+                    float minHeightForDenominator =
+                        bg_fallDamageMinHeight.value;
 #if !EMULATE_X87
-                        long double denominator =
-                            (long double)maxHeightForDenominator
-                            - minHeightForDenominator;
+                    long double denominator =
+                        (long double)maxHeightForDenominator
+                        - minHeightForDenominator;
 #endif
 #if EMULATE_X87
-                        fallDamage = (int32_t)(uint32_t)x87f_store_i64_trunc(
-                            x87f_mul(
-                                x87f_div(
-                                    x87f_sub(x87f_load_f32(fallHeight),
-                                             x87f_load_f32(
-                                                 minHeightForNumerator)),
-                                    x87f_sub(
-                                        x87f_load_f32(
-                                            maxHeightForDenominator),
-                                        x87f_load_f32(
-                                            minHeightForDenominator))),
-                                x87f_load_f32(PM_CRASH_DAMAGE_SCALE)));
+                    fallDamage = (int32_t)(uint32_t)x87f_store_i64_trunc(
+                        x87f_mul(
+                            x87f_div(
+                                x87f_sub(x87f_load_f32(fallHeight),
+                                         x87f_load_f32(
+                                             minHeightForNumerator)),
+                                x87f_sub(
+                                    x87f_load_f32(
+                                        maxHeightForDenominator),
+                                    x87f_load_f32(
+                                        minHeightForDenominator))),
+                            x87f_load_f32(PM_CRASH_DAMAGE_SCALE)));
 #else
-                        fallDamage = coduo_fp_to_i32_extended(
-                            numerator / denominator * PM_CRASH_DAMAGE_SCALE);
+                    fallDamage = coduo_fp_to_i32_extended(
+                        numerator / denominator * PM_CRASH_DAMAGE_SCALE);
 #endif
-                        if (fallDamage < 0) {
-                            fallDamage = 0;
-                        } else if (fallDamage > 100) {
-                            fallDamage = 100;
-                        }
+                    if (fallDamage < 0) {
+                        fallDamage = 0;
+                    } else if (fallDamage > 100) {
+                        fallDamage = 100;
                     }
                 }
             }
