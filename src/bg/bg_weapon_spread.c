@@ -2,6 +2,7 @@
 
 #include "bg_pmove.h"
 #include "compat/coduo_int32_bits.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h"
 
 #include <stdint.h>
@@ -50,7 +51,8 @@ long double BG_GetMinSpreadForWeapon(const playerState_t *ps, int32_t weapon,
     int32_t duration;
     int32_t elapsed;
 
-    if (ps->viewHeightLerpTarget == ps->viewHeightCurrent ||
+    /* Compare the integer target without first rounding it to binary32. */
+    if ((WIDE_FLOAT)ps->viewHeightLerpTarget == (WIDE_FLOAT)ps->viewHeightCurrent ||
         lerpStartTime == 0) {
         if ((ps->playerStateFlags & PMF_PRONE) != 0) {
             return (long double)prone;
