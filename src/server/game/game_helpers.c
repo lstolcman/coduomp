@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "recovered_game.h"
+#include "compat/coduo_x87_eval.h"
 #include "game_globals.h"
 #include "game_functions.h"
 #include "g_syscalls.h"
@@ -80,18 +81,26 @@ static void game_compat_g_vector_subtract3(const float *lhs, const float *rhs, f
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local dot-product helper for activation recovery.
- * Stock inlines the dot at the call site (0x5721d: 3-mul/2-add kept 80-bit,
- * stored to float); the caller consumes it as a stored float, so rounding here
- * on return is equivalent -> shim. */
+ * The three products stay wide through both additions, then round to float.
+ * Windows adds Z/Y before X; Linux adds X/Y before Z (0x5721d). The caller
+ * consumes the stored float, so the return must retain that rounding point. */
 static float game_compat_g_dot_product3(const float *lhs, const float *rhs)
 {
+#if defined(WINDOWS_BEHAVIOR)
+    const int first = 2, last = 0;
+#else
+    const int first = 0, last = 2;
+#endif
 #if EMULATE_X87
     return x87f_store_f32(x87f_add(x87f_add(
-        x87f_mul(x87f_load_f32(lhs[0]), x87f_load_f32(rhs[0])),
+        x87f_mul(x87f_load_f32(lhs[first]), x87f_load_f32(rhs[first])),
         x87f_mul(x87f_load_f32(lhs[1]), x87f_load_f32(rhs[1]))),
-        x87f_mul(x87f_load_f32(lhs[2]), x87f_load_f32(rhs[2]))));
+        x87f_mul(x87f_load_f32(lhs[last]), x87f_load_f32(rhs[last]))));
 #else
-    return lhs[0] * rhs[0] + lhs[1] * rhs[1] + lhs[2] * rhs[2];
+    volatile float result = ((WIDE_FLOAT)lhs[first] * (WIDE_FLOAT)rhs[first]
+                          + (WIDE_FLOAT)lhs[1] * (WIDE_FLOAT)rhs[1])
+                          + (WIDE_FLOAT)lhs[last] * (WIDE_FLOAT)rhs[last];
+    return result;
 #endif
 }
 
@@ -325,7 +334,7 @@ int G_GetActivateEnt(gentity_t *ent, activate_candidate_t *candidates)
         vec3_t direction;
         float distance;
         float dot;
-        float baseScore;
+        volatile float baseScore;
 
         if (candidate == ent ||
             (candidate->s.eType != ET_ITEM &&
@@ -377,8 +386,8 @@ int G_GetActivateEnt(gentity_t *ent, activate_candidate_t *candidates)
                 x87f_sub(x87f_load_f32(dot), x87f_load_f32(ACTIVATE_MIN_DOT)),
                 x87f_sub(x87f_load_f32(1.0f), x87f_load_f32(ACTIVATE_MIN_DOT)))));
 #else
-        baseScore = 1.0f - (dot - ACTIVATE_MIN_DOT) /
-                    (1.0f - ACTIVATE_MIN_DOT);
+        baseScore = (WIDE_FLOAT)1.0f - ((WIDE_FLOAT)dot - (WIDE_FLOAT)ACTIVATE_MIN_DOT) /
+                    ((WIDE_FLOAT)1.0f - (WIDE_FLOAT)ACTIVATE_MIN_DOT);
 #endif
         /* 0x572a0/0x572c2: the falloff factor is stored to a float32 slot
          * before the distance-scale multiply, which rounds again. */
@@ -512,12 +521,14 @@ void G_CheckForCursorHints(gentity_t *ent)
                 x87f_load_f32(ent->currentOrigin[k])));
         }
 #else
-        mountPoint[0] = ent->currentOrigin[0] + forward[0] * 15.0f;
-        mountPoint[1] = ent->currentOrigin[1] + forward[1] * 15.0f;
+        mountPoint[0] = (WIDE_FLOAT)ent->currentOrigin[0] + (WIDE_FLOAT)forward[0] * 15.0f;
+        mountPoint[1] = (WIDE_FLOAT)ent->currentOrigin[1] + (WIDE_FLOAT)forward[1] * 15.0f;
         mountPoint[2] = ent->currentOrigin[2] + forward[2] * 15.0f;
 #endif
         /* 0x577e6-0x577f4: the +1.0f lift is a second float32 store on
-         * the already-rounded mountPoint[2] (single add -> native). */
+         * the already-rounded mountPoint[2] (single add -> native). Windows
+         * retains the preceding sum, but this yaw-only direction has Z == 0,
+         * so the sum is already exactly the stored origin Z on both paths. */
         mountPoint[2] += 1.0f;
 
         contents = trap_PointContents(mountPoint, PASS_ENTITY_NONE,
