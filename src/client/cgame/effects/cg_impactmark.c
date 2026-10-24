@@ -40,7 +40,7 @@ void CG_ImpactMark(qhandle_t markShader, const vec3_t origin, const vec3_t dir,
      * A prior pass declared them (markLifeTime, temporary), reading both backwards. */
     /* 0x3002e571..0x3002e5df builds one contiguous renderer projection axis:
      * [0] is normalized dir, [2] is the rotated perpendicular, and [1] is then
-     * overwritten with [2] x [0]. The syscall passes &axis[0], and the engine
+     * overwritten with [0] x [2]. The syscall passes &axis[0], and the engine
      * reads all three rows through its axis_t MarkFragments parameter. */
     axis_t   projectionAxis;          /* [esp+0x1c..0x3f] */
     vec3_t   markPoints[4];           /* [esp+0x68..]: the 4 source quad corners     */
@@ -73,16 +73,17 @@ void CG_ImpactMark(qhandle_t markShader, const vec3_t origin, const vec3_t dir,
     RotatePointAroundVector(projectionAxis[2], projectionAxis[0],
                             projectionAxis[1], orientation);
 
-    /* 3002e5a1-3002e5df: overwrite row 1 with row 2 x row 0. */
+    /* 3002e5a1-3002e5df: overwrite row 1 with row 0 x row 2, retaining both
+     * products through the subtraction before each binary32 output store. */
     projectionAxis[1][0] =
-        projectionAxis[2][2] * projectionAxis[0][1] -
-        projectionAxis[2][1] * projectionAxis[0][2];
+        (WIDE_FLOAT)projectionAxis[2][2] * (WIDE_FLOAT)projectionAxis[0][1] -
+        (WIDE_FLOAT)projectionAxis[2][1] * (WIDE_FLOAT)projectionAxis[0][2];
     projectionAxis[1][1] =
-        projectionAxis[2][0] * projectionAxis[0][2] -
-        projectionAxis[2][2] * projectionAxis[0][0];
+        (WIDE_FLOAT)projectionAxis[2][0] * (WIDE_FLOAT)projectionAxis[0][2] -
+        (WIDE_FLOAT)projectionAxis[2][2] * (WIDE_FLOAT)projectionAxis[0][0];
     projectionAxis[1][2] =
-        projectionAxis[2][1] * projectionAxis[0][0] -
-        projectionAxis[2][0] * projectionAxis[0][1];
+        (WIDE_FLOAT)projectionAxis[2][1] * (WIDE_FLOAT)projectionAxis[0][0] -
+        (WIDE_FLOAT)projectionAxis[2][0] * (WIDE_FLOAT)projectionAxis[0][1];
 
     /* 3002e5e3-3002e74b: form the four quad corners of side 2*radius, centered on
      * `origin` in the (axis[1], axis[2]) plane. Verified component-by-component
@@ -96,10 +97,12 @@ void CG_ImpactMark(qhandle_t markShader, const vec3_t origin, const vec3_t dir,
         float originMinusRc = origin[c] - rc;
 
         markPoints[0][c] = originMinusRc - rr; /* origin - r*axis1 - r*axis2 */
-        markPoints[1][c] = (rc + origin[c]) - rr;
+        /* Corners 1 and 2 keep their complete expressions wide until the
+         * destination store; rc, rr and originMinusRc above remain floats. */
+        markPoints[1][c] = ((WIDE_FLOAT)rc + (WIDE_FLOAT)origin[c]) - (WIDE_FLOAT)rr;
         markPoints[2][c] =
-            (projectionAxis[2][c] + projectionAxis[1][c]) * radius +
-            origin[c];
+            ((WIDE_FLOAT)projectionAxis[2][c] + (WIDE_FLOAT)projectionAxis[1][c]) * (WIDE_FLOAT)radius +
+            (WIDE_FLOAT)origin[c];
         markPoints[3][c] = rr + originMinusRc;
     }
 
