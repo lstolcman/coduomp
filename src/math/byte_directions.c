@@ -256,8 +256,8 @@ uint8_t DirToByte(const vec3_t direction)
                              : "st", "memory");
         if ((status & UINT16_C(0x4100)) == 0) {
 #else
-        /* Windows runs x87 at PC=53.  Volatile double steps preserve that
-         * normal-value graph until client EMULATE_X87 wiring is introduced. */
+        /* Windows rounds live operations at PC=53.  Double intermediates
+         * preserve that graph before the candidate's float store. */
         volatile double productZ =
             (double)bytedirs[index][2] * (double)direction[2];
         volatile double productX =
@@ -333,9 +333,10 @@ uint8_t DirToByte(const vec3_t direction)
                              : "st", "st(1)", "memory");
         if ((status & UINT16_C(0x4100)) == 0) {
 #else
-        dot = (direction[0] * bytedirs[index][0] +
-               direction[1] * bytedirs[index][1]) +
-              direction[2] * bytedirs[index][2];
+        /* Round the complete wide dot once before comparing candidates. */
+        dot = (float)(((WIDE_FLOAT)direction[0] * bytedirs[index][0] +
+                       (WIDE_FLOAT)direction[1] * bytedirs[index][1]) +
+                      (WIDE_FLOAT)direction[2] * bytedirs[index][2]);
         if (isless(bestDot, dot)) {
 #endif
             bestDot = dot;

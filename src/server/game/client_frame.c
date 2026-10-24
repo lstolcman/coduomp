@@ -902,17 +902,17 @@ void G_SetClientContents(gentity_t *ent)
 void ClientThink(int clientNum)
 {
     gentity_t *ent = &g_entities[clientNum];
-    gclient_t *client = ent->client;
 
     /* The original six dword loads/stores are the compiler's complete
      * usercmd_t assignment, including its two padding bytes. */
-    client->oldPmoveCommand = client->command;
+    ent->client->oldPmoveCommand = ent->client->command;
 
-    trap_GetUsercmd(clientNum, &client->command);
-    client->lastUsercmdTime = level.time;
+    trap_GetUsercmd(clientNum, &ent->client->command);
+    /* Use the entity's current client after the engine callback. */
+    ent->client->lastUsercmdTime = level.time;
 
     if (g_synchronousClients.integer == 0) {
-        ClientThink_real(ent, &client->command);
+        ClientThink_real(ent, &ent->client->command);
     }
 }
 
@@ -920,14 +920,12 @@ void ClientThink(int clientNum)
 /* VERIFIED_DECOMPILER(0x41dfc, 51dfc_G_RunClient.c, VERIFY-WAVE2-CLIENT-FRAME-STATE-2026-06-17): DATAFLOW_VERIFIED - synchronous ClientThink_real path, noclip exit, linkInfo fixed-link setup, trajectory/link stores, psOrigin copy, and linked pmType decrement match generated output. */
 void G_RunClient(gentity_t *ent)
 {
-    gclient_t *client = ent->client;
-
     if (g_synchronousClients.integer != 0) {
-        client->command.commandTime = level.time;
-        ClientThink_real(ent, &client->command);
+        ent->client->command.commandTime = level.time;
+        ClientThink_real(ent, &ent->client->command);
     }
 
-    if (client->noclip != 0) {
+    if (ent->client->noclip != 0) {
         return;
     }
 
@@ -937,7 +935,7 @@ void G_RunClient(gentity_t *ent)
      * recovered and these source-level names can be confirmed.
      */
     if (ent->linkInfo != 0) {
-        client->ps.pmType = client->sessionState == SESS_STATE_DEAD
+        ent->client->ps.pmType = ent->client->sessionState == SESS_STATE_DEAD
                              ? PM_TYPE_LINKED_DEAD
                              : PM_TYPE_LINKED;
         G_SetFixedLink(ent, RUNCLIENT_FIXED_LINK_MODE);
@@ -945,12 +943,12 @@ void G_RunClient(gentity_t *ent)
         ent->s.pos.trType = TR_INTERPOLATE;
         ent->s.apos.trType = TR_INTERPOLATE;
         trap_LinkEntity(ent);
-        client->ps.psOrigin[0] = ent->currentOrigin[0];
-        client->ps.psOrigin[1] = ent->currentOrigin[1];
-        client->ps.psOrigin[2] = ent->currentOrigin[2];
-    } else if (client->ps.pmType == PM_TYPE_LINKED ||
-               client->ps.pmType == PM_TYPE_LINKED_DEAD) {
-        client->ps.pmType--;
+        ent->client->ps.psOrigin[0] = ent->currentOrigin[0];
+        ent->client->ps.psOrigin[1] = ent->currentOrigin[1];
+        ent->client->ps.psOrigin[2] = ent->currentOrigin[2];
+    } else if (ent->client->ps.pmType == PM_TYPE_LINKED ||
+               ent->client->ps.pmType == PM_TYPE_LINKED_DEAD) {
+        ent->client->ps.pmType--;
     }
 }
 
