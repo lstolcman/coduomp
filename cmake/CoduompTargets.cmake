@@ -64,8 +64,8 @@ if(CODUOMP_BUILD_MODULES)
 		PREFIX ""
 		FOLDER "modules")
 	# The module exports dllEntry/vmMain through the ABI definition file in
-	# build-mk/abi. MSVC has no 80-bit long double, so the retail long-double
-	# equivalence assert is relaxed only after the explicit FP policy opt-in.
+	# build-mk/abi. Both MSVC targets retain software-x87 source paths; their C
+	# long double is binary64 even when x86 compiler arithmetic uses x87.
 	target_compile_definitions(uo_game_mp_x86 PRIVATE
 		WINDOWS_BEHAVIOR
 		EMULATE_X87=${CODUOMP_EMULATE_X87}

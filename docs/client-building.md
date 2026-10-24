@@ -95,30 +95,56 @@ can use the same shared-library name with different public record layouts.
 Use Visual Studio 2022 17.9 or newer with the C++ desktop workload and CMake 3.24 or newer.
 The CMake build reads the Makefile source manifests and builds the executable
 and all three modules. The POSIX dedicated server remains a Makefile target.
+The checked-in CMake presets generate Visual Studio/MSBuild projects. Select
+the `msvc` preset for the default **32-bit x86** build, which uses
+`/arch:IA32` for compiler-generated x87 arithmetic:
 
 ```sh
-cmake -S . -B .workbench/build/msvc-win32 -A Win32 -DCODUO_FP_FAITHFUL=relaxed -DMSS32_DLL=C:/Games/CoDUO/mss32.dll
-cmake --build .workbench/build/msvc-win32 --config Release --parallel 2
+cmake --preset msvc -DMSS32_DLL=C:/Games/CoDUO/mss32.dll
+cmake --build --preset msvc --parallel 2
 ```
 
 The x86 build uses Miles and generates its import library from the supplied
 retail `mss32.dll`; keep that DLL beside the executable when running it.
-For x64, use a separate build directory and `-A x64`, and omit `MSS32_DLL`.
-The x64 build uses Miniaudio, matching the Makefile architecture policy.
-For a single-configuration
-generator such as NMake, run in the matching x86 or x64 developer command prompt
-and pass `-DCMAKE_BUILD_TYPE=Release` or `Debug` at configure time.
+Explicitly select **64-bit x64** with:
+
+```sh
+cmake --preset msvc-x64
+cmake --build --preset msvc-x64 --parallel 2
+```
+
+**MSVC x64 cannot generate x87 arithmetic from C/C++.** Its compiler-generated
+floating-point expressions use SSE2 or newer instructions, so rounding and
+intermediate results can differ from the original game. Configuration emits
+a warning on this target. The x64 build uses Miniaudio, matching the Makefile
+architecture policy, and does not need `MSS32_DLL`.
+
+The presets keep separate build directories at `.workbench/build/msvc` and
+`.workbench/build/msvc-x64`; never change the architecture of an existing
+build directory. Without presets, specify `-A Win32` or `-A x64` explicitly
+for a Visual Studio generator, whose own default follows the host architecture.
+For Ninja or NMake, use the matching x86 or x64 developer command prompt and
+pass `-DCMAKE_BUILD_TYPE=Release` or `Debug` instead of `-A`. In Visual Studio's
+CMake interface, select `MSVC x86 (default)` or `MSVC x64 (floating-point
+differences)` from the configure-preset selector.
 
 Outputs are `bin/<configuration>/CoDUOMP.exe` and the cgame, UI, and game DLLs
 under `bin/<configuration>/uo/`, relative to the build directory. Keep the
 executable and modules from the same build and architecture together.
 
-MSVC has no 80-bit `long double`. This build therefore requires the same
-explicit `CODUO_FP_FAITHFUL=relaxed` acknowledgement as other toolchains that
-cannot meet the native x87 policy. It uses the existing SoftFloat-backed source
-paths and reconstructed math routines, with their documented transcendental
-fallbacks. Remaining native arithmetic has not reached retail parity. Win32
-`/arch:IA32` alone does not establish that parity.
+Architecture selection and source-path fidelity are separate. MSVC x86 can
+retain extended intermediates in x87 registers even though its C `long double`
+has the same storage format as `double`. The current MSVC build still selects
+existing SoftFloat-backed source paths on both architectures, with documented
+host-math fallbacks for some transcendental functions. Selecting x86 therefore
+does not yet mean that all software emulation has been removed or that the
+whole program matches retail arithmetic.
+
+The default `CODUO_FP_FAITHFUL=auto` permits both architectures and reports
+these limits; `relaxed` remains accepted for existing build commands. `strict`
+rejects the current MSVC implementation because whole-program parity remains
+unverified. A separate `relaxed` acknowledgement is not needed to configure
+the x64 preset; choosing it emits the architecture warning above.
 
 Pinned, hash-checked zlib, SDL2, libjpeg-turbo, curl, and GL headers download
 under the build directory. Set `BUNDLED_LIBS=OFF` and `CODUOMP_DEP_PREFIX` to use

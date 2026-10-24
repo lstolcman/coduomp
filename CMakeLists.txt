@@ -2,8 +2,9 @@
 # toolchains; source ownership comes from their shared build-mk manifests.
 #
 # See docs/client-building.md for x86 Miles input and architecture selection.
-# cmake -S . -B .workbench/build/msvc -A x64 -DCODUO_FP_FAITHFUL=relaxed
-# cmake --build .workbench/build/msvc --config Release
+# cmake --preset msvc -DMSS32_DLL=C:/Games/CoDUO/mss32.dll
+# cmake --build --preset msvc
+# The msvc preset selects x86; msvc-x64 explicitly selects the 64-bit port.
 cmake_minimum_required(VERSION 3.24)
 
 # Keep generated sources, downloads, and outputs below the root workbench.
