@@ -1,5 +1,5 @@
 // Authoritative bodies: uo_cgame_mp_x86.dll 0x30006980,
-// uo_game_mp_x86.dll 0x20006790, game.mp.uo.i386.so RVA 0x00021028.
+// uo_game_mp_x86.dll 0x20006720, game.mp.uo.i386.so RVA 0x00021028.
 //
 // BG_PlayerStateToEntityStateExtrapolate -- project playerState into an
 // entityState whose position is extrapolated for 50 milliseconds. Although
@@ -101,8 +101,8 @@ void BG_PlayerStateToEntityStateExtrapolate(playerState_t *ps,
             }
 
             if (eventExclusions[exclusionIndex] < 0) {
-                /* Retail reloads the event byte after the scan and reloads
-                 * eventSequence separately for the event and parm stores. */
+                /* Recoil leaves the input event ring unchanged, so this reload
+                 * retains the captured event. Reload eventSequence for each store. */
                 uint8_t eventForStore = (uint8_t)ps->events[sourceSlot];
                 uint32_t eventOutputSlot =
                     (uint32_t)es->eventSequence & (MAX_PS_EVENTS - 1);
