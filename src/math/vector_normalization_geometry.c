@@ -83,9 +83,10 @@ float Q_rsqrt(float value)
         return result;
     }
 #else
-    /* The i386 excess-precision return intentionally has no binary32 spill. */
-    return estimate *
-           (threeHalves - value * half * estimate * estimate);
+    /* Keep the Newton chain wide until this ABI's binary32 return boundary. */
+    return (float)((WIDE_FLOAT)estimate *
+                   ((WIDE_FLOAT)threeHalves - (WIDE_FLOAT)value * (WIDE_FLOAT)half *
+                    (WIDE_FLOAT)estimate * (WIDE_FLOAT)estimate));
 #endif
 }
 #else
@@ -142,8 +143,9 @@ float Q_rsqrt(float value)
                            [threeHalves] "m"(threeHalves)
                          : "st", "st(1)", "memory");
 #else
-    estimate = estimate *
-               (threeHalves - halfValue * estimate * estimate);
+    estimate = (float)((WIDE_FLOAT)estimate *
+                       ((WIDE_FLOAT)threeHalves - (WIDE_FLOAT)halfValue *
+                        (WIDE_FLOAT)estimate * (WIDE_FLOAT)estimate));
 #endif
     return estimate;
 }
@@ -205,7 +207,9 @@ float VectorNormalize2D(vec2_t vector)
             x87f_load_f32(vector[1]), x87f_load_f32(inverseLength)));
     }
 #else
-    lengthSquared = vector[0] * vector[0] + vector[1] * vector[1];
+    /* The squared sum has one binary32 store, after both products and the sum. */
+    lengthSquared = (float)((WIDE_FLOAT)vector[0] * (WIDE_FLOAT)vector[0] +
+                            (WIDE_FLOAT)vector[1] * (WIDE_FLOAT)vector[1]);
     length = (float)sqrt((double)lengthSquared);
     if (length != 0.0f) {
         const float inverseLength = 1.0f / length;
@@ -290,10 +294,10 @@ float VectorNormalize4D(vec4_t vector)
             x87f_load_f32(vector[3]), x87f_load_f32(inverseLength)));
     }
 #else
-    lengthSquared = (((vector[0] * vector[0]) +
-                      (vector[1] * vector[1])) +
-                     (vector[2] * vector[2])) +
-                    (vector[3] * vector[3]);
+    lengthSquared = (float)((((WIDE_FLOAT)vector[0] * (WIDE_FLOAT)vector[0] +
+                              (WIDE_FLOAT)vector[1] * (WIDE_FLOAT)vector[1]) +
+                             (WIDE_FLOAT)vector[2] * (WIDE_FLOAT)vector[2]) +
+                            (WIDE_FLOAT)vector[3] * (WIDE_FLOAT)vector[3]);
     length = (float)sqrt((double)lengthSquared);
     if (length != 0.0f) {
         const float inverseLength = 1.0f / length;
@@ -351,9 +355,9 @@ void VectorNormalizeFast(vec3_t vector)
         x87f_load_f32(vector[2]), x87f_load_f32(inverseLength)));
 #elif (defined(__i386__) || defined(__x86_64__)) && \
       (defined(__GNUC__) || defined(__clang__))
-    lengthSquared = ((vector[0] * vector[0]) +
-                     (vector[1] * vector[1])) +
-                    (vector[2] * vector[2]);
+    lengthSquared = (float)(((WIDE_FLOAT)vector[0] * (WIDE_FLOAT)vector[0] +
+                             (WIDE_FLOAT)vector[1] * (WIDE_FLOAT)vector[1]) +
+                            (WIDE_FLOAT)vector[2] * (WIDE_FLOAT)vector[2]);
     __asm__ __volatile__("flds %[lengthSquared]\n\t"
                          "fmuls %[half]\n\t"
                          "fstps %[halfLengthSquared]"
@@ -391,21 +395,21 @@ void VectorNormalizeFast(vec3_t vector)
     vector[1] = vector[1] * inverseLength;
     vector[2] = vector[2] * inverseLength;
 #else
-    lengthSquared = ((vector[0] * vector[0]) +
-                     (vector[1] * vector[1])) +
-                    (vector[2] * vector[2]);
+    lengthSquared = (float)(((WIDE_FLOAT)vector[0] * (WIDE_FLOAT)vector[0] +
+                             (WIDE_FLOAT)vector[1] * (WIDE_FLOAT)vector[1]) +
+                            (WIDE_FLOAT)vector[2] * (WIDE_FLOAT)vector[2]);
     halfLengthSquared = lengthSquared * half;
     memcpy(&bits, &lengthSquared, sizeof(bits));
     bits = Q_RSQRT_MAGIC - coduo_int32_sar_bits(bits, 1U);
     memcpy(&inverseLength, &bits, sizeof(inverseLength));
 #if defined(WINDOWS_BEHAVIOR)
-    inverseLength = inverseLength *
-        (threeHalves -
-         (inverseLength * inverseLength) * halfLengthSquared);
+    inverseLength = (float)((WIDE_FLOAT)inverseLength *
+        ((WIDE_FLOAT)threeHalves -
+         ((WIDE_FLOAT)inverseLength * (WIDE_FLOAT)inverseLength) * (WIDE_FLOAT)halfLengthSquared));
 #else
-    inverseLength = inverseLength *
-        (threeHalves -
-         (halfLengthSquared * inverseLength) * inverseLength);
+    inverseLength = (float)((WIDE_FLOAT)inverseLength *
+        ((WIDE_FLOAT)threeHalves -
+         ((WIDE_FLOAT)halfLengthSquared * (WIDE_FLOAT)inverseLength) * (WIDE_FLOAT)inverseLength));
 #endif
     vector[0] = vector[0] * inverseLength;
     vector[1] = vector[1] * inverseLength;
@@ -617,12 +621,12 @@ void MakeNormalVectors(const vec3_t forward, vec3_t right, vec3_t up)
                          : [dot] "m"(dot), [forward] "m"(forward[2])
                          : "st", "st(1)", "memory");
 #else
-    dot = ((right[0] * forward[0]) +
-           (right[1] * forward[1])) +
-          (right[2] * forward[2]);
-    right[0] = (-dot) * forward[0] + right[0];
-    right[1] = (-dot) * forward[1] + right[1];
-    right[2] = (-dot) * forward[2] + right[2];
+    dot = (float)(((WIDE_FLOAT)right[0] * (WIDE_FLOAT)forward[0] +
+                   (WIDE_FLOAT)right[1] * (WIDE_FLOAT)forward[1]) +
+                  (WIDE_FLOAT)right[2] * (WIDE_FLOAT)forward[2]);
+    right[0] = (float)(-(WIDE_FLOAT)dot * (WIDE_FLOAT)forward[0] + (WIDE_FLOAT)right[0]);
+    right[1] = (float)(-(WIDE_FLOAT)dot * (WIDE_FLOAT)forward[1] + (WIDE_FLOAT)right[1]);
+    right[2] = (float)(-(WIDE_FLOAT)dot * (WIDE_FLOAT)forward[2] + (WIDE_FLOAT)right[2]);
 #endif
     (void)VectorNormalize(right);
     CrossProduct(right, forward, up);
@@ -705,9 +709,9 @@ int32_t PlaneFromPoints(vec4_t plane, const vec3_t point0,
                           x87f_load_f32(plane[1]))),
         x87f_mul(x87f_load_f32(point0[2]), x87f_load_f32(plane[2]))));
 #else
-    plane[3] = ((point0[0] * plane[0]) +
-                (point0[1] * plane[1])) +
-               (point0[2] * plane[2]);
+    plane[3] = (float)(((WIDE_FLOAT)point0[0] * (WIDE_FLOAT)plane[0] +
+                       (WIDE_FLOAT)point0[1] * (WIDE_FLOAT)plane[1]) +
+                      (WIDE_FLOAT)point0[2] * (WIDE_FLOAT)plane[2]);
 #endif
     return 1;
 }
@@ -944,21 +948,21 @@ void ProjectPointOnPlane(vec3_t output, const vec3_t point,
                            [output] "r"(output)
                          : "st", "st(1)", "memory");
 #else
-    const float lengthSquared = ((normal[0] * normal[0]) +
-                                 (normal[1] * normal[1])) +
-                                (normal[2] * normal[2]);
+    const float lengthSquared = (float)(((WIDE_FLOAT)normal[0] * (WIDE_FLOAT)normal[0] +
+                                         (WIDE_FLOAT)normal[1] * (WIDE_FLOAT)normal[1]) +
+                                        (WIDE_FLOAT)normal[2] * (WIDE_FLOAT)normal[2]);
     const float inverseLengthSquared = 1.0f / lengthSquared;
-    const float pointScale = (((normal[0] * point[0]) +
-                               (normal[1] * point[1])) +
-                              (normal[2] * point[2])) *
-                             inverseLengthSquared;
+    const float pointScale = (float)((((WIDE_FLOAT)normal[0] * (WIDE_FLOAT)point[0] +
+                                      (WIDE_FLOAT)normal[1] * (WIDE_FLOAT)point[1]) +
+                                     (WIDE_FLOAT)normal[2] * (WIDE_FLOAT)point[2]) *
+                                    (WIDE_FLOAT)inverseLengthSquared);
     const float scaled0 = normal[0] * inverseLengthSquared;
     const float scaled1 = normal[1] * inverseLengthSquared;
     const float scaled2 = normal[2] * inverseLengthSquared;
 
-    output[0] = point[0] - pointScale * scaled0;
-    output[1] = point[1] - pointScale * scaled1;
-    output[2] = point[2] - pointScale * scaled2;
+    output[0] = (float)((WIDE_FLOAT)point[0] - (WIDE_FLOAT)pointScale * (WIDE_FLOAT)scaled0);
+    output[1] = (float)((WIDE_FLOAT)point[1] - (WIDE_FLOAT)pointScale * (WIDE_FLOAT)scaled1);
+    output[2] = (float)((WIDE_FLOAT)point[2] - (WIDE_FLOAT)pointScale * (WIDE_FLOAT)scaled2);
 #endif
 }
 #endif
