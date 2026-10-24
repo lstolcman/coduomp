@@ -12,10 +12,10 @@
  *   uo_game_mp_x86.dll   PM_WaterEvents   0x2000c050
  *
  * Linux game retains the same three point-contents probes and transition
- * predicates at RVAs 0x00026cf1 and 0x0002a7b9.  Its unoptimized body chooses
- * the other operand as the initial FLD for commutative additions; that is a
- * compiler realization difference, not a different source computation.  All
- * arithmetic inputs are binary32 values or int32_t values and each probe Z is
+ * predicates at RVAs 0x00026cf1 and 0x0002a7b9. Windows adds half-height before
+ * the midpoint's origin/minimum terms; Linux adds it last. The stock lower Z
+ * bound is zero, so this grouping difference does not change the probe.
+ * Arithmetic inputs are binary32 values or int32_t values and each probe Z is
  * stored as binary32 before the callback, so a long-double expression is
  * sufficient without an emulated-x87 operation graph.
  */
