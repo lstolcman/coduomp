@@ -251,10 +251,15 @@ void MatrixInverse44(float input[4][4], float output[4][4])
     (dst) = x87f_store_f32(                                                   \
         x87f_sub(x87f_load_f32(dst), MATRIX_INVERSE44_DOT3(a, b, c, d, e, f)))
 #else
+/* Each cofactor group stays wide, but the positive group's store before SUB
+ * and the completed cofactor's store are both binary32 rounding boundaries. */
+#define MATRIX_INVERSE44_DOT3(a, b, c, d, e, f) \
+    (((WIDE_FLOAT)(a) * (WIDE_FLOAT)(b) + (WIDE_FLOAT)(c) * (WIDE_FLOAT)(d)) \
+     + (WIDE_FLOAT)(e) * (WIDE_FLOAT)(f))
 #define MATRIX_INVERSE44_SET(dst, a, b, c, d, e, f)                           \
-    (dst) = (((a) * (b)) + ((c) * (d))) + ((e) * (f))
+    (dst) = MATRIX_INVERSE44_DOT3(a, b, c, d, e, f)
 #define MATRIX_INVERSE44_SUB(dst, a, b, c, d, e, f)                           \
-    (dst) -= (((a) * (b)) + ((c) * (d))) + ((e) * (f))
+    (dst) -= MATRIX_INVERSE44_DOT3(a, b, c, d, e, f)
 #endif
 
 void MatrixInverse44(float input[4][4], float output[4][4])
@@ -393,10 +398,9 @@ void MatrixInverse44(float input[4][4], float output[4][4])
         x87f_load_f32(1.0f), x87f_load_f32(reciprocalDeterminant)));
 #else
     reciprocalDeterminant =
-        ((column0[0] * output[0][0] + column0[1] * output[0][1]) +
-         column0[2] * output[0][2]) +
-        column0[3] * output[0][3];
-    reciprocalDeterminant = 1.0f / reciprocalDeterminant;
+        MATRIX_INVERSE44_DOT3(column0[0], output[0][0], column0[1], output[0][1], column0[2], output[0][2])
+        + (WIDE_FLOAT)column0[3] * (WIDE_FLOAT)output[0][3];
+    reciprocalDeterminant = (WIDE_FLOAT)1.0f / (WIDE_FLOAT)reciprocalDeterminant;
 #endif
 
     for (index = 0; index < 16; ++index) {
@@ -404,9 +408,7 @@ void MatrixInverse44(float input[4][4], float output[4][4])
     }
 }
 
-#if EMULATE_X87
 #undef MATRIX_INVERSE44_DOT3
-#endif
 #undef MATRIX_INVERSE44_SET
 #undef MATRIX_INVERSE44_SUB
 #endif

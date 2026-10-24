@@ -199,8 +199,11 @@ void MatrixMultiplyEquals(axis_t left, axis_t right)
                   x87f_mul(x87f_load_f32(c), x87f_load_f32(d))),             \
          x87f_mul(x87f_load_f32(e), x87f_load_f32(f)))))
 #else
+/* Keep the complete dot wide until its destination's binary32 store. */
 #define MATRIX_LINUX_DOT(destination, a, b, c, d, e, f)                       \
-    ((destination) = ((a) * (b) + (c) * (d)) + (e) * (f))
+    ((destination) = ((WIDE_FLOAT)(a) * (WIDE_FLOAT)(b) +                    \
+                      (WIDE_FLOAT)(c) * (WIDE_FLOAT)(d)) +                 \
+                     (WIDE_FLOAT)(e) * (WIDE_FLOAT)(f))
 #endif
 
 void MatrixMultiply(axis_t left, axis_t right, axis_t output)

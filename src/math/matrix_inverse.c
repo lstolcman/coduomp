@@ -90,6 +90,9 @@ void MatrixInverse(axis_t input, axis_t output)
 #define MATRIX_INVERSE_MINOR(a, b, c, d)                                      \
     x87f_sub(x87f_mul(x87f_load_f32(a), x87f_load_f32(b)),                   \
              x87f_mul(x87f_load_f32(c), x87f_load_f32(d)))
+#else
+#define MATRIX_INVERSE_MINOR(a, b, c, d) \
+    ((WIDE_FLOAT)(a) * (WIDE_FLOAT)(b) - (WIDE_FLOAT)(c) * (WIDE_FLOAT)(d))
 #endif
 
 void MatrixInverse(axis_t input, axis_t output)
@@ -149,46 +152,46 @@ void MatrixInverse(axis_t input, axis_t output)
                              input[1][0], input[0][1]),
         x87f_load_f32(inverseDeterminant)));
 #else
+    /* Minors and their products stay wide. Only the determinant, reciprocal
+     * and output assignments narrow the accumulated values to binary32. */
     const float determinant =
-        ((input[2][2] * input[1][1] - input[2][1] * input[1][2]) *
+        (MATRIX_INVERSE_MINOR(input[2][2], input[1][1], input[2][1], input[1][2]) *
              input[0][0] -
-         (input[2][2] * input[0][1] - input[2][1] * input[0][2]) *
+         MATRIX_INVERSE_MINOR(input[2][2], input[0][1], input[2][1], input[0][2]) *
              input[1][0]) +
-        (input[1][2] * input[0][1] - input[1][1] * input[0][2]) *
+        MATRIX_INVERSE_MINOR(input[1][2], input[0][1], input[1][1], input[0][2]) *
             input[2][0];
-    const float inverseDeterminant = 1.0f / determinant;
+    const float inverseDeterminant = (WIDE_FLOAT)1.0f / (WIDE_FLOAT)determinant;
 
     output[0][0] =
-        (input[2][2] * input[1][1] - input[2][1] * input[1][2]) *
+        MATRIX_INVERSE_MINOR(input[2][2], input[1][1], input[2][1], input[1][2]) *
         inverseDeterminant;
     output[0][1] =
-        -(input[2][2] * input[0][1] - input[2][1] * input[0][2]) *
+        -MATRIX_INVERSE_MINOR(input[2][2], input[0][1], input[2][1], input[0][2]) *
         inverseDeterminant;
     output[0][2] =
-        (input[1][2] * input[0][1] - input[1][1] * input[0][2]) *
+        MATRIX_INVERSE_MINOR(input[1][2], input[0][1], input[1][1], input[0][2]) *
         inverseDeterminant;
     output[1][0] =
-        -(input[2][2] * input[1][0] - input[2][0] * input[1][2]) *
+        -MATRIX_INVERSE_MINOR(input[2][2], input[1][0], input[2][0], input[1][2]) *
         inverseDeterminant;
     output[1][1] =
-        (input[2][2] * input[0][0] - input[2][0] * input[0][2]) *
+        MATRIX_INVERSE_MINOR(input[2][2], input[0][0], input[2][0], input[0][2]) *
         inverseDeterminant;
     output[1][2] =
-        -(input[1][2] * input[0][0] - input[1][0] * input[0][2]) *
+        -MATRIX_INVERSE_MINOR(input[1][2], input[0][0], input[1][0], input[0][2]) *
         inverseDeterminant;
     output[2][0] =
-        (input[2][1] * input[1][0] - input[2][0] * input[1][1]) *
+        MATRIX_INVERSE_MINOR(input[2][1], input[1][0], input[2][0], input[1][1]) *
         inverseDeterminant;
     output[2][1] =
-        -(input[2][1] * input[0][0] - input[2][0] * input[0][1]) *
+        -MATRIX_INVERSE_MINOR(input[2][1], input[0][0], input[2][0], input[0][1]) *
         inverseDeterminant;
     output[2][2] =
-        (input[1][1] * input[0][0] - input[1][0] * input[0][1]) *
+        MATRIX_INVERSE_MINOR(input[1][1], input[0][0], input[1][0], input[0][1]) *
         inverseDeterminant;
 #endif
 }
 
-#if EMULATE_X87
 #undef MATRIX_INVERSE_MINOR
-#endif
 #endif
