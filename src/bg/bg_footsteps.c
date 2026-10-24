@@ -33,7 +33,7 @@
 //
 // The Windows game body at 0x2000b960 is instruction-identical to the cgame
 // body above apart from relocations. Linux retains the same state transitions
-// at RVA 0x0006912e, but its unoptimized build stores the intermediate speed,
+// at RVA 0x000297e4, but its unoptimized build stores the intermediate speed,
 // lerp, and bob-rate values as binary32 where Windows keeps several values live
 // in x87 registers. The whole-function behavior split below preserves that
 // genuine computational realization without mixing platform gates through the
@@ -447,10 +447,10 @@ void PM_Footsteps(void)
         x87f_mul(x87f_load_f32(pm->ps->velocity[1]),
                  x87f_load_f32(pm->ps->velocity[1])))));
 #else
-    speed2d = (float)CoduoLibm_Sqrt((double)(pm->ps->velocity[0] *
-                                   pm->ps->velocity[0] +
-                                   pm->ps->velocity[1] *
-                                   pm->ps->velocity[1]));
+    /* Keep both squares and their sum wide until the double sqrt argument;
+     * only the returned horizontal speed is stored as float. */
+    speed2d = (float)CoduoLibm_Sqrt((double)((WIDE_FLOAT)pm->ps->velocity[0] * pm->ps->velocity[0] +
+                                           (WIDE_FLOAT)pm->ps->velocity[1] * pm->ps->velocity[1]));
 #endif
     pm->horizontalSpeed = speed2d;
 
