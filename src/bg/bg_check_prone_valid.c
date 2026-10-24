@@ -2,6 +2,7 @@
 #include "bg_prone_debug.h"
 #include "bg_prone_services.h"
 
+#include "compat/coduo_x87_eval.h"
 #include "math/q_math.h"
 
 #include <math.h>
@@ -332,9 +333,16 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
     /* 0x3000767a..0x30007950: when the forward trace was shortened, reject an
      * excessive drop and try the normalized, raised connecting segment. */
     if (blockedForward != qfalse) {
+#if defined(WINDOWS_BEHAVIOR)
+        /* Keep the live drop through both sides of the slope comparison. */
+        WIDE_FLOAT slopeDrop =
+            (WIDE_FLOAT)groundTraceDepth * trace.fraction + BG_PRONE_TRACE_RADIUS;
+#else
+        /* The Linux path stores and reloads this intermediate as binary32. */
         float slopeDrop = (float)(
             (long double)groundTraceDepth * (long double)trace.fraction +
             BG_PRONE_TRACE_RADIUS);
+#endif
 
         if ((long double)frontClearance - (long double)slopeDrop <
             (long double)slopeDrop * BG_PRONE_MAX_SLOPE_RATIO) {
