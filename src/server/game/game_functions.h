@@ -123,7 +123,9 @@ extern void G_DamageClient(gentity_t *target, gentity_t *inflictor,
                            gentity_t *attacker, const float *dir,
                            const float *point, int damage, int flags,
                            int meansOfDeath, int hitLocation);
-extern float CanDamage(gentity_t *target, const float *origin);
+/* NOT_FROM_ORIGINAL_SOURCE: carry the live Windows visibility fraction across
+ * this internal call boundary; Linux rounds the fraction inside the callee. */
+extern WIDE_FLOAT CanDamage(gentity_t *target, const float *origin);
 extern qboolean G_IsVehicleImmune(gentity_t *vehicle, int meansOfDeath);
 extern int G_IsVehicleOccupantInvulnerable(gentity_t *player);
 extern float G_VehicleOccupantRadiusDamageScale(gentity_t *player);

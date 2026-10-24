@@ -392,7 +392,7 @@ int G_RadiusDamage(const float *origin, gentity_t *inflictor, gentity_t *attacke
 #endif
 
         /* Check line of sight */
-        float damageScale = CanDamage(ent, origin);
+        WIDE_FLOAT damageScale = CanDamage(ent, origin);
         if (damageScale > 0.0f) {
             if (LogAccuracyHit(ent, attacker)) {
                 hitAny = 1;
@@ -594,7 +594,7 @@ static int game_compat_can_damage_trace_point(gentity_t *target, const float *po
     return trace.fraction == 1.0f;
 }
 
-float CanDamage(gentity_t *target, const float *origin)
+WIDE_FLOAT CanDamage(gentity_t *target, const float *origin)
 {
     /* VERIFIED_DECOMPILER(0x503f8, 603f8_CanDamage.c, VERIFY-DAMAGE-SYSTEM-PACKET-2026-06-17): DATAFLOW_VERIFIED - full visibility sampling body. */
     vec3_t center;
@@ -628,7 +628,18 @@ float CanDamage(gentity_t *target, const float *origin)
         tracePoints[4][1] = center[1] - DAMAGE_VISIBILITY_SAMPLE_RADIUS;
         tracePoints[4][2] = center[2];
 
-        if (VectorDistanceSquared(center, origin) < DAMAGE_VISIBILITY_EPSILON) {
+        /* NOT_FROM_ORIGINAL_SOURCE: retain the original distance helper's
+         * live return through the comparison on wider host ABIs. The
+         * coordinate differences still round to float before squaring. */
+        float differenceX = origin[0] - center[0];
+        float differenceY = origin[1] - center[1];
+        float differenceZ = origin[2] - center[2];
+#if defined(WINDOWS_BEHAVIOR)
+        WIDE_FLOAT distanceSquared = ((WIDE_FLOAT)differenceZ * differenceZ + (WIDE_FLOAT)differenceY * differenceY) + (WIDE_FLOAT)differenceX * differenceX;
+#else
+        WIDE_FLOAT distanceSquared = ((WIDE_FLOAT)differenceX * differenceX + (WIDE_FLOAT)differenceY * differenceY) + (WIDE_FLOAT)differenceZ * differenceZ;
+#endif
+        if (distanceSquared < DAMAGE_VISIBILITY_EPSILON) {
             return 1.0f;
         }
 
@@ -651,7 +662,7 @@ float CanDamage(gentity_t *target, const float *origin)
     viewOrigin[2] = target->currentOrigin[2] + target->client->ps.viewHeightCurrent;
     G_AddLean(target, viewOrigin);
 
-    halfHeight = (viewOrigin[2] - target->currentOrigin[2]) * 0.5f;
+    halfHeight = (float)(((WIDE_FLOAT)viewOrigin[2] - (WIDE_FLOAT)target->currentOrigin[2]) * 0.5f);
 
     toOrigin[0] = origin[0] - target->currentOrigin[0];
     toOrigin[1] = origin[1] - target->currentOrigin[1];
@@ -698,21 +709,17 @@ float CanDamage(gentity_t *target, const float *origin)
     tracePoints[3][2] += halfHeight;
     tracePoints[4][2] -= halfHeight;
 #else
-    tracePoints[1][0] = center[0] + side[0] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
-    tracePoints[1][1] = center[1] + side[1] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
-    tracePoints[1][2] = center[2] + side[2] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
+    for (int j = 0; j < 3; j++) {
+        float plus = (float)((WIDE_FLOAT)center[j] + (WIDE_FLOAT)side[j] * DAMAGE_VISIBILITY_SAMPLE_RADIUS);
+        float minus = (float)((WIDE_FLOAT)center[j] - (WIDE_FLOAT)side[j] * DAMAGE_VISIBILITY_SAMPLE_RADIUS);
+        tracePoints[1][j] = plus;
+        tracePoints[2][j] = plus;
+        tracePoints[3][j] = minus;
+        tracePoints[4][j] = minus;
+    }
     tracePoints[1][2] += halfHeight;
-    tracePoints[2][0] = center[0] + side[0] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
-    tracePoints[2][1] = center[1] + side[1] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
-    tracePoints[2][2] = center[2] + side[2] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
     tracePoints[2][2] -= halfHeight;
-    tracePoints[3][0] = center[0] - side[0] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
-    tracePoints[3][1] = center[1] - side[1] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
-    tracePoints[3][2] = center[2] - side[2] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
     tracePoints[3][2] += halfHeight;
-    tracePoints[4][0] = center[0] - side[0] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
-    tracePoints[4][1] = center[1] - side[1] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
-    tracePoints[4][2] = center[2] - side[2] * DAMAGE_VISIBILITY_SAMPLE_RADIUS;
     tracePoints[4][2] -= halfHeight;
 #endif
 
@@ -728,11 +735,16 @@ float CanDamage(gentity_t *target, const float *origin)
     }
 
     if (hitCount < 4) {
-#if EMULATE_X87
+        /* Windows carries the live quotient into radius-damage scaling;
+         * Linux stores the quotient as binary32 before returning. */
+#if defined(WINDOWS_BEHAVIOR)
+        return (WIDE_FLOAT)hitCount / 3.0f;
+#elif EMULATE_X87
         return x87f_store_f32(
             x87f_div(x87f_load_i32(hitCount), x87f_load_f32(3.0f)));
 #else
-        return (float)hitCount / 3.0f;
+        volatile float fraction = (float)((WIDE_FLOAT)hitCount / 3.0f);
+        return fraction;
 #endif
     }
 
