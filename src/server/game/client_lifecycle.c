@@ -167,9 +167,8 @@ void ClientSpawn(gentity_t *ent, const float *origin, const float *angles)
     int clientNum = (int)(ent - g_entities);
     gclient_t *client = ent->client;
     uint8_t savedSession[CLIENT_SESSION_COPY_SIZE];
-    uint32_t preservedPsFlags =
-        client->ps.entityStateFlags & CLIENT_SPAWN_PRESERVED_PS_FLAGS;
-    int32_t preservedSpawnCount = client->ps.stats[STAT_SPAWN_COUNT];
+    uint32_t preservedPsFlags;
+    int32_t preservedSpawnCount;
 
     if ((client->ps.playerStateFlags & PSF_ACTIVE_PLAYER) != 0 &&
         (client->ps.entityStateFlags & CLIENT_SPAWN_TURRET_FLAGS) != 0) {
@@ -200,7 +199,10 @@ void ClientSpawn(gentity_t *ent, const float *origin, const float *angles)
     memcpy(ent->mins, playerMins, 3 * sizeof(float));
     memcpy(ent->maxs, playerMaxs, 3 * sizeof(float));
 
+    /* Capture preserved state after the teardown callbacks. */
+    preservedPsFlags = client->ps.entityStateFlags & CLIENT_SPAWN_PRESERVED_PS_FLAGS;
     memcpy(savedSession, &client->sessionState, sizeof(savedSession));
+    preservedSpawnCount = client->ps.stats[STAT_SPAWN_COUNT];
     memset(client, 0, sizeof(*client));
     memcpy(&client->sessionState, savedSession, sizeof(savedSession));
 
@@ -304,7 +306,8 @@ void ClientDisconnect(int clientNum)
         }
     }
 
-    if ((client->ps.entityStateFlags & EF_IN_VEHICLE) != 0) {
+    /* Read vehicle state through the entity's current client after callbacks. */
+    if ((ent->client->ps.entityStateFlags & EF_IN_VEHICLE) != 0) {
         VEH_UnlinkPlayer(ent, 0);
     }
 
