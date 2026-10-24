@@ -15,6 +15,7 @@
 #include "g_syscalls.h"
 #include "game_functions.h"
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
+#include "compat/coduo_x87_eval.h"
 
 #define RELIABLE_SERVER_COMMAND 1
 #define PLAYER_SAY_TEXT_SIZE 1023
@@ -577,19 +578,26 @@ void PlayerCmd_getFractionMaxAmmo(uint32_t entityNum)
         return;
     }
 
-    /* 0x4675c..0x46782: the reserve count IS rounded to a float slot (fild;
-     * fstp DWORD) before the divide, while the max-ammo divisor is fild'd
-     * directly with no float rounding.  So load reserve via (float) (rounds),
-     * maxAmmo via fild (exact). */
-    float reserveAmmoAsFloat =
+    /* Windows divides the exact integer reserve count; Linux rounds that
+     * count to binary32 first. Both retain the integer divisor's precision
+     * and round the quotient to float only when publishing the result. */
+#if defined(WINDOWS_BEHAVIOR)
+    int reserveAmmoForDivide = ent->client->ps.ammo[weaponInfo->ammoIndex];
+#else
+    float reserveAmmoForDivide =
         (float)ent->client->ps.ammo[weaponInfo->ammoIndex];
+#endif
     int maxAmmo = BG_GetAmmoTypeMax(weaponInfo->ammoIndex);
 #if EMULATE_X87
-    Scr_AddFloat(x87f_store_f32(x87f_div(
-        x87f_load_f32(reserveAmmoAsFloat), x87f_load_i32(maxAmmo))));
+#if defined(WINDOWS_BEHAVIOR)
+    x87f reserveValue = x87f_load_i32(reserveAmmoForDivide);
 #else
-    Scr_AddFloat((float)((long double)reserveAmmoAsFloat /
-                         (long double)maxAmmo));
+    x87f reserveValue = x87f_load_f32(reserveAmmoForDivide);
+#endif
+    Scr_AddFloat(x87f_store_f32(x87f_div(
+        reserveValue, x87f_load_i32(maxAmmo)));
+#else
+    Scr_AddFloat((float)((WIDE_FLOAT)reserveAmmoForDivide / (WIDE_FLOAT)maxAmmo));
 #endif
 }
 
