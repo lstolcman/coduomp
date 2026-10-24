@@ -2298,6 +2298,8 @@ int BG_WeaponAmmo(gclient_t *client, int weapon)
     return client->ps.ammo[ammoIndex] + client->ps.clips[clipIndex];
 }
 
-int32_t PMDebugLastWeaponState;
-uint32_t PMDebugLastWeaponAnim;
-const char *PMDebugPrefix = "pm";
+/* No weapon state or animation has been printed when the module is loaded. */
+#define PM_DEBUG_STATE_UNSET (-1)
+int32_t PMDebugLastWeaponState = PM_DEBUG_STATE_UNSET;
+uint32_t PMDebugLastWeaponAnim = UINT32_MAX;
+const char *PMDebugPrefix = "G";

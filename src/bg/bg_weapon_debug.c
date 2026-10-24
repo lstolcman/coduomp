@@ -16,9 +16,9 @@ void Com_Printf(const char *format, ...);
  * The Linux game module retains the same guard, stores, print order, and
  * switches at RVAs 0x000377cc and 0x0003793a.  The supporting Mac cgame and
  * game modules export these exact PM_ names.  PMDebugPrefix and the two cache
- * words remain module-owned because their load-state values differ: cgame
- * uses the "CG" prefix and -1 caches, while game uses the "pm" prefix and
- * zero-initialized caches.
+ * words remain module-owned: cgame uses the "CG" prefix and game uses "G".
+ * Both modules initialize their cache words to all bits set, so the first
+ * ordinary weapon state is printed.
  */
 
 void PM_Weapon_PrintWeaponState(void)
