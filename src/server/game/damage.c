@@ -13,6 +13,8 @@
 #include "qcommon/info.h"
 #include "game_globals.h"
 #include "scr_vm.h"
+#include "compat/coduo_fp_conversion.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h"
 #include "compat/coduo_native_x87.h"
 #include "qcommon/q_string.h"
@@ -156,16 +158,10 @@ void LookAtKiller(gentity_t *self, gentity_t *inflictor, gentity_t *attacker)
         dir[1] = inflictor->currentOrigin[1] - self->currentOrigin[1];
         dir[2] = inflictor->currentOrigin[2] - self->currentOrigin[2];
     } else {
-#if EMULATE_X87
-        self->client->ps.stats[STAT_DEAD_YAW] = x87f_store_i32_trunc(
-            x87f_load_f32(self->currentAngles[1]));
-#elif defined(__x86_64__)
+        /* Script-set angles can exceed signed-dword range. Preserve the
+         * selected platform's low-dword result for the stored binary32 yaw. */
         self->client->ps.stats[STAT_DEAD_YAW] =
-            CODUO_X87_TRUNCATE_I32((long double)self->currentAngles[1]);
-#else
-        self->client->ps.stats[STAT_DEAD_YAW] =
-            (int32_t)self->currentAngles[1];
-#endif
+            coduo_fp_to_i32_extended((WIDE_FLOAT)self->currentAngles[1]);
         return;
     }
 

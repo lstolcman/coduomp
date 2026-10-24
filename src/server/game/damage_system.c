@@ -15,6 +15,8 @@
 #include "g_syscalls.h"
 #include "game_functions.h"
 #include "scr_vm.h"
+#include "compat/coduo_fp_conversion.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/libm/coduo_libm.h"
 
@@ -85,12 +87,19 @@ void G_Damage(gentity_t *target, gentity_t *inflictor, gentity_t *attacker,
         }
         
         /* Scale damage based on vehicle type */
+#if defined(LINUX_BEHAVIOR)
+        /* A cast alone can retain excess precision; this is a real binary32
+         * store before the scaling call in the Linux binary. */
+        volatile float roundedDamage = (float)damage;
+#endif
         float scale = Scr_Vehicle_DamageScale(target, attacker, inflictor, point, mod);
-        /* NO shim: a single float*float product is exact in double (<=48 sig
-         * bits), so the (long double) intermediate is identical in 64-bit and
-         * 80-bit and the (int) truncation matches (rule 6). Applies to the other
-         * (int)((ld)damage*(ld)scale/multiplier) casts here too. */
-        damage = (int32_t)((long double)(float)damage * (long double)scale);
+        /* Windows multiplies integer damage directly; Linux first stores it
+         * as binary32. Preserve that boundary and each platform's conversion. */
+#if defined(WINDOWS_BEHAVIOR)
+        damage = coduo_fp_to_i32_extended((WIDE_FLOAT)damage * (WIDE_FLOAT)scale);
+#else
+        damage = coduo_fp_to_i32_extended((WIDE_FLOAT)roundedDamage * (WIDE_FLOAT)scale);
+#endif
     }
 
     /* Default inflictor/attacker to world if NULL */
@@ -391,13 +400,17 @@ int G_RadiusDamage(const float *origin, gentity_t *inflictor, gentity_t *attacke
 
             dir[0] = ent->currentOrigin[0] - origin[0];
             dir[1] = ent->currentOrigin[1] - origin[1];
-            /* 0x50eb5: stock rounds the z subtract to float, then adds the
-             * 24.0 offset in a second rounding. */
+            /* Linux rounds the Z difference before adding the offset;
+             * Windows retains the difference until the final float store. */
+#if defined(WINDOWS_BEHAVIOR)
+            dir[2] = (float)(((WIDE_FLOAT)ent->currentOrigin[2] - (WIDE_FLOAT)origin[2]) + (WIDE_FLOAT)RADIUS_DAMAGE_VERTICAL_OFFSET);
+#else
             dir[2] = ent->currentOrigin[2] - origin[2];
             dir[2] += RADIUS_DAMAGE_VERTICAL_OFFSET;
+#endif
             /* Direct line of sight - apply full damage */
             G_Damage(ent, inflictor, attacker, dir, origin,
-                    (int32_t)((long double)damage * (long double)damageScale),
+                    coduo_fp_to_i32_extended((WIDE_FLOAT)damage * (WIDE_FLOAT)damageScale),
                     DAMAGE_RADIUS, mod, 0);
         } else {
             /* No direct line of sight - check for partial damage through geometry */
@@ -459,12 +472,15 @@ int G_RadiusDamage(const float *origin, gentity_t *inflictor, gentity_t *attacke
 
                     dir[0] = ent->currentOrigin[0] - origin[0];
                     dir[1] = ent->currentOrigin[1] - origin[1];
-                    /* 0x5112a: same two-step z rounding as above. */
+                    /* Preserve the same platform-specific Z rounding as above. */
+#if defined(WINDOWS_BEHAVIOR)
+                    dir[2] = (float)(((WIDE_FLOAT)ent->currentOrigin[2] - (WIDE_FLOAT)origin[2]) + (WIDE_FLOAT)RADIUS_DAMAGE_VERTICAL_OFFSET);
+#else
                     dir[2] = ent->currentOrigin[2] - origin[2];
                     dir[2] += RADIUS_DAMAGE_VERTICAL_OFFSET;
+#endif
                     G_Damage(ent, inflictor, attacker, dir, origin,
-                            (int32_t)((long double)damage *
-                                      (long double)RADIUS_DAMAGE_PARTIAL_DAMAGE_SCALE),
+                            coduo_fp_to_i32_extended((WIDE_FLOAT)damage * (WIDE_FLOAT)RADIUS_DAMAGE_PARTIAL_DAMAGE_SCALE),
                             DAMAGE_RADIUS, mod, 0);
                 }
             }
@@ -509,8 +525,18 @@ void G_DamageClient(gentity_t *target, gentity_t *inflictor, gentity_t *attacker
         (target->client->ps.entityStateFlags & DAMAGECLIENT_VEHICLE_OCCUPANT_PSF) != 0) {
         /* Scale radius damage for vehicle occupants */
         if ((flags & DAMAGE_RADIUS) != 0) {
+#if defined(LINUX_BEHAVIOR)
+            /* Preserve the binary32 store before the scaling call. */
+            volatile float roundedDamage = (float)damage;
+#endif
             float scale = G_VehicleOccupantRadiusDamageScale(target);
-            damage = (int32_t)((long double)(float)damage * (long double)scale);
+            /* The Windows integer operand stays live through multiplication;
+             * the Linux call boundary first rounds damage to binary32. */
+#if defined(WINDOWS_BEHAVIOR)
+            damage = coduo_fp_to_i32_extended((WIDE_FLOAT)damage * (WIDE_FLOAT)scale);
+#else
+            damage = coduo_fp_to_i32_extended((WIDE_FLOAT)roundedDamage * (WIDE_FLOAT)scale);
+#endif
         }
         
         /* Check vehicle occupant invulnerability */
@@ -524,8 +550,7 @@ void G_DamageClient(gentity_t *target, gentity_t *inflictor, gentity_t *attacker
     
     /* Apply hit location damage multiplier */
     float multiplier = g_fHitLocDamageMult[hitLocation];
-    int32_t scaledDamage = (int32_t)((long double)damage *
-                                    (long double)multiplier);
+    int32_t scaledDamage = coduo_fp_to_i32_extended((WIDE_FLOAT)damage * (WIDE_FLOAT)multiplier);
 
     /* Determine hit location type from inflictor */
     if (inflictor == NULL) {
