@@ -47,6 +47,22 @@ static uint32_t coduo_color_ftol2_low_u32(x87f value)
 }
 #endif
 
+#if defined(LINUX_BEHAVIOR) && !EMULATE_X87 && \
+    !((defined(__i386__) || defined(__x86_64__)) && \
+      (defined(__GNUC__) || defined(__clang__)))
+/* NOT_FROM_ORIGINAL_SOURCE: native C result adapter for signed-word
+ * truncation. Keep the channel product wide until conversion; an invalid
+ * conversion has the signed-word indefinite value and therefore a zero byte. */
+static int16_t coduomp_color_truncate_i16(WIDE_FLOAT value)
+{
+    if (!(value > (WIDE_FLOAT)COLOR_FISTP_I16_MINIMUM_EXCLUSIVE &&
+          value < (WIDE_FLOAT)COLOR_FISTP_I16_MAXIMUM_EXCLUSIVE)) {
+        return INT16_MIN;
+    }
+    return (int16_t)value;
+}
+#endif
+
 /*
  * The four authoritative Windows bodies are instruction-identical apart from
  * constant and `_ftol2` addresses:
@@ -172,11 +188,10 @@ uint32_t ColorBytes3(float red, float green, float blue)
     blueByte = (uint8_t)CODUO_X87_TRUNCATE_I16_NEXT(
         &control, (long double)blue * (long double)scale);
 #else
-    /* This branch is available only when the caller deliberately disables
-     * x87 emulation on a non-x86 host; ordinary supported builds do not use it. */
-    redByte = (uint8_t)(int16_t)(red * (float)COLOR_BYTE_SCALE);
-    greenByte = (uint8_t)(int16_t)(green * (float)COLOR_BYTE_SCALE);
-    blueByte = (uint8_t)(int16_t)(blue * (float)COLOR_BYTE_SCALE);
+    /* Native platforms keep the product wide until signed-word truncation. */
+    redByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)red * COLOR_BYTE_SCALE);
+    greenByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)green * COLOR_BYTE_SCALE);
+    blueByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)blue * COLOR_BYTE_SCALE);
 #endif
 
     return redByte | (greenByte << COLOR_GREEN_SHIFT) |
@@ -216,10 +231,10 @@ uint32_t ColorBytes4(float red, float green, float blue, float alpha)
     alphaByte = (uint8_t)CODUO_X87_TRUNCATE_I16_NEXT(
         &control, (long double)alpha * (long double)scale);
 #else
-    redByte = (uint8_t)(int16_t)(red * (float)COLOR_BYTE_SCALE);
-    greenByte = (uint8_t)(int16_t)(green * (float)COLOR_BYTE_SCALE);
-    blueByte = (uint8_t)(int16_t)(blue * (float)COLOR_BYTE_SCALE);
-    alphaByte = (uint8_t)(int16_t)(alpha * (float)COLOR_BYTE_SCALE);
+    redByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)red * COLOR_BYTE_SCALE);
+    greenByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)green * COLOR_BYTE_SCALE);
+    blueByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)blue * COLOR_BYTE_SCALE);
+    alphaByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)alpha * COLOR_BYTE_SCALE);
 #endif
 
     return redByte | (greenByte << COLOR_GREEN_SHIFT) |
