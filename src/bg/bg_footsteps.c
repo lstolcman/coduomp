@@ -2,6 +2,7 @@
 
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_int32_bits.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h"
 #include "qcommon/client_info_types.h"
 
@@ -57,7 +58,8 @@ enum {
     PM_FOOTSTEPS_ANIM_AIRBORNE_DOWN = 17,
     PM_FOOTSTEPS_CONDITION_DIRECTION = ANIM_COND_STRAFING,
     PM_FOOTSTEPS_AIRBORNE_DELAY = 300,
-    PM_FOOTSTEPS_STANCE_FLAG_MASK = 3
+    PM_FOOTSTEPS_STANCE_FLAG_MASK = 3,
+    PM_FOOTSTEPS_ANIM_UNAVAILABLE = -1
 };
 
 #define PM_FOOTSTEPS_BOB_MASK ((uint32_t)0x000000ffu)
@@ -116,7 +118,7 @@ void PM_Footsteps(void)
     uint32_t flags;
     effectiveStance_t stance;
     int32_t oldBobCycle;
-    int32_t animResult;
+    int32_t animResult = PM_FOOTSTEPS_ANIM_UNAVAILABLE;
     int32_t animChanged;
     int32_t animCommand;
     int32_t direction;
@@ -124,8 +126,8 @@ void PM_Footsteps(void)
     long double horizontalSpeedX87;
     /* airborneBobRate is kept in st0 across the BG_ExecuteCommand call
      * (0x3000bd00) and consumed by the bobCycle FMUL (0x3000bd16) without ever
-     * being stored -- long double so a `float` local does not round it. */
-    long double airborneBobRate;
+     * being stored -- WIDE_FLOAT keeps the intermediate from narrowing. */
+    WIDE_FLOAT airborneBobRate;
     long double movementAmountX87;
     float movementAmount;
     long double lerp;   /* PM_GetViewHeightLerp returns raw st(0); the stance
@@ -183,44 +185,45 @@ void PM_Footsteps(void)
     flags = ps->playerStateFlags;
     if (ps->groundEntityNum == ENTITYNUM_NONE &&
         ps->pmType != PM_TYPE_LINKED) {
-        if ((flags & PM_FOOTSTEPS_FLAG_AIRBORNE_UPDATE) == 0 ||
-            coduo_int32_from_bits((uint32_t)move->command.commandTime -
-                             (uint32_t)ps->lastJumpCommandTime) <
+        if ((flags & PM_FOOTSTEPS_FLAG_AIRBORNE_UPDATE) != 0) {
+            if (coduo_int32_from_bits((uint32_t)move->command.commandTime -
+                                     (uint32_t)ps->lastJumpCommandTime) <
                 PM_FOOTSTEPS_AIRBORNE_DELAY) {
-            return;
-        }
+                return;
+            }
 
-        /* 0x3000bca4..0x3000bd40: airborne bob uses vertical velocity, chooses
-         * an up/down locomotion command, advances bobCycle, and forces the
-         * footstep-event phase check. */
-        if ((flags & PMF_WALKING) == 0 && ps->leanFraction == 0.0f) {
-            airborneBobRate =
-                ps->velocity[2] /
-                (ps->runSpeedScale * PM_FOOTSTEPS_AIRBORNE_SPEED_UNIT) *
-                PM_FOOTSTEPS_AIRBORNE_RUN_BOB_SCALE;
-        } else {
-            airborneBobRate =
-                ps->velocity[2] /
-                (ps->walkSpeedScale * PM_FOOTSTEPS_AIRBORNE_SPEED_UNIT) *
-                PM_FOOTSTEPS_AIRBORNE_WALK_BOB_SCALE;
-        }
-        (void)BG_ExecuteCommand(
-            ps, PM_FOOTSTEPS_ANIM_CATEGORY,
-            !(ps->velocity[2] >= 0.0f) ? PM_FOOTSTEPS_ANIM_AIRBORNE_DOWN
-                                       : PM_FOOTSTEPS_ANIM_AIRBORNE_UP,
-            qtrue);
-        move = pm;
-        ps = move->ps;
-        oldBobCycle = ps->bobCycle;
-        /* pml.msec and oldBobCycle enter via bare FILD/FIADD (0x3000bd05/0x3000bd1f)
-         * -- no (float) casts. */
-        ps->bobCycle = coduo_fp_to_i32_extended(pml.msec * airborneBobRate +
-                              oldBobCycle) & PM_FOOTSTEPS_BOB_MASK;
-        PM_FootstepEvent(oldBobCycle, ps->bobCycle, qtrue);
+            /* 0x3000bca4..0x3000bd40: airborne bob uses vertical velocity, chooses
+             * an up/down locomotion command, advances bobCycle, and forces the
+             * footstep-event phase check. */
+            if ((flags & PMF_WALKING) == 0 && ps->leanFraction == 0.0f) {
+                airborneBobRate =
+                    (WIDE_FLOAT)ps->velocity[2] /
+                    ((WIDE_FLOAT)ps->runSpeedScale * PM_FOOTSTEPS_AIRBORNE_SPEED_UNIT) *
+                    PM_FOOTSTEPS_AIRBORNE_RUN_BOB_SCALE;
+            } else {
+                airborneBobRate =
+                    (WIDE_FLOAT)ps->velocity[2] /
+                    ((WIDE_FLOAT)ps->walkSpeedScale * PM_FOOTSTEPS_AIRBORNE_SPEED_UNIT) *
+                    PM_FOOTSTEPS_AIRBORNE_WALK_BOB_SCALE;
+            }
+            animResult = BG_ExecuteCommand(
+                ps, PM_FOOTSTEPS_ANIM_CATEGORY,
+                !(ps->velocity[2] >= 0.0f) ? PM_FOOTSTEPS_ANIM_AIRBORNE_DOWN
+                                           : PM_FOOTSTEPS_ANIM_AIRBORNE_UP,
+                qtrue);
+            move = pm;
+            ps = move->ps;
+            oldBobCycle = ps->bobCycle;
+            /* pml.msec and oldBobCycle enter via bare FILD/FIADD (0x3000bd05/0x3000bd1f)
+             * -- no (float) casts. */
+            ps->bobCycle = coduo_fp_to_i32_extended(pml.msec * airborneBobRate +
+                                  oldBobCycle) & PM_FOOTSTEPS_BOB_MASK;
+            PM_FootstepEvent(oldBobCycle, ps->bobCycle, qtrue);
 
-        move = pm;
-        ps = move->ps;
-        horizontalSpeed = move->horizontalSpeed;
+            move = pm;
+            ps = move->ps;
+            horizontalSpeed = move->horizontalSpeed;
+        }
 
         /* 0x3000bd4b..0x3000bd59: if the current low two movement flags already
          * encode this stance, the airborne update is complete. Otherwise the
@@ -244,7 +247,6 @@ void PM_Footsteps(void)
             ps->bobCycle = 0;
         }
 
-        animResult = -1;
         if (ps->viewHeightTarget == ps->proneViewHeight) {
             animResult = BG_ExecuteCommand(ps, PM_FOOTSTEPS_ANIM_CATEGORY,
                                            PM_FOOTSTEPS_ANIM_IDLE_PRONE,
@@ -307,12 +309,12 @@ void PM_Footsteps(void)
     movementAmount = (float)movementAmountX87;
     /* The two directed viewheight lerps use opposite endpoint order. A zero
      * result from both falls back to the current stance's fixed scale. */
-    lerp = PM_GetViewHeightLerp(ps->proneViewHeight, ps->crouchViewHeight);
+    lerp = PM_GetViewHeightLerp(ps->crouchViewHeight, ps->proneViewHeight);
     if (lerp != 0.0f) {
         stanceScale = (1.0L - lerp) * (long double)ps->crouchSpeedScale +
                       lerp * (long double)ps->proneSpeedScale;
     } else {
-        lerp = PM_GetViewHeightLerp(ps->crouchViewHeight, ps->proneViewHeight);
+        lerp = PM_GetViewHeightLerp(ps->proneViewHeight, ps->crouchViewHeight);
         if (lerp != 0.0f) {
             stanceScale = (1.0L - lerp) * (long double)ps->proneSpeedScale +
                           lerp * (long double)ps->crouchSpeedScale;
@@ -399,6 +401,11 @@ void PM_Footsteps(void)
             move = pm;
             ps = move->ps;
         }
+        if (animResult < 0) {
+            (void)BG_ExecuteCommand(ps, PM_FOOTSTEPS_ANIM_CATEGORY,
+                                    PM_FOOTSTEPS_ANIM_IDLE, qtrue);
+        }
+        return;
     }
     if (animResult < 0) {
         (void)BG_ExecuteCommand(ps, PM_FOOTSTEPS_ANIM_CATEGORY,
