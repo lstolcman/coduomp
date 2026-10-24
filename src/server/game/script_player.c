@@ -1435,14 +1435,17 @@ void PlayerCmd_spawn(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
+        /* Preserve the rejected entity if the script error handler returns. */
+        ent = NULL;
     }
 
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
-    }
     vec3_t origin;
     vec3_t angles;
 
@@ -1456,18 +1459,25 @@ void PlayerCmd_setEnterTime(uint32_t entityNum)
 {
     gentity_t *ent;
 
-    if (entityNum > ENTITYNUM_NONE) {
+    if (entityNum <= ENTITYNUM_NONE) {
+        ent = &g_entities[entityNum];
+        if (ent->client == NULL) {
+            Scr_Error(va("entity %i is not a player", (int)entityNum));
+        }
+    } else {
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
+        ent = NULL;
     }
 
-    ent = &g_entities[entityNum];
-    if (ent->client == NULL) {
-        Scr_Error(va("entity %i is not a player", (int)entityNum));
-    }
-
+#if defined(WINDOWS_BEHAVIOR)
+    /* Windows selects the client after fetching the script argument. */
+    int enterTime = Scr_GetInt(0);
+    ent->client->enterTime = enterTime;
+#else
     gclient_t *client = ent->client;
 
     client->enterTime = Scr_GetInt(0);
+#endif
 }
 
 /* VERIFIED_DECOMPILER(0x48b92, 58b92_FUN_00058b92.c, VERIFY-SCRIPT-PLAYER-CMDS-2026-06-17): DATAFLOW_VERIFIED; temporary corpse clone s_flags clear checked. */
