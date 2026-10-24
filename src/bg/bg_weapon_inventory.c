@@ -271,6 +271,7 @@ qboolean BG_GivePlayerWeapon(playerState_t *ps, int32_t weapon)
         weaponInfo->weaponClass == WEAPCLASS_NON_PLAYER) {
         return qfalse;
     }
+    BG_WEAPON_REGISTER_ITEM(weapon);
     ps->weaponBits[word] |= bit;
     ps->weaponRechamberBits[word] &= ~bit;
 
@@ -303,6 +304,7 @@ qboolean BG_GivePlayerWeapon(playerState_t *ps, int32_t weapon)
         if ((ps->weaponBits[altWord] & altBit) != 0) {
             break;
         }
+        BG_WEAPON_REGISTER_ITEM(altWeapon);
         ps->weaponBits[altWord] |= altBit;
         /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
         ps->weaponRechamberBits[word] &= ~bit;

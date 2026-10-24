@@ -9,5 +9,7 @@
 #define BG_WEAPON_ERROR(...) Com_Error(ERR_DROP, __VA_ARGS__)
 #define BG_WEAPON_DEBUG(...) Com_DPrintf(__VA_ARGS__)
 #define BG_WEAPON_SHARED_AMMO_DEBUG(...) ((void)0)
+/* Cgame grants update prediction state without server item registration. */
+#define BG_WEAPON_REGISTER_ITEM(weapon) ((void)0)
 
 #endif

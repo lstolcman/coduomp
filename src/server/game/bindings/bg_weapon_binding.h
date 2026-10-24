@@ -15,5 +15,7 @@
 #endif
 #define BG_WEAPON_DEBUG(...) Com_DPrintf(__VA_ARGS__)
 #define BG_WEAPON_SHARED_AMMO_DEBUG(...) Com_DPrintf(__VA_ARGS__)
+/* Game grants register the item before publishing its ownership bit. */
+#define BG_WEAPON_REGISTER_ITEM(weapon) RegisterItem((weapon), qtrue)
 
 #endif
