@@ -20,6 +20,7 @@
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_int32_bits.h"
 #include "compat/coduo_native_x87.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
@@ -30,6 +31,8 @@
 #define PM_SHORT2ANGLE_SCALE 0.0054931641f
 #define PM_DEGREES_TO_RADIANS 0.017453292f
 #define PM_PRONE_DEBUG_LINE_LENGTH 18.0f
+#define PM_PRONE_TURN_RATE 55.0f
+#define PM_PRONE_TURN_MARGIN 5.0f
 
 enum {
     PM_PITCH_CLAMP = 16000,
@@ -585,7 +588,8 @@ void PM_UpdateViewAngles(playerState_t *client,
             start[2] += (long double)client->proneViewHeight;
 #endif
             AngleVectors(client->viewAngles, forward, NULL, NULL);
-            /* 0x2b763: machine computes the scaled forward term first. */
+            /* 0x2b763: machine computes the scaled forward term first and
+             * retains it through the origin add; only end[] rounds to float. */
 #if EMULATE_X87
             for (int i = 0; i < 3; i++) {
                 end[i] = x87f_store_f32(x87f_add(
@@ -593,9 +597,9 @@ void PM_UpdateViewAngles(playerState_t *client,
                     x87f_load_f32(start[i])));
             }
 #else
-            end[0] = forward[0] * 18.0f + start[0];
-            end[1] = forward[1] * 18.0f + start[1];
-            end[2] = forward[2] * 18.0f + start[2];
+            end[0] = (float)((WIDE_FLOAT)forward[0] * PM_PRONE_DEBUG_LINE_LENGTH + (WIDE_FLOAT)start[0]);
+            end[1] = (float)((WIDE_FLOAT)forward[1] * PM_PRONE_DEBUG_LINE_LENGTH + (WIDE_FLOAT)start[1]);
+            end[2] = (float)((WIDE_FLOAT)forward[2] * PM_PRONE_DEBUG_LINE_LENGTH + (WIDE_FLOAT)start[2]);
 #endif
             bg_compat_pmove_debug_line(start, end);
             bg_compat_pmove_debug_arc(
@@ -614,22 +618,22 @@ void PM_UpdateViewAngles(playerState_t *client,
         if ((client->playerStateFlags & PMF_PRONE) != 0 &&
             (weaponInfo->weaponClass != WEAPCLASS_LMG ||
              (client->playerStateFlags & PMF_ADS) == 0) &&
-            (yawDelta > yawCap - 5.0f ||
-             yawDelta < -(yawCap - 5.0f) ||
+            (yawDelta > (WIDE_FLOAT)yawCap - PM_PRONE_TURN_MARGIN ||
+             yawDelta < -((WIDE_FLOAT)yawCap - PM_PRONE_TURN_MARGIN) ||
              ((command->forwardmove != 0 || command->rightmove != 0) &&
               (yawDelta != 0.0f || isnan(yawDelta))))) {
             float targetYaw;
             int keepTrying = 1;
             int proneOK;
 
-            /* frametime * 55.0f full width (0x68018 stock: fmulp; fcomip),
-             * non-power-of-two -> emulate the compare. */
+            /* The Linux x87 body retains frametime * 55 through the comparison
+             * and each target-yaw update. Only targetYaw rounds to float. */
 #if EMULATE_X87
             if (x87f_lt(x87f_abs(x87f_load_f32(yawDelta)),
                         x87f_mul(x87f_load_f32(pml.frametime),
                                  x87f_load_f32(55.0f)))) {
 #else
-            if (fabsf(yawDelta) < pml.frametime * 55.0f) {
+            if ((WIDE_FLOAT)fabsf(yawDelta) < (WIDE_FLOAT)pml.frametime * PM_PRONE_TURN_RATE) {
 #endif
                 targetYaw = client->viewAngles[1];
             } else if (yawDelta > 0.0f) {
@@ -638,7 +642,7 @@ void PM_UpdateViewAngles(playerState_t *client,
                     x87f_load_f32(client->proneDirection),
                     x87f_mul(x87f_load_f32(pml.frametime), x87f_load_f32(55.0f))));
 #else
-                targetYaw = client->proneDirection - pml.frametime * 55.0f;
+                targetYaw = (float)((WIDE_FLOAT)client->proneDirection - (WIDE_FLOAT)pml.frametime * PM_PRONE_TURN_RATE);
 #endif
             } else {
 #if EMULATE_X87
@@ -646,7 +650,7 @@ void PM_UpdateViewAngles(playerState_t *client,
                     x87f_load_f32(client->proneDirection),
                     x87f_mul(x87f_load_f32(pml.frametime), x87f_load_f32(55.0f))));
 #else
-                targetYaw = client->proneDirection + pml.frametime * 55.0f;
+                targetYaw = (float)((WIDE_FLOAT)client->proneDirection + (WIDE_FLOAT)pml.frametime * PM_PRONE_TURN_RATE);
 #endif
             }
 
