@@ -904,7 +904,8 @@ void FireWeapon(gentity_t *ent)
             x87f_mul(x87f_sub(x87f_load_f32(maxSpread), x87f_load_f32(minSpread)),
                      x87f_load_f32(spreadFraction))));
 #else
-        spread = minSpread + (maxSpread - minSpread) * spreadFraction;
+        /* Keep the subtraction, product and sum wide until the spread store. */
+        spread = (float)((WIDE_FLOAT)minSpread + ((WIDE_FLOAT)maxSpread - minSpread) * spreadFraction);
 #endif
 
         /* Get weapon type */
