@@ -841,9 +841,9 @@ int32_t yyparse(void)
             if (newCapacity > SCRIPT_YYSTACK_MAX_COUNT) {                 \
                 newCapacity = SCRIPT_YYSTACK_MAX_COUNT;                   \
             }                                                             \
-            int16_t *newStateStack = CODUOMP_ALLOCA(                      \
+            int16_t *newStateStack = CODUO_ALLOCA(                      \
                 (size_t)newCapacity * sizeof(*newStateStack));            \
-            sval_u *newValueStack = CODUOMP_ALLOCA(             \
+            sval_u *newValueStack = CODUO_ALLOCA(             \
                 (size_t)newCapacity * sizeof(*newValueStack));            \
             __yy_memcpy(newStateStack, stateStackBase,                    \
                         used * (int32_t)sizeof(*newStateStack));            \

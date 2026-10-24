@@ -144,7 +144,7 @@ void PM_Footsteps(void)
     horizontalSpeedX87 =
         (long double)ps->velocity[0] * (long double)ps->velocity[0] +
         (long double)ps->velocity[1] * (long double)ps->velocity[1];
-    horizontalSpeed = (float)__builtin_sqrtl(horizontalSpeedX87);
+    horizontalSpeed = (float)sqrtl(horizontalSpeedX87);
     move->horizontalSpeed = horizontalSpeed;
 
     if ((ps->entityStateFlags & PM_FOOTSTEPS_DISABLE_MASK) != 0) {

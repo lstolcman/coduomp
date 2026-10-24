@@ -1,3 +1,4 @@
+#include "compat/coduo_compiler.h"
 #include "com_parse.h"
 #include "compat/crt/atof_compat.h"
 #include "compat/crt/atoi_compat.h"
@@ -725,7 +726,7 @@ void Com_Parse3DMatrix(char **data, int32_t z, int32_t y, int32_t x,
 #define COM_PARSE_LAYOUT_ASSERT(name, expression) \
     typedef char name[(expression) ? 1 : -1]
 COM_PARSE_LAYOUT_ASSERT(com_parse_session_alignment,
-                        __alignof__(com_parse_session_t) == 4);
+                        CODUO_ALIGNOF(com_parse_session_t) == 4);
 COM_PARSE_LAYOUT_ASSERT(com_parse_session_token_offset,
                         offsetof(com_parse_session_t, token) == 0x000);
 COM_PARSE_LAYOUT_ASSERT(com_parse_session_token_extent,
@@ -751,7 +752,7 @@ COM_PARSE_LAYOUT_ASSERT(com_parse_session_name_extent,
 COM_PARSE_LAYOUT_ASSERT(com_parse_session_size,
                         sizeof(com_parse_session_t) == 0x45c);
 COM_PARSE_LAYOUT_ASSERT(com_parse_mark_alignment,
-                        __alignof__(com_parse_mark_t) == 4);
+                        CODUO_ALIGNOF(com_parse_mark_t) == 4);
 COM_PARSE_LAYOUT_ASSERT(com_parse_mark_line_offset,
                         offsetof(com_parse_mark_t, line) == 0x00);
 COM_PARSE_LAYOUT_ASSERT(com_parse_mark_parse_offset,

@@ -1,3 +1,4 @@
+#include "compat/coduo_layout.h"
 #include "collision_map_load.h"
 
 #include "collision_area.h"
@@ -43,8 +44,7 @@ _Static_assert(offsetof(dheader_t, version) == 0x04,
                "collision BSP header version moved");
 _Static_assert(offsetof(dheader_t, lumps) == 0x08,
                "collision BSP header lump table moved");
-_Static_assert(offsetof(dheader_t,
-                        lumps[HEADER_LUMPS - 1]) == 0x108,
+_Static_assert(CODUO_ARRAY_OFFSET(dheader_t, lumps, HEADER_LUMPS - 1) == 0x108,
                "collision BSP header last lump moved");
 _Static_assert(sizeof(dheader_t) == 0x110,
                "collision BSP header size changed");

@@ -98,7 +98,7 @@ void BG_CalculateWeaponPosition_BobOffset(pm_weapon_angle_state_t *state,
         amp2 = (long double)BG_SWAY_MAX_BOB_AMP;
     }
     float yaw = (float)(
-        __builtin_sinl((long double)phase) * amp2 * -1.0L);
+        sinl((long double)phase) * amp2 * -1.0L);
 
     /* 0x300153b6..0x300153c8: roll phase, shifted by 0.47123894 (0x3007bf5c =
      * 0x3ef1463b; 0.4712389f would be 1 ULP low at 0x3ef1463a), and the 1.5x
@@ -124,7 +124,7 @@ void BG_CalculateWeaponPosition_BobOffset(pm_weapon_angle_state_t *state,
      * (FCOMP against 0.0 @0x3007bcec / TEST AH,0x5 / JP skips when the product is
      * >= 0). Otherwise the roll is 0.0. rollAmp is non-negative, so this selects
      * the negative half of sin(rollPhase). */
-    long double sinRollWide = __builtin_sinl((long double)rollPhase);
+    long double sinRollWide = sinl((long double)rollPhase);
     float sinRoll = (float)sinRollWide; /* 0x3001540b FST retained */
     long double roll;
     if (sinRollWide * rollAmp < 0.0L) {

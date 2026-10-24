@@ -123,7 +123,7 @@ void R_XModelDebugBoxes(trRefEntity_t *entity,
     };
     static const vec4_t boxColor = {1.0f, 1.0f, 1.0f, 0.0f};
     DObj *obj = entity->e.dobj;
-    XModelPartColl **partCollisions = CODUOMP_ALLOCA(
+    XModelPartColl **partCollisions = CODUO_ALLOCA(
         (size_t)obj->boneCount * sizeof(*partCollisions));
     DObjSkelMat *boneMatrices =
         &obj->evaluationStorage->matrices[obj->modelPartBaseIndices[0]];
@@ -621,7 +621,7 @@ void R_AddXModelSurfaces(trRefEntity_t *entity)
 
     modelCount = DObjGetNumModels(obj);
     lodIndices = modelCount != 0
-        ? CODUOMP_ALLOCA((size_t)modelCount * sizeof(*lodIndices))
+        ? CODUO_ALLOCA((size_t)modelCount * sizeof(*lodIndices))
         : NULL;
     lodDistance = R_GetLodDist(entity);
     for (int32_t modelIndex = 0;
@@ -641,7 +641,7 @@ void R_AddXModelSurfaces(trRefEntity_t *entity)
     }
 
     surfaceRefs = surfaceCount != 0
-        ? CODUOMP_ALLOCA((size_t)surfaceCount * sizeof(*surfaceRefs))
+        ? CODUO_ALLOCA((size_t)surfaceCount * sizeof(*surfaceRefs))
         : NULL;
     DObjGetSurfaces(obj, surfaceRefs, partBits, lodIndices);
 

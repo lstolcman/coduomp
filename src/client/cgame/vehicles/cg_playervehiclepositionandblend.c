@@ -73,6 +73,7 @@
 //     prologue-seeded slot F+0x18 that [ESP+0x24] aliases at the tail ESP depth).
 // All four blocks and the tail are byte-verified.
 
+#include <math.h>
 #include "../client_recovered.h"
 #include "../globals.h"
 
@@ -116,7 +117,7 @@ cgame_compat_turret_blend_step(float sample, float reference)
      * FDIVR, so no (float) cast (Class 4). */
     long double diff =
         (long double)sample - (long double)reference;      /* FSUB reference */
-    long double mag  = __builtin_fabsl(diff);             /* FABS */
+    long double mag  = fabsl(diff);             /* FABS */
     long double rate =
         mag * (1000.0L / (long double)cg_frametime);       /* FILD ft; FDIVR 1000.0f; FMULP */
     return rate > 0.0L ? (float)(1.0L / rate) : 0.0f;     /* FCOM 0.0; TEST AH,0x41; JNZ */

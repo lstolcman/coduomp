@@ -65,7 +65,7 @@ void R_GetXModelBounds(const DObj *obj, const axis_t transform,
     maxs[2] = -FLT_MAX;
 
     int32_t surfaceCount = DObjGetNumSurfaces(obj, &lodIndex);
-    dobj_surface_ref_t *surfaceRefs = CODUOMP_ALLOCA(
+    dobj_surface_ref_t *surfaceRefs = CODUO_ALLOCA(
         (size_t)surfaceCount * sizeof(surfaceRefs[0]));
     DObjGetSurfaces(obj, surfaceRefs, partBits, &lodIndex);
 

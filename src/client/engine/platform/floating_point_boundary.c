@@ -1,6 +1,6 @@
 #include "floating_point_boundary.h"
 
-#if defined(_WIN32)
+#if CODUOMP_NATIVE_X87_PRECISION_CONTROL
 
 #include <float.h>
 #include <stdint.h>

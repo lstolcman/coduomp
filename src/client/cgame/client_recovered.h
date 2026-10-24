@@ -5,6 +5,7 @@
 #define EMULATE_X87 0
 #endif
 
+#include "compat/coduo_layout.h"
 #include "compat/coduo_int32_bits.h"
 #include "compat/coduo_native_x87.h"
 #include "bg/bg_animation.h"
@@ -4769,9 +4770,9 @@ _Static_assert(offsetof(playerState_t, currentWeapon) == 0xd8, "playerState curr
 _Static_assert(offsetof(playerState_t, weaponState) == 0xdc, "playerState weaponState @ +0xdc");
 _Static_assert(offsetof(playerState_t, damageEvent) == 0x10c, "playerState damageEvent @ +0x10c");
 _Static_assert(offsetof(playerState_t, damageCount) == 0x118, "playerState damageCount @ +0x118");
-_Static_assert(offsetof(playerState_t, stats[STAT_HEALTH]) == 0x11c,
+_Static_assert(CODUO_ARRAY_OFFSET(playerState_t, stats, STAT_HEALTH) == 0x11c,
                "playerState health @ +0x11c");
-_Static_assert(offsetof(playerState_t, stats[STAT_MAX_HEALTH]) == 0x124,
+_Static_assert(CODUO_ARRAY_OFFSET(playerState_t, stats, STAT_MAX_HEALTH) == 0x124,
                "playerState maxHealth @ +0x124");
 _Static_assert(offsetof(playerState_t, ammo) == 0x134, "playerState ammo @ +0x134");
 _Static_assert(offsetof(playerState_t, clips) == 0x334, "playerState clips @ +0x334");
@@ -4780,7 +4781,7 @@ _Static_assert(offsetof(playerState_t, deltaAngles) == 0x4c, "playerState deltaA
 _Static_assert(offsetof(playerState_t, groundEntityNum) == 0x58, "playerState groundEntityNum @ +0x58");
 _Static_assert(offsetof(playerState_t, viewModelIndex) == 0xe4, "playerState viewModelIndex @ +0xe4");
 _Static_assert(offsetof(playerState_t, viewAngles) == 0xe8, "playerState viewAngles @ +0xe8");
-_Static_assert(offsetof(playerState_t, stats[STAT_DEAD_YAW]) == 0x120,
+_Static_assert(CODUO_ARRAY_OFFSET(playerState_t, stats, STAT_DEAD_YAW) == 0x120,
                "playerState deathYaw @ +0x120");
 _Static_assert(offsetof(playerState_t, playerMaxs) == 0x568, "playerState playerMaxs @ +0x568");
 _Static_assert(offsetof(playerState_t, proneViewHeight) == 0x574, "playerState proneViewHeight @ +0x574");

@@ -1,3 +1,4 @@
+#include "compat/coduo_compiler.h"
 #include "script_memory.h"
 #include "script_runtime_host.h"
 #include "script_string.h"
@@ -351,7 +352,7 @@ uint16_t SL_FindLowercaseString(const char *text)
     uint32_t size = (uint32_t)textSize;
     /* The original scratch allocation covers the full input. The arena bound
      * above also bounds this stack allocation. */
-    char lowercase[size];
+    CODUO_STACK_ARRAY(char, lowercase, size);
 
     for (int32_t index = coduomp_script_string_int32_from_bits(size - 1u);
          index >= 0; --index) {
@@ -477,7 +478,7 @@ uint16_t SL_GetLowercaseStringOfLen(const char *text, uint8_t user,
     uint32_t targetSize = (uint32_t)size;
     /* The original scratch allocation covers the full input. Keep a valid C
      * array extent for the empty byte sequence as well. */
-    char lowercase[targetSize != 0 ? targetSize : 1];
+    CODUO_STACK_ARRAY(char, lowercase, targetSize != 0 ? targetSize : 1);
 
     for (int32_t index =
              coduomp_script_string_int32_from_bits(targetSize - 1u);

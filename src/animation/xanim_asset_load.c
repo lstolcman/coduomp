@@ -1,3 +1,4 @@
+#include "compat/coduo_compiler.h"
 #include "xanim_asset_load.h"
 #include "animation_private.h"
 #include "qcommon/com_sprintf.h"
@@ -737,8 +738,7 @@ uint16_t XAnimSetModel(XAnimEntry *entry,
     const uint16_t *animPartNames = animPartNameTable + 1;
     size_t remapSize = (size_t)(
         (uint32_t)animPartCount + DOBJ_PART_REMAP_PREFIX_SIZE);
-    uint32_t remapStorage[(remapSize + sizeof(uint32_t) - 1U) /
-                          sizeof(uint32_t)];
+    CODUO_STACK_ARRAY(uint32_t, remapStorage, (remapSize + sizeof(uint32_t) - 1U) / sizeof(uint32_t));
     XAnimToXModel *remap = (XAnimToXModel *)remapStorage;
     uint8_t *animToDObjPart = remap->boneIndex;
 

@@ -5,6 +5,8 @@
 #define EMULATE_X87 0
 #endif
 
+#include "compat/coduo_compiler.h"
+#include "compat/coduo_layout.h"
 #include <stddef.h>
 #include <setjmp.h>
 #include <stdarg.h>
@@ -63,12 +65,6 @@
 #define _Noreturn [[noreturn]]
 #endif
 
-#if defined(_MSC_VER)
-#include <malloc.h>
-#define CODUOMP_ALLOCA(size_) _alloca(size_)
-#else
-#define CODUOMP_ALLOCA(size_) __builtin_alloca(size_)
-#endif
 
 
 typedef enum sysCpuClass_e {
@@ -497,12 +493,18 @@ CODUOMP_ASSERT_PLAYER_STATE_OFFSET(damagePitch, 0x114);
 CODUOMP_ASSERT_PLAYER_STATE_OFFSET(damageCount, 0x118);
 CODUOMP_ASSERT_PLAYER_STATE_OFFSET(stats, 0x11c);
 CODUOMP_ASSERT_PLAYER_STATE_EXTENT(stats, 0x018);
-CODUOMP_ASSERT_PLAYER_STATE_OFFSET(stats[STAT_HEALTH], 0x11c);
-CODUOMP_ASSERT_PLAYER_STATE_OFFSET(stats[STAT_DEAD_YAW], 0x120);
-CODUOMP_ASSERT_PLAYER_STATE_OFFSET(stats[STAT_MAX_HEALTH], 0x124);
-CODUOMP_ASSERT_PLAYER_STATE_OFFSET(stats[STAT_IDENT_CLIENT_NUM], 0x128);
-CODUOMP_ASSERT_PLAYER_STATE_OFFSET(stats[STAT_IDENT_CLIENT_HEALTH], 0x12c);
-CODUOMP_ASSERT_PLAYER_STATE_OFFSET(stats[STAT_SPAWN_COUNT], 0x130);
+_Static_assert(CODUO_ARRAY_OFFSET(playerState_t, stats, STAT_HEALTH) == 0x11c,
+               "i386 player-state stats[STAT_HEALTH] moved");
+_Static_assert(CODUO_ARRAY_OFFSET(playerState_t, stats, STAT_DEAD_YAW) == 0x120,
+               "i386 player-state stats[STAT_DEAD_YAW] moved");
+_Static_assert(CODUO_ARRAY_OFFSET(playerState_t, stats, STAT_MAX_HEALTH) == 0x124,
+               "i386 player-state stats[STAT_MAX_HEALTH] moved");
+_Static_assert(CODUO_ARRAY_OFFSET(playerState_t, stats, STAT_IDENT_CLIENT_NUM) == 0x128,
+               "i386 player-state stats[STAT_IDENT_CLIENT_NUM] moved");
+_Static_assert(CODUO_ARRAY_OFFSET(playerState_t, stats, STAT_IDENT_CLIENT_HEALTH) == 0x12c,
+               "i386 player-state stats[STAT_IDENT_CLIENT_HEALTH] moved");
+_Static_assert(CODUO_ARRAY_OFFSET(playerState_t, stats, STAT_SPAWN_COUNT) == 0x130,
+               "i386 player-state stats[STAT_SPAWN_COUNT] moved");
 CODUOMP_ASSERT_PLAYER_STATE_OFFSET(ammo, 0x134);
 CODUOMP_ASSERT_PLAYER_STATE_EXTENT(ammo, 0x200);
 CODUOMP_ASSERT_PLAYER_STATE_OFFSET(clips, 0x334);

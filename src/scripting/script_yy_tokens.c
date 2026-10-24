@@ -1,3 +1,4 @@
+#include "compat/coduo_compiler.h"
 #include "script_runtime_host.h"
 
 #include "script_string.h"
@@ -33,7 +34,7 @@ void TextValue(const char *text, int32_t length)
  * Name and signature: same-module Mac symbol StringValue. */
 void StringValue(const char *text, int32_t length)
 {
-    char unescaped[(size_t)length + 1];
+    CODUO_STACK_ARRAY(char, unescaped, (size_t)length + 1);
     int32_t readIndex = 0;
     int32_t writeIndex = 0;
 

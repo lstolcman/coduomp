@@ -46,6 +46,7 @@
 // cg_frametime (0x304831ac, int32 ms delta) is FILD'd and combined with 1000.0f to
 // form the per-frame blend-rate denominator.
 
+#include <math.h>
 #include "../client_recovered.h"
 #include "../globals.h"
 
@@ -114,7 +115,7 @@ static CG_TURRET_COMPAT_ALWAYS_INLINE float
 cgame_compat_turret_blend_step(float sample, float reference)
 {
     long double delta = (long double)sample - (long double)reference;
-    long double magnitude = __builtin_fabsl(delta);
+    long double magnitude = fabsl(delta);
     long double rate = magnitude * (1000.0L / (long double)cg_frametime);
     if (rate > 0.0L) {
         return (float)(1.0L / rate);

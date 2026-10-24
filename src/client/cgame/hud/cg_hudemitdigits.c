@@ -1,6 +1,7 @@
 // Source: uo_cgame_mp_x86.dll 0x30031300..0x3003150e
 // Evidence: cgame_mp/mcode/uo_cgame_mp_x86/FUN_30031300_3003150e.mcode
 
+#include "compat/coduo_layout.h"
 #include "../client_recovered.h"
 #include "../globals.h"
 
@@ -57,7 +58,7 @@ _Static_assert(offsetof(clientInfo_t, infoValid) == 0x00, "infoValid +0x00");
 _Static_assert(offsetof(clientInfo_t, health) == 0x3c, "health +0x3c");
 #if UINTPTR_MAX == 0xFFFFFFFFu
 _Static_assert(offsetof(snapshot_t, ps.psClientNum) == 0xe0, "cg_snap->ps.psClientNum +0xe0");
-_Static_assert(offsetof(snapshot_t, ps.stats[STAT_HEALTH]) == 0x128,
+_Static_assert(CODUO_ARRAY_OFFSET(snapshot_t, ps.stats, STAT_HEALTH) == 0x128,
                "cg_snap->ps.stats[STAT_HEALTH] +0x128");
 _Static_assert(offsetof(rectDef_t, x) == 0x0, "rectDef_t.x +0x0");
 _Static_assert(offsetof(rectDef_t, y) == 0x4, "rectDef_t.y +0x4");

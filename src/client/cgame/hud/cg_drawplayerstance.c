@@ -32,6 +32,7 @@
 //   0x48/72 CG_R_SETCOLOR       — set the 2D draw color (rgba[4] | NULL)
 //   0x49/73 CG_R_DRAWSTRETCHPIC — 2D stretch-pic (x,y,w,h,s1,t1,s2,t2,hShader)
 
+#include <math.h>
 #include <stdint.h>
 #include "client/cgame/client_recovered.h"
 #include "client/cgame/globals.h"
@@ -168,7 +169,7 @@ void CG_DrawPlayerStance(const rectDef_t *iconRect, /* arg0 (EDI) */
                      * registers; the ONLY rounding is the drawColor[3] store
                      * (FSTP 0x3002f15c) -- hence one expression through sinl/fabsl
                      * (sinf would round both the argument and the result). */
-                    drawColor[3] = (float)__builtin_fabsl(__builtin_sinl(
+                    drawColor[3] = (float)fabsl(sinl(
                         (long double)remaining
                              * (long double)0.0006666666595f  /* 0x3007c1f8 */
                              * (long double)540.0f            /* 0x3007c1f4 */

@@ -1,3 +1,4 @@
+#include "compat/coduo_compiler.h"
 #include "xanim_eval.h"
 
 #include "animation_private.h"
@@ -1145,7 +1146,7 @@ void XAnimCalc(uint32_t animIndex, float weight,
 
     DObjAnimMat *blendParts = parts;
     if (clear == qfalse) {
-        blendParts = __builtin_alloca(xanim_evalPartBytes);
+        blendParts = CODUO_ALLOCA(xanim_evalPartBytes);
     }
     XAnimCalc(entry->payload.parent.firstChildIndex + firstActiveChild,
               firstWeight, blendParts, qtrue, qtrue);

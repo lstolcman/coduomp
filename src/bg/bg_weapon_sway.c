@@ -64,7 +64,7 @@ long double BG_SmoothWeaponSwayValue(float target, float current, float rate,
     const float step = (float)(
         (long double)msec * (long double)BG_SWAY_MILLISECONDS_TO_SECONDS *
         delta * (long double)rate);
-    const long double absoluteDelta = __builtin_fabsl(delta);
+    const long double absoluteDelta = fabsl(delta);
     const long double absoluteStep =
         (long double)fabsf(step);
 
