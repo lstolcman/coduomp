@@ -90,9 +90,9 @@ void VectorRotate(const vec3_t input, const axis_t matrix, vec3_t output)
  * matrix products, and final row transform.
  *
  * Windows forms radians from binary32 pi and 180 constants and uses its
- * characteristic final-row product orders.  Linux uses binary64 pi and 180;
- * the game calls VectorRotate while the engine emits the same X,Y,Z row loop
- * inline.  Complete platform bodies preserve those arithmetic differences.
+ * characteristic final-row product orders. Linux uses binary64 pi and 180
+ * and an X,Y,Z row loop in the game body; the call below preserves that row
+ * transform. Complete platform bodies preserve those arithmetic differences.
  * EMULATE_X87 remains independent in both bodies.
  */
 #if defined(WINDOWS_BEHAVIOR)
