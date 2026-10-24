@@ -261,7 +261,9 @@ void BG_CalculateWeaponPosition_Sway(const playerState_t *ps,
         x87f_load_f32(dt),
         x87f_load_f32(BG_SWAY_MILLISECONDS_TO_SECONDS)));
 #else
-    dt = (float)frameTime * BG_SWAY_MILLISECONDS_TO_SECONDS;
+    /* Round the millisecond count to binary32 before scaling to seconds. */
+    dt = (float)frameTime;
+    dt *= BG_SWAY_MILLISECONDS_TO_SECONDS;
 #endif
 
     /* Snap-condition polarity at every carrier (0x30015eef/0x30015f00 etc.):
