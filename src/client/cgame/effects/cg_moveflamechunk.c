@@ -439,7 +439,7 @@ void CG_MoveFlameChunk(flameChunk_t *chunk, int32_t flameTime)
                                                         ((long double)1.0 +
                                                          (long double)0.5 *
                                                             ((long double)1.0 -
-                                                             __builtin_fabsl((long double)
+                                                             fabsl((long double)
                                                                  cg_flameDamageTrace.normal[2]))) *
                                                             (long double)2000.0 +
                                                         (long double)child->spawnTime);

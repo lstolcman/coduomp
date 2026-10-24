@@ -27,8 +27,8 @@ Offensive installation to run the resulting client.
 
 ## Build
 
-The native executable currently supports Apple Silicon macOS and 32-bit or
-64-bit x86 Linux.
+The executable supports Apple Silicon macOS and 32-bit or 64-bit x86 Linux
+and Windows.
 
 ### Debian 12
 
@@ -89,6 +89,48 @@ the build uses its installed headers and links its library through
 `pkg-config`. Linux packages do not bundle Minizip. Keep the runtime library
 matched to the implementation used to build the executable: the two providers
 can use the same shared-library name with different public record layouts.
+
+### Windows with MSVC
+
+Use Visual Studio 2022 17.9 or newer with the C++ desktop workload and CMake 3.24 or newer.
+The CMake build reads the Makefile source manifests and builds the executable
+and all three modules. The POSIX dedicated server remains a Makefile target.
+
+```sh
+cmake -S . -B .workbench/build/msvc-win32 -A Win32 -DCODUO_FP_FAITHFUL=relaxed -DMSS32_DLL=C:/Games/CoDUO/mss32.dll
+cmake --build .workbench/build/msvc-win32 --config Release --parallel 2
+```
+
+The x86 build uses Miles and generates its import library from the supplied
+retail `mss32.dll`; keep that DLL beside the executable when running it.
+For x64, use a separate build directory and `-A x64`, and omit `MSS32_DLL`.
+The x64 build uses Miniaudio, matching the Makefile architecture policy.
+For a single-configuration
+generator such as NMake, run in the matching x86 or x64 developer command prompt
+and pass `-DCMAKE_BUILD_TYPE=Release` or `Debug` at configure time.
+
+Outputs are `bin/<configuration>/CoDUOMP.exe` and the cgame, UI, and game DLLs
+under `bin/<configuration>/uo/`, relative to the build directory. Keep the
+executable and modules from the same build and architecture together.
+
+MSVC has no 80-bit `long double`. This build therefore requires the same
+explicit `CODUO_FP_FAITHFUL=relaxed` acknowledgement as other toolchains that
+cannot meet the native x87 policy. It uses the existing SoftFloat-backed source
+paths and reconstructed math routines, with their documented transcendental
+fallbacks. Remaining native arithmetic has not reached retail parity. Win32
+`/arch:IA32` alone does not establish that parity.
+
+Pinned, hash-checked zlib, SDL2, libjpeg-turbo, curl, and GL headers download
+under the build directory. Set `BUNDLED_LIBS=OFF` and `CODUOMP_DEP_PREFIX` to use
+matching MSVC dependencies instead. `CODUOMP_BUILD_CLIENT=OFF` builds modules
+without downloading client dependencies. Missing client dependencies are a
+configuration error.
+
+The CRT is static by default (`/MT` for Release, `/MTd` for Debug).
+`CODUOMP_STATIC_VCRT=OFF` selects the DLL CRT consistently for the product and
+bundled libraries. JPEG uses its upstream-required separate CMake build;
+configuration, toolchain, and CRT selection are passed to that child build.
+No JPEG preconfiguration or source patch is necessary.
 
 ### macOS application bundle
 

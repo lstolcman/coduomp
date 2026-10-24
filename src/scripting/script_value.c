@@ -1,3 +1,4 @@
+#include "compat/coduo_compiler.h"
 #include "script_value.h"
 #include "script_runtime_host.h"
 #include "script_memory.h"
@@ -11,12 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(_MSC_VER)
-#include <malloc.h>
-#define SCRIPT_ALLOCA(size) _alloca(size)
-#else
-#define SCRIPT_ALLOCA(size) __builtin_alloca(size)
-#endif
+
 
 enum {
     SCRIPT_TIME_MASK = 0x00ffffff,
@@ -53,7 +49,7 @@ uint16_t VM_ConcatenateStrings(const VariableValue values[2])
     size_t leftLength = strlen(left);
     size_t rightLength = strlen(right);
     size_t combinedLength = leftLength + rightLength + 1;
-    char *combined = SCRIPT_ALLOCA(combinedLength);
+    char *combined = CODUO_ALLOCA(combinedLength);
 
     memcpy(combined, left, leftLength);
     memcpy(combined + leftLength, right, rightLength + 1);

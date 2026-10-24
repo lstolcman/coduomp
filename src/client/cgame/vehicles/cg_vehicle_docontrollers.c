@@ -28,6 +28,7 @@
 // persistent >32 and <=200-unit wheel-motion gate, surface-class switch, and three
 // independent rand-scaled dust-vector components follow the instruction order.
 
+#include "compat/coduo_compiler.h"
 #include "client/cgame/client_recovered.h"
 #include "compat/coduo_native_x87.h"
 
@@ -373,7 +374,7 @@ void CG_Vehicle_DoControllers(centity_t *veh, uint32_t *partBits)
         int32_t partCount = coduo_int32_from_bits((uint32_t)cgame_syscall(
             CG_DOBJ_NUM_BONES, (intptr_t)self));
         size_t  matBytes  = (size_t)((((uint32_t)partCount << 6) + 3u) & ~3u);
-        DObjSkelMat *boneMatrices = __builtin_alloca(matBytes);
+        DObjSkelMat *boneMatrices = CODUO_ALLOCA(matBytes);
         matrix43_t placement;
         vec3_t right;
 

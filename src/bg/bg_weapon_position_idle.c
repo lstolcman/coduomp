@@ -157,13 +157,13 @@ void BG_CalculateWeaponPosition_IdleAngles(pm_weapon_angle_state_t *state,
      * FSTP ST0 discards it) -- long double. */
     long double amp = swayMag * idleScale;
     angles[2] = (float)(
-        __builtin_sinl((long double)state->time * (long double)0.0005f) *
+        sinl((long double)state->time * (long double)0.0005f) *
         amp * (long double)0.04f + (long double)angles[2]);
     angles[1] = (float)(
-        __builtin_sinl((long double)state->time * (long double)0.0007f) *
+        sinl((long double)state->time * (long double)0.0007f) *
         amp * (long double)0.01f + (long double)angles[1]);
     angles[0] = (float)(
-        __builtin_sinl((long double)state->time * (long double)0.001f) *
+        sinl((long double)state->time * (long double)0.001f) *
         amp * (long double)0.01f + (long double)angles[0]);
     /* 0x300152e0 FSTP ST0 discards the leftover `amp`; 0x300152e2 RET. */
 #else

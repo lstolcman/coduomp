@@ -177,7 +177,7 @@ void CG_DrawObjectivePointers(const rectDef_t *rect, const vec3_t color)
 
         /* 0x30030000..0x30030028: horizontal distance to the objective, sqrt(dx^2+dy^2).
          * (The FADDP order is dy^2 + dx^2; the sum is identical.) */
-        float distance = (float)__builtin_sqrtl(
+        float distance = (float)sqrtl(
             (long double)dir[1] * (long double)dir[1] +
             (long double)dir[0] * (long double)dir[0]);
 

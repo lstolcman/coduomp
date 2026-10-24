@@ -1,3 +1,4 @@
+#include "compat/coduo_posix.h"
 #include "filesystem.h"
 #include "filesystem_path_security.h"
 #include "filesystem_services.h"

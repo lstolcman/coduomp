@@ -1,3 +1,4 @@
+#include "compat/coduo_compiler.h"
 #include "collision_static_model_trace.h"
 
 #include "compat/coduo_x87emu.h"
@@ -48,7 +49,7 @@ void CM_TraceStaticModel(worldSectorAreaLink_t *areaLink,
     localTrace.partGroup = 0;
 
     const int32_t partNameCount = XModelNumBones(areaLink->model);
-    DObjSkelMat basePose[partNameCount];
+    CODUO_STACK_ARRAY(DObjSkelMat, basePose, partNameCount);
     XModelGetBasePose(areaLink->model, basePose);
 
     vec3_t offsetStart;
@@ -173,7 +174,7 @@ void CM_TraceStaticModel(worldSectorAreaLink_t *areaLink,
     localTrace.partGroup = 0;
 
     const int32_t partNameCount = XModelNumBones(areaLink->model);
-    DObjSkelMat basePose[partNameCount];
+    CODUO_STACK_ARRAY(DObjSkelMat, basePose, partNameCount);
     XModelGetBasePose(areaLink->model, basePose);
 
     vec3_t offsetStart;

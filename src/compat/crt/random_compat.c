@@ -1,4 +1,5 @@
 #include "compat/crt/random_compat.h"
+#include "compat/coduo_compiler.h"
 
 #include <stdlib.h>
 
@@ -13,7 +14,7 @@ enum {
 /* NOT_FROM_ORIGINAL_SOURCE: compiler TLS carries the random word owned by
  * each image's statically linked Windows CRT. It must not share the host
  * libc generator with another image or another calling thread. */
-static __thread uint32_t coduo_crt_random_state = CODUO_CRT_RAND_INITIAL_SEED;
+static CODUO_THREAD_LOCAL uint32_t coduo_crt_random_state = CODUO_CRT_RAND_INITIAL_SEED;
 
 #if RAND_MAX % 32768 != 32767
 #error "Host rand domain must contain a whole number of 15-bit domains"

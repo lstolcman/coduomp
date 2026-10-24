@@ -1,3 +1,4 @@
+#include "compat/coduo_layout.h"
 #include "bg_weapon.h"
 
 #include "bg_weapon_binding.h"
@@ -17,9 +18,12 @@
  */
 #define BG_WEAPON_FIELD(index_, key_, member_, i386_offset_, type_) \
     { (key_), (int32_t)offsetof(weaponInfo_t, member_), (type_) }
+#define BG_WEAPON_ARRAY_FIELD(index_, key_, member_, element_, i386_offset_, type_) \
+    { (key_), (int32_t)CODUO_ARRAY_OFFSET(weaponInfo_t, member_, element_), (type_) }
 const parseField_t bg_weaponFieldDefs[BG_WEAPON_FIELD_COUNT] = {
 #include "bg_weapon_field_defs.inc"
 };
+#undef BG_WEAPON_ARRAY_FIELD
 #undef BG_WEAPON_FIELD
 
 #if UINTPTR_MAX == UINT32_MAX
@@ -29,7 +33,11 @@ enum {
 #define BG_WEAPON_FIELD(index_, key_, member_, i386_offset_, type_) \
     bg_weapon_field_offset_check_##index_ = \
         1 / ((offsetof(weaponInfo_t, member_) == (i386_offset_)) ? 1 : 0)
+#define BG_WEAPON_ARRAY_FIELD(index_, key_, member_, element_, i386_offset_, type_) \
+    bg_weapon_field_offset_check_##index_ = \
+        1 / ((CODUO_ARRAY_OFFSET(weaponInfo_t, member_, element_) == (i386_offset_)) ? 1 : 0)
 #include "bg_weapon_field_defs.inc"
+#undef BG_WEAPON_ARRAY_FIELD
 #undef BG_WEAPON_FIELD
 };
 #endif

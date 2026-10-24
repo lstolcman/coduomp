@@ -1,4 +1,5 @@
 #include "memory.h"
+#include "compat/coduo_compiler.h"
 
 #include "qcommon/hunk.h"
 #include "../system_fatal.h"
@@ -27,7 +28,7 @@ typedef struct botlib_memory_header_s {
  * allocator. The original executable has no 64-bit form of this header. */
 typedef union botlib_memory_header_u {
     uint32_t allocationMarker;
-    max_align_t alignment;
+    CODUO_MAX_ALIGN_TYPE alignment;
 } botlib_memory_header_t;
 #endif
 

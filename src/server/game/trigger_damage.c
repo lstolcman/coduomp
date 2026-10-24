@@ -5,6 +5,7 @@
  * 4d2391c10e234559ace294fb69d96741cad522653c361f13f626f4dc1891acb7
  */
 
+#include "compat/coduo_posix.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>

@@ -1,6 +1,7 @@
 #ifndef QCOMMON_XMODEL_TYPES_H
 #define QCOMMON_XMODEL_TYPES_H
 
+#include "compat/coduo_layout.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -294,9 +295,9 @@ XMODEL_TYPES_ASSERT(xmodel_collision_triangle_alignment,
 XMODEL_TYPES_ASSERT(xmodel_collision_triangle_planes_offset,
                     offsetof(XModelCollTri, planes) == 0x00);
 XMODEL_TYPES_ASSERT(xmodel_collision_triangle_second_plane_offset,
-                    offsetof(XModelCollTri, planes[1]) == 0x10);
+                    CODUO_ARRAY_OFFSET(XModelCollTri, planes, 1) == 0x10);
 XMODEL_TYPES_ASSERT(xmodel_collision_triangle_third_plane_offset,
-                    offsetof(XModelCollTri, planes[2]) == 0x20);
+                    CODUO_ARRAY_OFFSET(XModelCollTri, planes, 2) == 0x20);
 XMODEL_TYPES_ASSERT(xmodel_collision_triangle_size,
                     sizeof(XModelCollTri) == 0x30);
 XMODEL_TYPES_ASSERT(xmodel_collision_surface_alignment,
@@ -522,9 +523,9 @@ XMODEL_TYPES_ASSERT(xmodel_config_alignment,
 XMODEL_TYPES_ASSERT(xmodel_config_lods_offset,
                     offsetof(XModelConfig, lods) == 0x000);
 XMODEL_TYPES_ASSERT(xmodel_config_second_lod_offset,
-                    offsetof(XModelConfig, lods[1]) == 0x404);
+                    CODUO_ARRAY_OFFSET(XModelConfig, lods, 1) == 0x404);
 XMODEL_TYPES_ASSERT(xmodel_config_third_lod_offset,
-                    offsetof(XModelConfig, lods[2]) == 0x808);
+                    CODUO_ARRAY_OFFSET(XModelConfig, lods, 2) == 0x808);
 XMODEL_TYPES_ASSERT(xmodel_config_mins_offset,
                     offsetof(XModelConfig, mins) == 0xc0c);
 XMODEL_TYPES_ASSERT(xmodel_config_maxs_offset,

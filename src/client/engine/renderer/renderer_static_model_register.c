@@ -135,7 +135,7 @@ qboolean R_NeedsBoundsAdjustment(const refEntity_t *entity)
     int32_t lodIndex = 0;
     uint32_t partBits[DOBJ_PART_BITSET_WORD_COUNT];
     const int32_t surfaceCount = DObjGetNumSurfaces(obj, &lodIndex);
-    dobj_surface_ref_t *surfaceRefs = CODUOMP_ALLOCA(
+    dobj_surface_ref_t *surfaceRefs = CODUO_ALLOCA(
         (size_t)surfaceCount * sizeof(surfaceRefs[0]));
 
     DObjGetSurfaces(obj, surfaceRefs, partBits, &lodIndex);
@@ -283,7 +283,7 @@ void R_CreateStaticModel(const char *name, const vec3_t origin,
     model.modelIndex = modelHandle;
     DObjCreate(&model, 1, NULL, &obj, 0);
 
-    dobj_eval_storage_t *storage = CODUOMP_ALLOCA(
+    dobj_eval_storage_t *storage = CODUO_ALLOCA(
         (size_t)DObjGetAllocSkelSize(&obj));
     DObjCreateSkel(&obj, storage);
 

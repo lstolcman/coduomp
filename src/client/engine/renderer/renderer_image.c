@@ -2963,9 +2963,9 @@ void MergeAndLoadDelayedImages(image_t **images, int32_t imageCount,
         ri.Printf(R_PRINT_ALL, "%i groups -> ", imageCount);
 
     const int32_t nodeCapacity = imageCount * 2 - 1;
-    renderer_image_group_node_t *nodes = CODUOMP_ALLOCA(
+    renderer_image_group_node_t *nodes = CODUO_ALLOCA(
         (size_t)nodeCapacity * sizeof(*nodes));
-    renderer_image_group_node_t **groups = CODUOMP_ALLOCA(
+    renderer_image_group_node_t **groups = CODUO_ALLOCA(
         (size_t)nodeCapacity * sizeof(*groups));
 
     for (int32_t imageIndex = 0; imageIndex < imageCount; ++imageIndex) {
@@ -3065,7 +3065,7 @@ void R_LoadDelayedImages(void)
     if (tr.delayedImageCount == 0)
         return;
 
-    image_t **delayedImages = CODUOMP_ALLOCA(
+    image_t **delayedImages = CODUO_ALLOCA(
         (size_t)tr.delayedImageCount * sizeof(*delayedImages));
     int32_t delayedImageCount = 0;
 
@@ -4019,7 +4019,7 @@ void LoadJPG(const char *name, uint8_t **pixels,
 
     const size_t rowBytes = (size_t)sourceWidth * 4u;
     if (loadMode == R_IMAGE_LOAD_TILE && sourceWidth < sourceHeight) {
-        uint8_t *rowBuffer = CODUOMP_ALLOCA(rowBytes);
+        uint8_t *rowBuffer = CODUO_ALLOCA(rowBytes);
 
         while (decoder.output_scanline < decoder.output_height) {
             JSAMPROW scanline = rowBuffer;

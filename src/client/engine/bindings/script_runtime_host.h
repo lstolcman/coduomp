@@ -19,7 +19,7 @@ fileData_t *FS_GetDataForFile(const char *type, const char *name,
 #define SCRIPT_HUNK_CLEAR_TEMP_HIGH() Hunk_ClearTempMemoryHigh()
 #define SCRIPT_HUNK_COMMIT_TEMP() Hunk_CommitTempMemory()
 #define SCRIPT_OUT_OF_MEMORY() Sys_OutOfMemory()
-#define SCRIPT_HOST_ALLOCA(size) CODUOMP_ALLOCA(size)
+#define SCRIPT_HOST_ALLOCA(size) CODUO_ALLOCA(size)
 #define SCRIPT_STRICMP(left, right) coduo_crt_stricmp((left), (right))
 #define SCRIPT_ISALNUM_SIGNED_BYTE(value) coduo_crt_isalnum(value)
 #define SCRIPT_TOLOWER_SIGNED_BYTE(value) \

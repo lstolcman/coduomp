@@ -1,3 +1,4 @@
+#include "compat/coduo_layout.h"
 #include "collision_triangle_soup.h"
 
 #include "compat/coduo_x87emu.h"
@@ -24,9 +25,9 @@ typedef struct collisionSoupBuildEdge_s {
 #if UINTPTR_MAX == UINT32_MAX
 _Static_assert(_Alignof(collisionSoupBuildEdge_t) == 2,
                "i386 soup-build edge alignment changed");
-_Static_assert(offsetof(collisionSoupBuildEdge_t, vertexIndices[0]) == 0x00,
+_Static_assert(CODUO_ARRAY_OFFSET(collisionSoupBuildEdge_t, vertexIndices, 0) == 0x00,
                "i386 soup-build edge first vertex index moved");
-_Static_assert(offsetof(collisionSoupBuildEdge_t, vertexIndices[1]) == 0x02,
+_Static_assert(CODUO_ARRAY_OFFSET(collisionSoupBuildEdge_t, vertexIndices, 1) == 0x02,
                "i386 soup-build edge second vertex index moved");
 _Static_assert(sizeof(collisionSoupBuildEdge_t) == 0x04,
                "i386 soup-build edge size changed");

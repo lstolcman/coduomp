@@ -1,3 +1,4 @@
+#include "compat/coduo_compiler.h"
 #include "animation_private.h"
 #include "xanim_compat.h"
 
@@ -417,7 +418,7 @@ void DObjCreateDuplicateParts(DObj *state)
 
     record = state;
     remapStackSize = dobj_compat_trace_remap_stack_size(state);
-    uint8_t remap[remapStackSize];
+    CODUO_STACK_ARRAY(uint8_t, remap, remapStackSize);
 
     Com_Memset(remap, 0, DOBJ_PART_REMAP_PREFIX_SIZE);
 

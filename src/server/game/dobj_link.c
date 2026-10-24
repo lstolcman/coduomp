@@ -9,6 +9,7 @@
  * strong; unresolved names are tracked in private recovery records.
  */
 
+#include "compat/coduo_posix.h"
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>

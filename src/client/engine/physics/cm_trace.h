@@ -1,6 +1,7 @@
 #ifndef CODUOMP_CM_TRACE_H
 #define CODUOMP_CM_TRACE_H
 
+#include "compat/coduo_layout.h"
 #include "../q_shared.h"
 #include "../surface_types.h"
 #include "collision/collision_map_load.h"
@@ -64,7 +65,7 @@ _Static_assert(offsetof(dnode_t, planeNum) == 0x00,
                "original BSP node plane index moved");
 _Static_assert(offsetof(dnode_t, children) == 0x04,
                "original BSP node children moved");
-_Static_assert(offsetof(dnode_t, children[1]) == 0x08,
+_Static_assert(CODUO_ARRAY_OFFSET(dnode_t, children, 1) == 0x08,
                "original BSP node second child moved");
 _Static_assert(offsetof(dnode_t, mins) == 0x0c,
                "original BSP node mins moved");

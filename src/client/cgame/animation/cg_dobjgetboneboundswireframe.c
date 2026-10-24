@@ -1,6 +1,7 @@
 // Source: uo_cgame_mp_x86.dll 0x30020020..0x30020189
 // Evidence: cgame_mp/mcode/uo_cgame_mp_x86/FUN_30020020_30020189.mcode
 
+#include "compat/coduo_compiler.h"
 #include "../client_recovered.h"
 #include "../globals.h"
 
@@ -99,7 +100,7 @@ qboolean CG_DObjGetBoneBoundsWireframe(struct DObj_s *self,
     uint32_t partTableBytes =
         ((uint32_t)partCount * (uint32_t)sizeof(XModelPartColl *) + 3u) & ~3u;
     XModelPartColl **partTable =
-        (XModelPartColl **)__builtin_alloca(partTableBytes);
+        (XModelPartColl **)CODUO_ALLOCA(partTableBytes);
 
     /* 30020067: trap(0xb4, self, partTable) -> fill the table with a per-part
      * pointer (here, a pointer to each part's local {mins,maxs} bounds record). */

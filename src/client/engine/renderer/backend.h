@@ -1,6 +1,7 @@
 #ifndef CODUOMP_RENDERER_BACKEND_H
 #define CODUOMP_RENDERER_BACKEND_H
 
+#include "compat/coduo_layout.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -1970,7 +1971,7 @@ _Static_assert(offsetof(renderer_aabb_tree_t, bounds) == 0x00,
                "i386 renderer AABB-tree minimum-bounds offset changed");
 _Static_assert(sizeof(((renderer_aabb_tree_t *)0)->bounds) == 0x18,
                "i386 renderer AABB-tree bounds extent changed");
-_Static_assert(offsetof(renderer_aabb_tree_t, bounds[1]) == 0x0c,
+_Static_assert(CODUO_ARRAY_OFFSET(renderer_aabb_tree_t, bounds, 1) == 0x0c,
                "i386 renderer AABB-tree maximum-bounds offset changed");
 _Static_assert(offsetof(renderer_aabb_tree_t, surfaces) == 0x18,
                "i386 renderer AABB-tree surface-pointer offset changed");
@@ -1997,7 +1998,7 @@ _Static_assert(offsetof(renderer_cull_group_t, bounds) == 0x00,
                "i386 renderer cull-group minimum-bounds offset changed");
 _Static_assert(sizeof(((renderer_cull_group_t *)0)->bounds) == 0x18,
                "i386 renderer cull-group bounds extent changed");
-_Static_assert(offsetof(renderer_cull_group_t, bounds[1]) == 0x0c,
+_Static_assert(CODUO_ARRAY_OFFSET(renderer_cull_group_t, bounds, 1) == 0x0c,
                "i386 renderer cull-group maximum-bounds offset changed");
 _Static_assert(offsetof(renderer_cull_group_t, surfaces) == 0x18,
                "i386 renderer cull-group surface-pointer offset changed");
@@ -2130,7 +2131,7 @@ _Static_assert(offsetof(renderer_cell_entity_link_t, bounds) == 0x04,
                "i386 renderer cell-entity link minimum-bounds offset changed");
 _Static_assert(sizeof(((renderer_cell_entity_link_t *)0)->bounds) == 0x18,
                "i386 renderer cell-entity link bounds extent changed");
-_Static_assert(offsetof(renderer_cell_entity_link_t, bounds[1]) == 0x10,
+_Static_assert(CODUO_ARRAY_OFFSET(renderer_cell_entity_link_t, bounds, 1) == 0x10,
                "i386 renderer cell-entity link maximum-bounds offset changed");
 _Static_assert(offsetof(renderer_cell_entity_link_t, next) == 0x1c,
                "i386 renderer cell-entity link next offset changed");
@@ -2539,7 +2540,7 @@ _Static_assert(offsetof(renderer_lit_surface_t, bounds) == 0x0c,
                "i386 lit-surface minimum-bounds offset changed");
 _Static_assert(sizeof(((renderer_lit_surface_t *)0)->bounds) == 0x18,
                "i386 lit-surface bounds extent changed");
-_Static_assert(offsetof(renderer_lit_surface_t, bounds[1]) == 0x18,
+_Static_assert(CODUO_ARRAY_OFFSET(renderer_lit_surface_t, bounds, 1) == 0x18,
                "i386 lit-surface maximum-bounds offset changed");
 _Static_assert(sizeof(renderer_lit_surface_t) == 0x24,
                "original i386 lit-surface prefix size changed");
@@ -2565,7 +2566,7 @@ _Static_assert(offsetof(renderer_world_mesh_surface_t, bounds) == 0x0c,
                "i386 world-mesh minimum-bounds offset changed");
 _Static_assert(sizeof(((renderer_world_mesh_surface_t *)0)->bounds) == 0x18,
                "i386 world-mesh bounds extent changed");
-_Static_assert(offsetof(renderer_world_mesh_surface_t, bounds[1]) == 0x18,
+_Static_assert(CODUO_ARRAY_OFFSET(renderer_world_mesh_surface_t, bounds, 1) == 0x18,
                "i386 world-mesh maximum-bounds offset changed");
 _Static_assert(offsetof(renderer_world_mesh_surface_t, vertexCount) == 0x24,
                "i386 world-mesh vertex-count offset changed");
@@ -2950,7 +2951,7 @@ _Static_assert(offsetof(renderer_static_model_t, bounds) == 0x09c,
                "i386 static-model minimum-bounds offset changed");
 _Static_assert(sizeof(((renderer_static_model_t *)0)->bounds) == 0x018,
                "i386 static-model bounds extent changed");
-_Static_assert(offsetof(renderer_static_model_t, bounds[1]) == 0x0a8,
+_Static_assert(CODUO_ARRAY_OFFSET(renderer_static_model_t, bounds, 1) == 0x0a8,
                "i386 static-model maximum-bounds offset changed");
 _Static_assert(offsetof(renderer_static_model_t, viewCount) == 0x0b4,
                "i386 static-model view-count offset changed");

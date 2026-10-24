@@ -86,7 +86,7 @@ void CG_DrawFlashDamage(void)
     // clamp and again at the 0.2*0.7 attenuation -- three roundings the DLL does
     // not perform. The clamp's not-taken path (FSTP ST0; FLD 5.0f, 0x3001a922)
     // DISCARDS st0 and reloads the float 5.0f, which the assignment models.
-    long double alpha = __builtin_fabsl((long double)remaining * (1.0f / 500.0f)
+    long double alpha = fabsl((long double)remaining * (1.0f / 500.0f)
                                         * cg_damageFlashScale);
     if (alpha > 5.0f) {
         alpha = 5.0f;

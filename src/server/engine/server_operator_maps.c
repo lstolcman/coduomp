@@ -1,3 +1,4 @@
+#include "compat/coduo_compiler.h"
 #include "server_operator_maps.h"
 
 #include "qcommon/com_parse.h"
@@ -268,7 +269,7 @@ const char *SV_GetMapRotationToken(void)
         return NULL;
     }
 
-    char remainingRotation[strlen(parseData) + 1];
+    CODUO_STACK_ARRAY(char, remainingRotation, strlen(parseData) + 1);
     strcpy(remainingRotation, parseData);
     Cvar_Set("sv_mapRotationCurrent", remainingRotation);
     return token;

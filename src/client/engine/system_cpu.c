@@ -2,6 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
+#include "compat/coduo_compiler.h"
 #include "q_shared.h"
 
 #include "platform/dynamic_library_boundary.h"
@@ -274,7 +275,7 @@ int32_t Sys_GetPhysicalMemoryMB(void)
     uint64_t totalPhysicalBytes;
 
 #if defined(_WIN32)
-    typedef __typeof__(&GlobalMemoryStatusEx) global_memory_status_ex_t;
+    typedef CODUO_FUNCTION_POINTER_TYPE(GlobalMemoryStatusEx) global_memory_status_ex_t;
     HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
     global_memory_status_ex_t getMemoryStatusEx = NULL;
     uint64_t availableVirtualBytes;

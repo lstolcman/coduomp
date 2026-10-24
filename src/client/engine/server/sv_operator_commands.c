@@ -106,7 +106,7 @@ void SV_XModelDebugBoxes(int32_t entityNum)
     };
     const vec4_t boxColor = {1.0f, 1.0f, 1.0f, 0.0f};
     DObj *obj = Com_GetServerDObj(entityNum);
-    XModelPartColl **partCollisions = CODUOMP_ALLOCA(
+    XModelPartColl **partCollisions = CODUO_ALLOCA(
         (size_t)obj->boneCount * sizeof(*partCollisions));
     DObjSkelMat *boneMatrix = DObjGetMatrixArray(obj, 0);
     sharedEntity_t *gentity = (sharedEntity_t *)(

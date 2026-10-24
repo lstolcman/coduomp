@@ -1,3 +1,4 @@
+#include "compat/coduo_posix.h"
 #include "collision_static_models.h"
 
 #include "compat/crt/atof_compat.h"
@@ -12,7 +13,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 void Com_Error(errorParm_t code, const char *format, ...);
 extern char *cm_entityString;
