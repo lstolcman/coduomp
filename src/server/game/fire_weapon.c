@@ -16,6 +16,8 @@
 #include "g_syscalls.h"
 #include "game_functions.h"
 #include "compat/coduo_native_x87.h"
+#include "compat/coduo_fp_conversion.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #define MAX_BULLET_RECURSION 13
@@ -265,23 +267,42 @@ void SnapVectorTowards(float *point, const float *towards)
 /* ------------------------------------------------------------------ */
 
 /* VERIFIED_DECOMPILER(0x7a7f8, 8a7f8_Damage_Falloff.c, VERIFY-FIRE-WEAPON-PACKET-2026-06-17): DATAFLOW_VERIFIED */
-float Damage_Falloff(float distance, float maxDamage, float minDamagePercent,
+WIDE_FLOAT Damage_Falloff(float distance, float maxDamage, float minDamagePercent,
                      int minRange, int maxRange)
 {
-    float damage = maxDamage;
+#if defined(WINDOWS_BEHAVIOR)
+    /* Windows stores the minimum range as binary32, then keeps the falloff
+     * fraction and damage live through the return. Bullet damage truncates
+     * that return directly; missile impact stores it as binary32 first. */
+    volatile float storedMinRange = (float)minRange;
+    WIDE_FLOAT damage = maxDamage;
+
+    if (storedMinRange < distance) {
+        if ((WIDE_FLOAT)maxRange < distance) {
+            damage = (WIDE_FLOAT)minDamagePercent * 0.01f * maxDamage;
+        } else {
+            int32_t rangeSpan = coduo_int32_from_bits((uint32_t)maxRange - (uint32_t)minRange);
+            WIDE_FLOAT fraction = 1.0f - ((WIDE_FLOAT)distance - storedMinRange) / rangeSpan;
+            /* Keep the multiply and add separate on hosts with fused operations. */
+            volatile WIDE_FLOAT scaledDamage = (100.0f - (WIDE_FLOAT)minDamagePercent) * fraction;
+            damage = (scaledDamage + minDamagePercent) * maxDamage * 0.01f;
+        }
+    }
+#else
+    volatile float damage = maxDamage;
 
     /* 0x7a810/0x7a843: ranges are consumed via bare fild (no float32
      * rounding of the ints), the falloff fraction is stored through a
      * float32 local (0x7a865), and the tail multiplies group as
      * (percent * 0.01f) * maxDamage (0x7a877-0x7a882). */
-    if ((long double)minRange < (long double)distance) {
-        if ((long double)maxRange < (long double)distance) {
+    if ((WIDE_FLOAT)minRange < (WIDE_FLOAT)distance) {
+        if ((WIDE_FLOAT)maxRange < (WIDE_FLOAT)distance) {
 #if EMULATE_X87
             damage = x87f_store_f32(x87f_mul(
                 x87f_mul(x87f_load_f32(minDamagePercent), x87f_load_f32(0.01f)),
                 x87f_load_f32(maxDamage)));
 #else
-            damage = minDamagePercent * 0.01f * maxDamage;
+            damage = (WIDE_FLOAT)minDamagePercent * 0.01f * maxDamage;
 #endif
         } else {
             int32_t rangeSpan = coduo_int32_from_bits(
@@ -303,18 +324,13 @@ float Damage_Falloff(float distance, float maxDamage, float minDamagePercent,
                          x87f_load_f32(0.01f)),
                 x87f_load_f32(maxDamage)));
 #else
-            float fraction = (float)(1.0L -
-                ((long double)distance - (long double)minRange) /
-                (long double)rangeSpan);
-            damage = (float)((((long double)100.0f -
-                                (long double)minDamagePercent) *
-                               (long double)fraction +
-                               (long double)minDamagePercent) *
-                              (long double)0.01f *
-                              (long double)maxDamage);
+            volatile float fraction = 1.0f - ((WIDE_FLOAT)distance - (WIDE_FLOAT)minRange) / (WIDE_FLOAT)rangeSpan;
+            volatile WIDE_FLOAT scaledDamage = (100.0f - (WIDE_FLOAT)minDamagePercent) * fraction;
+            damage = (scaledDamage + minDamagePercent) * 0.01f * maxDamage;
 #endif
         }
     }
+#endif
 
     if (damage < 0.0f) {
         damage = 0.0f;
@@ -506,7 +522,7 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
         return hit;
     }
 
-    damage = game_compat_int32_from_float_trunc(
+    damage = coduo_fp_to_i32_extended(
         Damage_Falloff(VectorDistance(start, trace.endpos),
                        (float)damage,
                        (float)weaponInfo->damageFalloffMinDamagePercent,
