@@ -52,6 +52,7 @@
 #define PLAYER_DAMAGE_KNOCKBACK_PM_TIME_MIN 50
 #define PLAYER_DAMAGE_KNOCKBACK_PM_TIME_MAX 200
 #define PLAYER_DAMAGE_KNOCKBACK_DIVISOR 250.0f
+#define PLAYER_DAMAGE_KNOCKBACK_RECIPROCAL 0.004f
 #define PLAYER_DAMAGE_SURFACE_TYPE_FLESH 7
 #define PLAYER_DAMAGE_IMPACT_EVENT_FLAG 0x00002000u
 #define PLAYER_DAMAGE_BULLET_EVENT_FLAGS 0x00000800u
@@ -966,6 +967,31 @@ void PlayerCmd_finishPlayerDamage(uint32_t entityNum)
         }
 
         if (knockback != 0) {
+#if defined(WINDOWS_BEHAVIOR)
+            /* The Windows reciprocal is binary32. X remains wide through its
+             * velocity sum; Y and Z round to binary32 before their sums. */
+#if EMULATE_X87
+            x87f impulseBase = x87f_mul(
+                x87f_mul(x87f_load_i32(knockback), x87f_load_f32(g_knockback.value)),
+                x87f_load_f32(PLAYER_DAMAGE_KNOCKBACK_RECIPROCAL));
+            x87f impulseX = x87f_mul(x87f_load_f32(dir[0]), impulseBase);
+            float impulseY = x87f_store_f32(x87f_mul(x87f_load_f32(dir[1]), impulseBase));
+            float impulseZ = x87f_store_f32(x87f_mul(x87f_load_f32(dir[2]), impulseBase));
+
+            ent->client->ps.velocity[0] = x87f_store_f32(x87f_add(impulseX, x87f_load_f32(ent->client->ps.velocity[0])));
+            ent->client->ps.velocity[1] = x87f_store_f32(x87f_add(x87f_load_f32(impulseY), x87f_load_f32(ent->client->ps.velocity[1])));
+            ent->client->ps.velocity[2] = x87f_store_f32(x87f_add(x87f_load_f32(impulseZ), x87f_load_f32(ent->client->ps.velocity[2])));
+#else
+            WIDE_FLOAT impulseBase = ((WIDE_FLOAT)knockback * (WIDE_FLOAT)g_knockback.value) * (WIDE_FLOAT)PLAYER_DAMAGE_KNOCKBACK_RECIPROCAL;
+            volatile WIDE_FLOAT impulseX = (WIDE_FLOAT)dir[0] * impulseBase;
+            volatile float impulseY = (float)((WIDE_FLOAT)dir[1] * impulseBase);
+            volatile float impulseZ = (float)((WIDE_FLOAT)dir[2] * impulseBase);
+
+            ent->client->ps.velocity[0] = (float)(impulseX + (WIDE_FLOAT)ent->client->ps.velocity[0]);
+            ent->client->ps.velocity[1] += impulseY;
+            ent->client->ps.velocity[2] += impulseZ;
+#endif
+#else
             vec3_t impulseDelta;
 
             /* Stock 0x4770e/0x4772b/0x47748: dir[k] * ((fild(knockback) *
@@ -1004,6 +1030,7 @@ void PlayerCmd_finishPlayerDamage(uint32_t entityNum)
             ent->client->ps.velocity[0] += impulseDelta[0];
             ent->client->ps.velocity[1] += impulseDelta[1];
             ent->client->ps.velocity[2] += impulseDelta[2];
+#endif
 
             if (ent->client->ps.pmTime == 0) {
                 int pmTime = knockback * 2;
