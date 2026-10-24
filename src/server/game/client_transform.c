@@ -9,7 +9,8 @@
 #include <math.h>
 #include <stdlib.h>
 
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
+#include "compat/coduo_fp_conversion.h"
+#include "compat/coduo_x87_eval.h"
 #include "recovered_game.h"
 #include "game_globals.h"
 #include "game_functions.h"
@@ -17,6 +18,8 @@
 #define CLIENT_ORIGIN_Z_SNAP_OFFSET 1.0f
 #define CLIENT_ORIGIN_TELEPORT_BIT 0x00000008u
 #define CLIENT_ANGLE_SHORT_SCALE 0x1.6c16c2p+7f /* original float32 0x43360b61 */
+#define CLIENT_ANGLE_SHORT_TO_DEGREES 0.0054931640625f
+#define CLIENT_PRONE_YAW_LIMIT_SHORT 8192.0f
 #define CLIENT_PRONE_YAW_LIMIT 45.0f
 #define CLIENT_PRONE_PITCH_UP_LIMIT 45.0f
 #define CLIENT_PRONE_PITCH_DOWN_LIMIT -15.0f
@@ -33,15 +36,12 @@ int trap_IsLocalClient(int clientNum);
 static int32_t game_compat_client_transform_angle_to_short(float angle)
 {
     /* SetClientViewAngle 0x44402..0x445df keeps each product live through the
-     * truncating fistp; this helper is the native-width adaptation site. */
-#if EMULATE_X87
-    int32_t packed = x87f_store_i32_trunc(x87f_mul(
-        x87f_load_f32(angle), x87f_load_f32(CLIENT_ANGLE_SHORT_SCALE)));
-#else
-    int32_t packed = game_compat_int32_from_long_double_trunc(
-        (long double)angle * (long double)CLIENT_ANGLE_SHORT_SCALE);
-#endif
-    return (int32_t)((uint32_t)packed & 0xffffu);
+     * truncating fistp; this helper is the native-width adaptation site.
+     * Windows converts through signed qword before taking the low 16 bits;
+     * Linux uses signed dword conversion. */
+    uint32_t packed = coduo_fp_to_u32_extended(
+        (WIDE_FLOAT)angle * (WIDE_FLOAT)CLIENT_ANGLE_SHORT_SCALE);
+    return (int32_t)(packed & 0xffffu);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: helper for the SetClientViewAngle delta-angle loop. */
@@ -78,11 +78,24 @@ static void game_compat_client_transform_clamp_prone_view(gclient_t *client, vec
             (uint32_t)client->ps.deltaAngles[1] +
             (uint32_t)game_compat_client_transform_angle_to_short(yawDelta));
 
+#if defined(WINDOWS_BEHAVIOR)
+        /* The inlined Windows normalization retains the live subtraction.
+         * Its other branch multiplies first, then adds the folded short-angle
+         * offset. Neither path rounds the intermediate angle to binary32. */
+        WIDE_FLOAT packedYaw;
+        if (yawDelta > 0.0f) {
+            packedYaw = ((WIDE_FLOAT)proneYaw - (WIDE_FLOAT)CLIENT_PRONE_YAW_LIMIT) * (WIDE_FLOAT)CLIENT_ANGLE_SHORT_SCALE;
+        } else {
+            packedYaw = (WIDE_FLOAT)proneYaw * (WIDE_FLOAT)CLIENT_ANGLE_SHORT_SCALE + (WIDE_FLOAT)CLIENT_PRONE_YAW_LIMIT_SHORT;
+        }
+        angles[1] = (float)(coduo_fp_to_u32_extended(packedYaw) & 0xffffu) * CLIENT_ANGLE_SHORT_TO_DEGREES;
+#else
         if (yawDelta > 0.0f) {
             angles[1] = AngleNormalize360(proneYaw - CLIENT_PRONE_YAW_LIMIT);
         } else {
             angles[1] = AngleNormalize360(proneYaw + CLIENT_PRONE_YAW_LIMIT);
         }
+#endif
     }
 
     float pronePitch = client->ps.proneTorsoPitch;
