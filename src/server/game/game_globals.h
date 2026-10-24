@@ -6,6 +6,13 @@
 #include "bg_state.h"
 #include "level_locals.h"
 
+/* Original module identity follows the selected platform behavior. */
+#if defined(WINDOWS_BEHAVIOR)
+#define GAME_STOCK_BUILD_DATE "Dec 21 2004"
+#else
+#define GAME_STOCK_BUILD_DATE "Feb 10 2005"
+#endif
+
 /*
  * Global variable declarations.
  * These are defined in the binary and accessed throughout the codebase.
@@ -69,8 +76,6 @@ extern vmCvar_t g_inactivityspectator;
 extern vmCvar_t g_debugMove;
 extern vmCvar_t g_debugProneCheck;
 extern vmCvar_t g_debugProneCheckDepthCheck;
-/* NOT_FROM_ORIGINAL_SOURCE: gated spectator/archive diagnostics. */
-extern vmCvar_t g_debugArchiveCheck;
 /* NOT_FROM_ORIGINAL_SOURCE: gated corpse clone snapshot diagnostics. */
 extern vmCvar_t g_debugCorpseCheck;
 /* NOT_FROM_ORIGINAL_SOURCE: gated water movement diagnostics. */

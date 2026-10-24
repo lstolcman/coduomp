@@ -50,7 +50,7 @@ void dllEntry(game_syscall_t syscallPtr)
 #define UI_CVAR_BUFFER_SIZE 256
 #define GAMETYPE_DEFAULT "dm"
 #define GAME_LOG_DISPLAY_NAME "CoD:United Offensive"
-#define GAME_LOG_DISPLAY_DATE "Feb 10 2005"
+#define GAME_LOG_DISPLAY_DATE GAME_STOCK_BUILD_DATE
 /* rodata 0xa1100: "e \"GAME_SERVER\x15: %s \x14GAME_CHANGEDTO\x15 %s\"" -
  * the marker before GAME_CHANGEDTO is 0x14, not 0x15. */
 #define CVAR_CHANGE_COMMAND "e \"GAME_SERVER\x15: %s \x14GAME_CHANGEDTO\x15 %s\""
@@ -279,12 +279,6 @@ void G_RegisterCvars(void)
             entry->modificationCount = entry->vmCvar->modificationCount;
         }
     }
-
-    /* NOT_FROM_ORIGINAL_SOURCE: g_debugArchiveCheck gates recovery-only
-     * snapshot diagnostics. Register it outside the machine-backed 132-entry
-     * gameCvarTable so that the retail table's extent and entry ordering stay
-     * exact; this extra registration is the intentional behavior deviation. */
-    trap_Cvar_Register(&g_debugArchiveCheck, "g_debugArchiveCheck", "0", 0);
 
     if (Scr_IsValidGameType(g_gametype.string) == 0) {
         G_Printf("g_gametype %s is not a valid gametype, defaulting to dm\n",

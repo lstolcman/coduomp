@@ -113,8 +113,6 @@ vmCvar_t g_inactivityspectator;
 vmCvar_t g_debugMove;
 vmCvar_t g_debugProneCheck;
 vmCvar_t g_debugProneCheckDepthCheck;
-/* NOT_FROM_ORIGINAL_SOURCE: gated spectator/archive diagnostics. */
-vmCvar_t g_debugArchiveCheck;
 /* NOT_FROM_ORIGINAL_SOURCE: gated corpse clone snapshot diagnostics. */
 vmCvar_t g_debugCorpseCheck;
 /* NOT_FROM_ORIGINAL_SOURCE: gated water movement diagnostics. */
@@ -234,7 +232,7 @@ int g_numHidden;
 game_cvar_table_t gameCvarTable[] = {
     { &g_cheats, "sv_cheats", "", 0, 0, 0 },
     { NULL, "gamename", "CoD:United Offensive", 68, 0, 0 },
-    { NULL, "gamedate", "Feb 10 2005", 64, 0, 0 },
+    { NULL, "gamedate", GAME_STOCK_BUILD_DATE, 64, 0, 0 },
     { NULL, "sv_mapname", "", 68, 0, 0 },
     { &g_night, "sv_night", "0", 72, 0, 0 },
     { &g_obituary, "sv_obituary", "1", 8, 0, 0 },
