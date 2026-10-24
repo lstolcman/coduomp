@@ -27,7 +27,8 @@
  * The behavioral split is genuine.  Windows rand has a 15-bit result and its
  * optimized body retains selected max-min/sample expressions in x87 before
  * their final stores.  Linux rand has a 31-bit result and the unoptimized body
- * spills each range delta and random sample to binary32 before later use.
+ * spills each range delta and completed random result to binary32. The random
+ * quotient remains live through multiplication and addition before that store.
  */
 
 #if defined(WINDOWS_BEHAVIOR)
