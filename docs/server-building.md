@@ -135,6 +135,14 @@ names the sources use (`unistd.h`, `strings.h`, `sys/time.h`, `dirent.h`) and
 maps file descriptors, `stat`/`chmod`, `gettimeofday`, sleep and directory
 iteration onto the CRT and Win32 APIs.
 
+One behavior deliberately differs from the retail Linux server: localized pak
+acceptance uses the Windows engine's fourteen-entry language table. The retail
+Linux server accepts only `localized_english_*`, so a non-English install cannot
+mount the localized pak that carries `default_mp.cfg` and startup fails with
+`Couldn't load default_mp.cfg`. The standalone server now mounts
+`localized_polish_*` and the other supported names for every language in that
+table. `fs_ignoreLozalized 1` still disables localized assets.
+
 CD-key authorization and PunkBuster are selected at configure time; the default
 matches the Makefile target (`AUTH=0`, PunkBuster disabled):
 
