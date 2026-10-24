@@ -208,8 +208,8 @@ void BG_PlayerStateToEntityState(playerState_t *ps, entityState_t *es,
             }
 
             if (eventExclusions[exclusionIndex] < 0) {
-                /* Retail reloads the source event byte after scanning. It also
-                 * reloads eventSequence between the event and parm stores. */
+                /* Recoil leaves the input event ring unchanged, so this reload
+                 * retains the captured event. Reload eventSequence for each store. */
                 uint8_t eventForStore = (uint8_t)ps->events[sourceSlot];
                 uint32_t eventOutputSlot =
                     (uint32_t)es->eventSequence & (MAX_PS_EVENTS - 1);
