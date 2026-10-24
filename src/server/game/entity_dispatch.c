@@ -924,20 +924,17 @@ void G_RotatePoint(float *point, float matrix[3][3])
     float y = point[1];
     float z = point[2];
 
-    /* Stock 0x60568..0x60587: each row is a ((m0*x + m1*y) + m2*z) dot kept
-     * 80-bit until the point[i] store -> shim. */
-#if EMULATE_X87
+    /* Keep each dot product wide until its float store. The standalone
+     * Windows body adds Z/Y before X; Linux adds X/Y before Z. */
     for (int i = 0; i < 3; i++) {
-        point[i] = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(matrix[i][0]), x87f_load_f32(x)),
-                     x87f_mul(x87f_load_f32(matrix[i][1]), x87f_load_f32(y))),
-            x87f_mul(x87f_load_f32(matrix[i][2]), x87f_load_f32(z))));
-    }
+#if defined(WINDOWS_BEHAVIOR)
+        point[i] = (float)(((WIDE_FLOAT)matrix[i][2] * z + (WIDE_FLOAT)matrix[i][1] * y)
+                         + (WIDE_FLOAT)matrix[i][0] * x);
 #else
-    point[0] = matrix[0][0] * x + matrix[0][1] * y + matrix[0][2] * z;
-    point[1] = matrix[1][0] * x + matrix[1][1] * y + matrix[1][2] * z;
-    point[2] = matrix[2][0] * x + matrix[2][1] * y + matrix[2][2] * z;
+        point[i] = (float)(((WIDE_FLOAT)matrix[i][0] * x + (WIDE_FLOAT)matrix[i][1] * y)
+                         + (WIDE_FLOAT)matrix[i][2] * z);
 #endif
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -975,7 +972,21 @@ int G_TryPushingEntity(gentity_t *ent, gentity_t *mover,
     originalRelativeOrigin[1] = relativeOrigin[1];
     originalRelativeOrigin[2] = relativeOrigin[2];
 
+#if defined(WINDOWS_BEHAVIOR)
+    /* The Windows inlined rotation adds Z/Y before X in the first two rows,
+     * but X/Z before Y in the third. Each row rounds once to float. */
+    relativeOrigin[0] = (float)(((WIDE_FLOAT)transposeMatrix[0][2] * originalRelativeOrigin[2]
+                              + (WIDE_FLOAT)transposeMatrix[0][1] * originalRelativeOrigin[1])
+                              + (WIDE_FLOAT)transposeMatrix[0][0] * originalRelativeOrigin[0]);
+    relativeOrigin[1] = (float)(((WIDE_FLOAT)transposeMatrix[1][2] * originalRelativeOrigin[2]
+                              + (WIDE_FLOAT)transposeMatrix[1][1] * originalRelativeOrigin[1])
+                              + (WIDE_FLOAT)transposeMatrix[1][0] * originalRelativeOrigin[0]);
+    relativeOrigin[2] = (float)(((WIDE_FLOAT)transposeMatrix[2][0] * originalRelativeOrigin[0]
+                              + (WIDE_FLOAT)transposeMatrix[2][2] * originalRelativeOrigin[2])
+                              + (WIDE_FLOAT)transposeMatrix[2][1] * originalRelativeOrigin[1]);
+#else
     G_RotatePoint(relativeOrigin, transposeMatrix);
+#endif
     /* 0x606eb..0x6072d: stock rounds the rotation delta to a float vector
      * first, then adds it to pushedOrigin -- two roundings per component. */
     rotateDelta[0] = relativeOrigin[0] - originalRelativeOrigin[0];
