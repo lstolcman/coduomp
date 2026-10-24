@@ -289,7 +289,7 @@ int ClientNumberFromString(gentity_t *to, const char *text)
                 continue;
             }
 
-            SanitizeString(client->userInfoName, cleanName);
+            SanitizeString(client->clientState.name, cleanName);
             if (strcmp(cleanName, cleanInput) == 0) {
                 return clientNum;
             }
@@ -825,11 +825,11 @@ int OnSameTeam(gentity_t *ent1, gentity_t *ent2)
         return 0;
     }
 
-    if (ent1->client->sessionTeam == TEAM_FREE) {
+    if (ent1->client->clientState.team == TEAM_FREE) {
         return 0;
     }
 
-    return ent1->client->sessionTeam == ent2->client->sessionTeam;
+    return ent1->client->clientState.team == ent2->client->clientState.team;
 }
 
 /* VERIFIED_DECOMPILER(0x75c37, 85c37_InSameSquad.c, VERIFY-CLIENT-COMMANDS-CHAT-TEAM-2026-06-17): DATAFLOW_VERIFIED - OnSameTeam gate, no-squad rejection, int16 squad compare, and return values checked. */
@@ -938,7 +938,7 @@ void TeamplayInfoMessage(gentity_t *ent)
     int32_t targetLocation;
 
     if (client->sessionState == SESS_STATE_PLAYING) {
-        if (client->sessionTeam == TEAM_FREE) {
+        if (client->clientState.team == TEAM_FREE) {
             client->ps.stats[STAT_IDENT_CLIENT_NUM] = -1;
             client->ps.stats[STAT_IDENT_CLIENT_HEALTH] = 0;
             return;
@@ -1077,8 +1077,8 @@ void G_Say(gentity_t *ent, gentity_t *target, int mode, const char *message)
     char color;
 
     if (mode == SAY_MODE_TEAM &&
-        ent->client->sessionTeam != TEAM_AXIS &&
-        ent->client->sessionTeam != TEAM_ALLIES) {
+        ent->client->clientState.team != TEAM_AXIS &&
+        ent->client->clientState.team != TEAM_ALLIES) {
         mode = SAY_MODE_ALL;
     } else if (mode == SAY_MODE_SQUAD &&
                ent->client->sessionSquad != SESS_SQUAD_ALPHA &&
@@ -1086,18 +1086,18 @@ void G_Say(gentity_t *ent, gentity_t *target, int mode, const char *message)
         mode = SAY_MODE_TEAM;
     }
 
-    Q_strncpyz(cleanName, ent->client->userInfoName, SAY_NAME_BUFFER_SIZE);
+    Q_strncpyz(cleanName, ent->client->clientState.name, SAY_NAME_BUFFER_SIZE);
     Q_CleanStr(cleanName);
 
-    if (ent->client->sessionTeam == TEAM_AXIS) {
+    if (ent->client->clientState.team == TEAM_AXIS) {
         teamColor = SAY_COLOR_AXIS;
-    } else if (ent->client->sessionTeam == TEAM_ALLIES) {
+    } else if (ent->client->clientState.team == TEAM_ALLIES) {
         teamColor = SAY_COLOR_ALLIES;
     } else {
         teamColor = "";
     }
 
-    if (ent->client->sessionTeam == TEAM_SPECTATOR) {
+    if (ent->client->clientState.team == TEAM_SPECTATOR) {
         Com_sprintf(namePrefix, SAY_NAME_BUFFER_SIZE,
                     "\x15(\x14GAME_SPECTATOR\x15)");
     } else if (ent->client->sessionState == SESS_STATE_PLAYING) {
@@ -1111,7 +1111,7 @@ void G_Say(gentity_t *ent, gentity_t *target, int mode, const char *message)
     if (mode == SAY_MODE_TEAM) {
         int senderGuid;
 
-        teamName = ent->client->sessionTeam == TEAM_AXIS
+        teamName = ent->client->clientState.team == TEAM_AXIS
                        ? "GAME_AXIS"
                        : "GAME_ALLIES";
         senderGuid = trap_GetGuid((uint32_t)ent->s.number);
@@ -1131,7 +1131,7 @@ void G_Say(gentity_t *ent, gentity_t *target, int mode, const char *message)
         color = SAY_COLOR_TEAM;
     } else if (mode == SAY_MODE_TELL) {
         if (target == NULL || target->client == NULL ||
-            target->client->sessionTeam != ent->client->sessionTeam ||
+            target->client->clientState.team != ent->client->clientState.team ||
             Team_GetLocationMsg(ent, location, SAY_LOCATION_BUFFER_SIZE) == 0) {
             Com_sprintf(messagePrefix, SAY_PREFIX_BUFFER_SIZE,
                         "%s[%s]%s: ",
@@ -1145,7 +1145,7 @@ void G_Say(gentity_t *ent, gentity_t *target, int mode, const char *message)
     } else if (mode == SAY_MODE_SQUAD) {
         int senderGuid;
 
-        teamName = ent->client->sessionTeam == TEAM_AXIS
+        teamName = ent->client->clientState.team == TEAM_AXIS
                        ? "GAME_AXIS"
                        : "GAME_ALLIES";
         squadName = ent->client->sessionSquad == SESS_SQUAD_ALPHA
@@ -1289,9 +1289,9 @@ void Cmd_Tell_f(gentity_t *ent)
 
     message = ConcatArgs(2);
 
-    Q_strncpyz(senderName, ent->client->userInfoName, sizeof(senderName));
+    Q_strncpyz(senderName, ent->client->clientState.name, sizeof(senderName));
     Q_CleanStr(senderName);
-    Q_strncpyz(targetName, target->client->userInfoName, sizeof(targetName));
+    Q_strncpyz(targetName, target->client->clientState.name, sizeof(targetName));
     Q_CleanStr(targetName);
 
     targetGuid = trap_GetGuid((uint32_t)target->s.number);
@@ -1557,7 +1557,7 @@ static int game_compat_command_callvote_client_from_arg(const char *command,
 
         for (index = 0; index < SCOREBOARD_MAX_CLIENTS; index++) {
             if (level.clients[index].connectedState == CON_CONNECTED) {
-                Q_strncpyz(cleanName, level.clients[index].userInfoName,
+                Q_strncpyz(cleanName, level.clients[index].clientState.name,
                            CALLVOTE_CLIENT_NAME_BUFFER_SIZE);
                 Q_CleanStr(cleanName);
                 if (Q_stricmp(cleanName, arg) == 0) {
@@ -1572,7 +1572,7 @@ static int game_compat_command_callvote_client_from_arg(const char *command,
             level.clients[clientNum].connectedState != CON_CONNECTED) {
             clientNum = SCOREBOARD_MAX_CLIENTS;
         } else {
-            Q_strncpyz(cleanName, level.clients[clientNum].userInfoName,
+            Q_strncpyz(cleanName, level.clients[clientNum].clientState.name,
                        CALLVOTE_CLIENT_NAME_BUFFER_SIZE);
             Q_CleanStr(cleanName);
         }
@@ -1646,7 +1646,7 @@ void Cmd_CallVote_f(gentity_t *ent)
         return;
     }
 
-    if (client->sessionTeam == TEAM_SPECTATOR) {
+    if (client->clientState.team == TEAM_SPECTATOR) {
         game_compat_command_send_literal_status(ent, "e \"GAME_NOSPECTATORCALLVOTE\"");
         return;
     }
@@ -1788,7 +1788,7 @@ void Cmd_CallVote_f(gentity_t *ent)
                     "%s \"%d\"", kickCommand, clientNum);
         Com_sprintf(lvl->voteDisplayString, sizeof(lvl->voteDisplayString),
                     "GAME_VOTE_KICK\x15(%i)%s",
-                    clientNum, level.clients[clientNum].userInfoName);
+                    clientNum, level.clients[clientNum].clientState.name);
     } else if (Q_stricmp(command, "drawfriend") == 0) {
         if (game_compat_command_callvote_arg_hits_stock_binary_reject(arg)) {
             trap_SendServerCommand((uint32_t)(int)(ent - g_entities),
@@ -1876,7 +1876,7 @@ void Cmd_CallVote_f(gentity_t *ent)
     trap_SendServerCommand(SERVER_COMMAND_ALL_CLIENTS,
                            COMMAND_SEND_UNRELIABLE,
                            va("e \"GAME_CALLEDAVOTE\x15%s\"",
-                              client->userInfoName));
+                              client->clientState.name));
     lvl->voteTime = coduo_int32_from_bits(
         (uint32_t)trap_Milliseconds() + CALLVOTE_DURATION_MS);
     lvl->voteYes = 1;
@@ -1929,7 +1929,7 @@ void Cmd_Vote_f(gentity_t *ent)
         return;
     }
 
-    if (client->sessionTeam == TEAM_SPECTATOR) {
+    if (client->clientState.team == TEAM_SPECTATOR) {
         trap_SendServerCommand((uint32_t)(int)(ent - g_entities),
                                COMMAND_SEND_UNRELIABLE,
                                "e \"GAME_NOSPECTATORVOTE\"");
@@ -2045,9 +2045,9 @@ qboolean Cmd_Activate_f(gentity_t *ent)
         }
     } else if (classname == scr_const_team_WOLF_checkpoint) {
         /* This entity class stores its team selector in the otherwise generic
-         * itemCount lane. The original compares that dword to sessionTeam. */
+         * itemCount lane. The original compares that dword to clientState.team. */
         const team_t checkpointTeam = (team_t)target->itemCount;
-        if (checkpointTeam != client->sessionTeam) {
+        if (checkpointTeam != client->clientState.team) {
             target->health = coduo_int32_from_bits(
                 (uint32_t)target->health + UINT32_C(1));
         }
@@ -2072,7 +2072,7 @@ void Cmd_MatchTimeout_f(gentity_t *ent)
     }
 
     if (client->sessionState != SESS_STATE_PLAYING ||
-        client->sessionTeam == TEAM_SPECTATOR) {
+        client->clientState.team == TEAM_SPECTATOR) {
         trap_SendServerCommand((uint32_t)(int)(ent - g_entities),
                                COMMAND_SEND_UNRELIABLE,
                                "e \"PATCH_1_5_TIMEOUT_MUSTBEPLAYING\"");
@@ -2087,7 +2087,7 @@ void Cmd_MatchTimeout_f(gentity_t *ent)
         return;
     }
 
-    if (client->sessionTeam == TEAM_ALLIES) {
+    if (client->clientState.team == TEAM_ALLIES) {
         teamName = "GAME_ALLIES";
         if (g_timeoutsAllowed.integer <= lvl->timeoutUsedAllies) {
             trap_SendServerCommand(
@@ -2114,7 +2114,7 @@ void Cmd_MatchTimeout_f(gentity_t *ent)
             lvl->matchTimeoutDuration = g_timeoutLength.integer;
         }
     } else {
-        if (client->sessionTeam != TEAM_AXIS) {
+        if (client->clientState.team != TEAM_AXIS) {
             trap_SendServerCommand(
                 (uint32_t)(int)(ent - g_entities),
                 COMMAND_SEND_UNRELIABLE,
@@ -2149,7 +2149,7 @@ void Cmd_MatchTimeout_f(gentity_t *ent)
         }
     }
 
-    Q_strncpyz(cleanName, client->userInfoName,
+    Q_strncpyz(cleanName, client->clientState.name,
                CALLVOTE_CLIENT_NAME_BUFFER_SIZE);
     Q_CleanStr(cleanName);
     trap_Cvar_Set("timescale", "0");
@@ -2187,14 +2187,14 @@ void Cmd_MatchTimein_f(gentity_t *ent)
     }
 
     if (client->sessionState != SESS_STATE_PLAYING ||
-        client->sessionTeam == TEAM_SPECTATOR) {
+        client->clientState.team == TEAM_SPECTATOR) {
         trap_SendServerCommand((uint32_t)(int)(ent - g_entities),
                                COMMAND_SEND_UNRELIABLE,
                                "e \"PATCH_1_5_TIMEIN_MUSTBEPLAYING\"");
         return;
     }
 
-    if (client->sessionTeam != lvl->matchTimeoutTeam) {
+    if (client->clientState.team != lvl->matchTimeoutTeam) {
         trap_SendServerCommand((uint32_t)(int)(ent - g_entities),
                                COMMAND_SEND_UNRELIABLE,
                                "e \"PATCH_1_5_TIMEIN_WRONGTEAM\"");
@@ -2203,7 +2203,7 @@ void Cmd_MatchTimein_f(gentity_t *ent)
 
     Com_sprintf(lvl->timeoutMessage, sizeof(lvl->timeoutMessage),
                 "PATCH_1_5_TIMEOUT_ENDING\x15");
-    Q_strncpyz(cleanName, client->userInfoName,
+    Q_strncpyz(cleanName, client->clientState.name,
                CALLVOTE_CLIENT_NAME_BUFFER_SIZE);
     Q_CleanStr(cleanName);
     now = trap_Milliseconds();

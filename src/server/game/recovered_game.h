@@ -534,13 +534,12 @@ struct gclient_s {
     uint32_t spectateTeamDenyMask;           /* +0x45ac, deny bits read by G_ClientCanSpectateTeam */
     char abiGap_45b0[0x004];                 /* +0x45b0, size 0x004; client team/model audit found no maintained access before sessionSquad; retained for ABI. */
     int16_t sessionSquad;                    /* +0x45b4 */
-    char padding45b6[2];                     /* +0x45b6..+0x45b7, aligns clientNum. */
-    int32_t clientNum;                       /* +0x45b8 */
-    team_t sessionTeam;                      /* +0x45bc, RECOVERED(UO-GAME-UNK-0024) */
-    int32_t baseModelIndex;                  /* +0x45c0 */
-    int32_t attachModelIndices[6];           /* +0x45c4 */
-    int32_t attachTagIndices[6];             /* +0x45dc */
-    char userInfoName[0x20];                 /* +0x45f4 */
+    char padding45b6[2];                     /* +0x45b6..+0x45b7, aligns clientState. */
+    /* The game query exposes this complete 92-byte snapshot record.
+     * clientNum +0x45b8; team +0x45bc, RECOVERED(UO-GAME-UNK-0024);
+     * modelindex +0x45c0; attachModelIndex +0x45c4;
+     * attachTagIndex +0x45dc; name +0x45f4. */
+    clientState_t clientState;               /* +0x45b8..+0x4613 */
 
     /* === Spectator / buttons / damage (offset range 0x4614-0x469f) === */
     int32_t spectatorActivityState;          /* +0x4614 */
@@ -1002,16 +1001,18 @@ GAME_STATIC_ASSERT(gclient_script_max_speed_offset, offsetof(gclient_t, maxSpeed
 GAME_STATIC_ASSERT(gclient_called_votes_offset, offsetof(gclient_t, calledVotes) == 0x4594);
 GAME_STATIC_ASSERT(gclient_view_model_index_offset, offsetof(gclient_t, viewModelIndex) == 0x45a8);
 GAME_STATIC_ASSERT(gclient_session_squad_offset, offsetof(gclient_t, sessionSquad) == 0x45b4);
-GAME_STATIC_ASSERT(gclient_client_num_offset, offsetof(gclient_t, clientNum) == 0x45b8);
-GAME_STATIC_ASSERT(gclient_session_team_offset, offsetof(gclient_t, sessionTeam) == 0x45bc);
+GAME_STATIC_ASSERT(gclient_client_state_offset, offsetof(gclient_t, clientState) == 0x45b8);
+GAME_STATIC_ASSERT(gclient_client_state_extent, sizeof(((gclient_t *)0)->clientState) == 92);
+GAME_STATIC_ASSERT(gclient_client_num_offset, offsetof(gclient_t, clientState.clientNum) == 0x45b8);
+GAME_STATIC_ASSERT(gclient_session_team_offset, offsetof(gclient_t, clientState.team) == 0x45bc);
 GAME_STATIC_ASSERT(gclient_base_model_index_offset,
-                 offsetof(gclient_t, baseModelIndex) == 0x45c0);
+                 offsetof(gclient_t, clientState.modelindex) == 0x45c0);
 GAME_STATIC_ASSERT(gclient_attach_model_indices_offset,
-                 offsetof(gclient_t, attachModelIndices) == 0x45c4);
+                 offsetof(gclient_t, clientState.attachModelIndex) == 0x45c4);
 GAME_STATIC_ASSERT(gclient_attach_tag_indices_offset,
-                 offsetof(gclient_t, attachTagIndices) == 0x45dc);
+                 offsetof(gclient_t, clientState.attachTagIndex) == 0x45dc);
 GAME_STATIC_ASSERT(gclient_script_userinfo_name_offset,
-                 offsetof(gclient_t, userInfoName) == 0x45f4);
+                 offsetof(gclient_t, clientState.name) == 0x45f4);
 GAME_STATIC_ASSERT(gclient_script_no_inactivity_kick_offset,
                  offsetof(gclient_t, spectatorActivityState) == 0x4614);
 GAME_STATIC_ASSERT(gclient_archive_client_offset, offsetof(gclient_t, archiveClient) == 0x4618);

@@ -1849,7 +1849,7 @@ static void game_compat_touch_item_log_pickup(gentity_t *itemEnt, gentity_t *pla
     int guid;
 
     Q_strncpyz(cleanName,
-               player->client->userInfoName,
+               player->client->clientState.name,
                sizeof(cleanName));
     Q_CleanStr(cleanName);
 
@@ -1952,7 +1952,7 @@ static void game_compat_touch_item_schedule_respawn(gentity_t *itemEnt, int resp
     trap_LinkEntity(itemEnt);
 }
 
-/* VERIFIED_DECOMPILER(0x5473b, 6473b_Touch_Item.c, VERIFY-WAVE3-ITEM-TOUCH-VISIBILITY-2026-06-17): DATAFLOW_VERIFIED - auto-touch gate, manual denial messages, userInfoName logging, pickup dispatch, event selection, visibility/no-respawn stores, dropped-item free path, and link behavior checked against current decompiler output. */
+/* VERIFIED_DECOMPILER(0x5473b, 6473b_Touch_Item.c, VERIFY-WAVE3-ITEM-TOUCH-VISIBILITY-2026-06-17): DATAFLOW_VERIFIED - auto-touch gate, manual denial messages, clientState.name logging, pickup dispatch, event selection, visibility/no-respawn stores, dropped-item free path, and link behavior checked against current decompiler output. */
 void Touch_Item(gentity_t *itemEnt, gentity_t *player, int traceMode)
 {
     int event = EV_ITEM_PICKUP;

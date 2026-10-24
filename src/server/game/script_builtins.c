@@ -589,7 +589,7 @@ void Scr_ConstructMessageString(uint32_t index, char *buffer, uint32_t size,
             }
 
             text = va(SCRIPT_PLAYER_NAME_MESSAGE_FORMAT,
-                      ent->client->userInfoName);
+                      ent->client->clientState.name);
             textLength = (uint32_t)strlen(text);
             prefixLength = needsPlainMarker ? 1u : 0u;
             game_compat_script_check_message_length(paramIndex, modeName, size, used,
@@ -2509,7 +2509,7 @@ gclient_t *ClientForString(const char *text)
         gclient_t *client = &level.clients[clientNum];
 
         if (client->connectedState != 0 &&
-            Q_stricmp(client->userInfoName, text) == 0) {
+            Q_stricmp(client->clientState.name, text) == 0) {
             return client;
         }
     }
@@ -3529,7 +3529,7 @@ void script_func_updateclientnames(void)
     for (int clientNum = 0; clientNum < level.maxclients; clientNum++) {
         gclient_t *client = game_compat_script_level_client(clientNum);
         char *cleanName = client->cleanName;
-        char *userinfoName = client->userInfoName;
+        char *userinfoName = client->clientState.name;
 
         if (client->connectedState == CON_CONNECTED &&
             strcmp(userinfoName, cleanName) != 0) {
@@ -3551,7 +3551,7 @@ void script_func_getteamplayersalive(void)
     for (int clientNum = 0; clientNum < g_maxclients.integer; clientNum++) {
         gentity_t *ent = &g_entities[clientNum];
 
-        if (ent->linked != 0 && ent->client->sessionTeam == team &&
+        if (ent->linked != 0 && ent->client->clientState.team == team &&
             ent->health > 0) {
             count++;
         }

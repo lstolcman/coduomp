@@ -45,7 +45,7 @@
 #define CLIENT_SPAWN_LEVELTIME_BACKDATE_MS 100
 #define CLIENT_SECONDS_TO_MS 1000
 #define CLIENT_DISCONNECT_TAIL_CLEAR_SIZE \
-    (offsetof(gclient_t, spectatorActivityState) - offsetof(gclient_t, clientNum))
+    sizeof(clientState_t)
 #define SERVER_COMMAND_RELIABLE 1
 #define DISCONNECT_REASON "disconnect"
 #define DISCONNECT_MENU_RESPONSE_VALUE "-1"
@@ -112,7 +112,7 @@ char *ClientConnect(int clientNum, uint16_t persistentValue)
 
     client->connectedState = CON_CONNECTING;
     client->pers = persistentValue;
-    client->sessionTeam = TEAM_SPECTATOR;
+    client->clientState.team = TEAM_SPECTATOR;
     client->sessionState = SESS_STATE_SPECTATOR;
     client->archiveClient = CLIENT_ARCHIVE_NONE;
     client->followClient = CLIENT_ARCHIVE_NONE;
@@ -122,7 +122,7 @@ char *ClientConnect(int clientNum, uint16_t persistentValue)
     ent->touch = 0;
     ent->pain = 0;
     ent->client = client;
-    client->clientNum = clientNum;
+    client->clientState.clientNum = clientNum;
     client->ps.psClientNum = clientNum;
     client->ps.entityStateFlags = PLAYERSTATE_CONNECT_FLAGS;
     ent->svFlags = SVF_CAPSULE;
@@ -211,7 +211,7 @@ void ClientSpawn(gentity_t *ent, const float *origin, const float *angles)
         (uint32_t)preservedSpawnCount + UINT32_C(1));
     client->ps.stats[STAT_MAX_HEALTH] = client->normalMaxHealth;
     client->ps.entityStateFlags = preservedPsFlags | CLIENT_SPAWN_ACTIVE_PS_FLAG;
-    client->clientNum = clientNum;
+    client->clientState.clientNum = clientNum;
     client->ps.psClientNum = clientNum;
 
     /* 0x45149..0x45162 recomputes this index from the client-array base,
@@ -315,7 +315,7 @@ void ClientDisconnect(int clientNum)
     Scr_PlayerDisconnect(ent);
     G_FreeEntity(ent);
     client->connectedState = 0;
-    memset(&client->clientNum, 0, CLIENT_DISCONNECT_TAIL_CLEAR_SIZE);
+    memset(&client->clientState, 0, CLIENT_DISCONNECT_TAIL_CLEAR_SIZE);
     CalculateRanks();
 }
 

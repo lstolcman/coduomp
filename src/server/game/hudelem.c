@@ -783,7 +783,7 @@ void HudElem_UpdateClient(gclient_t *client, int clientNum, uint32_t updateFlags
         if (elem->client.type == HE_TYPE_NONE) {
             continue;
         }
-        if (elem->team != TEAM_FREE && elem->team != client->sessionTeam) {
+        if (elem->team != TEAM_FREE && elem->team != client->clientState.team) {
             continue;
         }
         if (elem->clientNum != HUDELEM_GLOBAL_CLIENT && elem->clientNum != clientNum) {

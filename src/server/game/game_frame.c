@@ -61,8 +61,8 @@ static int SortRanks(const void *lhs, const void *rhs)
     if (right->connectedState == CON_CONNECTING) {
         return -1;
     }
-    if (left->sessionTeam == TEAM_SPECTATOR &&
-        right->sessionTeam == TEAM_SPECTATOR) {
+    if (left->clientState.team == TEAM_SPECTATOR &&
+        right->clientState.team == TEAM_SPECTATOR) {
         if (leftClientNum < rightClientNum) {
             return -1;
         }
@@ -71,10 +71,10 @@ static int SortRanks(const void *lhs, const void *rhs)
         }
         return 0;
     }
-    if (left->sessionTeam == TEAM_SPECTATOR) {
+    if (left->clientState.team == TEAM_SPECTATOR) {
         return 1;
     }
-    if (right->sessionTeam == TEAM_SPECTATOR) {
+    if (right->clientState.team == TEAM_SPECTATOR) {
         return -1;
     }
     if (right->score < left->score) {
@@ -109,7 +109,7 @@ void CalculateRanks(void)
             lvl->sortedClients[lvl->sortedClientCount] = clientNum;
             lvl->sortedClientCount++;
 
-            if (client->sessionTeam != TEAM_SPECTATOR &&
+            if (client->clientState.team != TEAM_SPECTATOR &&
                 client->connectedState == CON_CONNECTED) {
                 lvl->numVotingClients++;
             }
@@ -268,7 +268,7 @@ void G_UpdateObjectiveToClients(void)
         }
 
         client = ent->client;
-        team = client->sessionTeam;
+        team = client->clientState.team;
         for (objectiveIndex = 0; objectiveIndex < PLAYERSTATE_OBJECTIVE_COUNT;
              objectiveIndex++) {
             objective_t *objective = &lvl->objectives[objectiveIndex];
