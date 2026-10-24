@@ -283,12 +283,6 @@ void G_RegisterCvars(void)
         }
     }
 
-    /* NOT_FROM_ORIGINAL_SOURCE: g_debugArchiveCheck gates recovery-only
-     * snapshot diagnostics. Register it outside the machine-backed 132-entry
-     * gameCvarTable so that the retail table's extent and entry ordering stay
-     * exact; this extra registration is the intentional behavior deviation. */
-    trap_Cvar_Register(&g_debugArchiveCheck, "g_debugArchiveCheck", "0", 0);
-
     /* NOT_FROM_ORIGINAL_SOURCE: keep the master-only chat policy outside the
      * machine-backed retail cvar table. */
     trap_Cvar_Register(&g_allowGlobalChat, "g_allowGlobalChat", "1", CVAR_ARCHIVE);
