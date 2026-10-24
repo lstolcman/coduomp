@@ -144,15 +144,16 @@ void MatrixTransposeTransformVector(const vec3_t vector, axis_t matrix,
                          : "r"(vector), "r"(matrix), "r"(transformed)
                          : "st", "st(1)", "memory");
 #else
+    /* Keep each row's products and sums wide until the final float store. */
     transformed[0] =
-        (vector[0] * matrix[0][0] + vector[1] * matrix[0][1]) +
-        vector[2] * matrix[0][2];
+        ((WIDE_FLOAT)vector[0] * matrix[0][0] + (WIDE_FLOAT)vector[1] * matrix[0][1]) +
+        (WIDE_FLOAT)vector[2] * matrix[0][2];
     transformed[1] =
-        (vector[0] * matrix[1][0] + vector[1] * matrix[1][1]) +
-        vector[2] * matrix[1][2];
+        ((WIDE_FLOAT)vector[0] * matrix[1][0] + (WIDE_FLOAT)vector[1] * matrix[1][1]) +
+        (WIDE_FLOAT)vector[2] * matrix[1][2];
     transformed[2] =
-        (vector[0] * matrix[2][0] + vector[1] * matrix[2][1]) +
-        vector[2] * matrix[2][2];
+        ((WIDE_FLOAT)vector[0] * matrix[2][0] + (WIDE_FLOAT)vector[1] * matrix[2][1]) +
+        (WIDE_FLOAT)vector[2] * matrix[2][2];
 #endif
 }
 #endif
