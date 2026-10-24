@@ -212,6 +212,11 @@ if(CODUOMP_BUILD_SERVER)
 			${CODUOMP_SERVER_SYSTEM_LIBS})
 	endif()
 
+	# The retail Windows executables reserve 8 MiB of stack with a 4 KiB
+	# initial commit. Server map and game initialization exceed the MSVC
+	# default of 1 MiB, so match the retail reservation rather than crash.
+	target_link_options(coduo_dedicated_recovered PRIVATE "/STACK:8388608,4096")
+
 	coduomp_group_sources(${CODUOMP_SERVER_ABSOLUTE})
 
 endif()
