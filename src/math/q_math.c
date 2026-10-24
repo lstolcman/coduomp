@@ -238,27 +238,19 @@ float VectorDistance(const vec3_t first, const vec3_t second)
 #endif
 }
 
-#if defined(__i386__) && defined(__GNUC__) && !defined(__clang__)
 /* The original i386 body returns its binary32 expression without first
- * spilling ST0.  This local compiler setting prevents an added return-boundary
- * binary32 store/reload in client and UI builds. */
-__attribute__((optimize("-fexcess-precision=fast")))
-#endif
-float VectorDistanceSquared(const vec3_t first, const vec3_t second)
+ * spilling ST0. WIDE_FLOAT preserves that return on modern ABIs as well;
+ * only the three coordinate differences round to binary32 inside this body. */
+WIDE_FLOAT VectorDistanceSquared(const vec3_t first, const vec3_t second)
 {
-    const float differenceX = first[0] - second[0];
-    const float differenceY = first[1] - second[1];
-    const float differenceZ = first[2] - second[2];
+    volatile float differenceX = first[0] - second[0];
+    volatile float differenceY = first[1] - second[1];
+    volatile float differenceZ = first[2] - second[2];
 
-#if defined(__i386__) && (defined(__GNUC__) || defined(__clang__))
-    /* FLT_EVAL_METHOD=2 retains the original unspilled ST0 return. */
-    return (differenceZ * differenceZ + differenceY * differenceY) +
-           differenceX * differenceX;
-#else
-    return (float)(((double)differenceZ * (double)differenceZ +
-                    (double)differenceY * (double)differenceY) +
-                   (double)differenceX * (double)differenceX);
-#endif
+    /* Wide evaluation retains the original unspilled ST0 return. */
+    return ((WIDE_FLOAT)differenceZ * (WIDE_FLOAT)differenceZ +
+            (WIDE_FLOAT)differenceY * (WIDE_FLOAT)differenceY) +
+           (WIDE_FLOAT)differenceX * (WIDE_FLOAT)differenceX;
 }
 
 #else
@@ -330,7 +322,7 @@ float VectorDistance(const vec3_t first, const vec3_t second)
 #endif
 }
 
-float VectorDistanceSquared(const vec3_t first, const vec3_t second)
+WIDE_FLOAT VectorDistanceSquared(const vec3_t first, const vec3_t second)
 {
 #if EMULATE_X87
     const float differenceX = x87f_store_f32(
@@ -347,22 +339,15 @@ float VectorDistanceSquared(const vec3_t first, const vec3_t second)
                           x87f_load_f32(differenceY))),
         x87f_mul(x87f_load_f32(differenceZ),
                  x87f_load_f32(differenceZ))));
-#elif defined(__i386__) && (defined(__GNUC__) || defined(__clang__))
-    const float differenceX = second[0] - first[0];
-    const float differenceY = second[1] - first[1];
-    const float differenceZ = second[2] - first[2];
-
-    /* FLT_EVAL_METHOD=2 retains the original unspilled ST0 return. */
-    return (differenceX * differenceX + differenceY * differenceY) +
-           differenceZ * differenceZ;
 #else
-    const float differenceX = second[0] - first[0];
-    const float differenceY = second[1] - first[1];
-    const float differenceZ = second[2] - first[2];
+    volatile float differenceX = second[0] - first[0];
+    volatile float differenceY = second[1] - first[1];
+    volatile float differenceZ = second[2] - first[2];
 
-    return (float)(((long double)differenceX * (long double)differenceX +
-                    (long double)differenceY * (long double)differenceY) +
-                   (long double)differenceZ * (long double)differenceZ);
+    /* Wide evaluation retains the original unspilled ST0 return. */
+    return ((WIDE_FLOAT)differenceX * (WIDE_FLOAT)differenceX +
+            (WIDE_FLOAT)differenceY * (WIDE_FLOAT)differenceY) +
+           (WIDE_FLOAT)differenceZ * (WIDE_FLOAT)differenceZ;
 #endif
 }
 
