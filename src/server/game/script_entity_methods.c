@@ -31,6 +31,7 @@
 #define HINT_STRING_CONFIGSTRING_COUNT CS_HINTSTRINGS_COUNT
 #define CURSOR_HINT_TABLE_LIMIT 267
 #define HINTSTRING_INHERIT 255
+#define HINTSTRING_INHERIT_TEXT ""
 #define HINT_INHERIT_STRING "HINT_INHERIT"
 #define SET_HINTSTRING_TRIGGER_USE_ERROR \
     "The setHintString command only works on trigger_use entities.\n"
@@ -685,7 +686,8 @@ void GScr_SetCursorHint(uint32_t scriptObject)
     }
 }
 
-/* VERIFIED_DECOMPILER(0x699b6, 799b6_script_method_scriptbuiltin_sethintstring.c, VERIFY-SCRIPT-ENTITY-METHODS-PACKET-2026-06-17): DATAFLOW_VERIFIED - trigger_use validation, string-type HINT_INHERIT path, Scr_ConstructMessageString arguments, hintstring index lookup/error, and byte index store checked against current decompiler output. */
+/* An empty ordinary string selects inherited hint text. Other values are
+ * constructed and registered as hint strings before storing the index. */
 void GScr_SetHintString(uint32_t scriptObject)
 {
     gentity_t *ent = script_object_to_gentity(scriptObject);
@@ -697,7 +699,7 @@ void GScr_SetHintString(uint32_t scriptObject)
     }
 
     if (Scr_GetType(0) == SCRIPT_VAR_STRING &&
-        Q_stricmp(Scr_GetString(0), HINT_INHERIT_STRING) == 0) {
+        Q_stricmp(Scr_GetString(0), HINTSTRING_INHERIT_TEXT) == 0) {
         ent->s.hintStringIndex = HINTSTRING_INHERIT;
         return;
     }
