@@ -1919,11 +1919,13 @@ typedef struct text_paint_command_s {
 /* NOT_FROM_ORIGINAL_SOURCE: command-buffer marker for one complete cgame
  * presentation scope. `stretched` records the cgame-published full-width
  * stretch policy at scope open, so deferred text commands inside the scope
- * use the same transform the frontend used for its picture bias. */
+ * use the same transform the frontend used for its picture bias.
+ * textWidthScale records the glyph-width correction used by text metrics. */
 typedef struct coduomp_cgame_2d_presentation_command_s {
     int32_t commandId;
     qboolean enabled;
     qboolean stretched;
+    float textWidthScale;
 } coduomp_cgame_2d_presentation_command_t;
 
 /* NOT_FROM_ORIGINAL_SOURCE: command-buffer marker for one complete console
@@ -1953,6 +1955,7 @@ extern int32_t rendererCurrentFogIndex;
 extern qboolean rendererSkyboxPortalActive;
 extern qboolean coduomp_backend_cgame_2d_compat_active;
 extern qboolean coduomp_backend_cgame_2d_stretch_active;
+extern float coduomp_backend_cgame_text_width_scale;
 extern qboolean coduomp_backend_console_2d_compat_active;
 extern qboolean coduomp_backend_ui_2d_compat_active;
 extern qboolean coduomp_backend_ui_2d_stretch_active;

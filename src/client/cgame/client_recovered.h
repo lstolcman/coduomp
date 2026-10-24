@@ -2565,6 +2565,7 @@ void cgame_compat_evaluate_hud_menu_authorship(void);
 void cgame_compat_reset_hud_menu_authorship(void);
 qboolean cgame_compat_hud_menus_are_mod_authored(void);
 qboolean cgame_compat_uses_stretched_hud(void);
+float cgame_compat_hud_text_width_scale(void);
 void cgame_compat_publish_hud_presentation(void);
 void cgame_compat_tile_clear(void);
 void cgame_compat_draw_physical_stretch_pic(

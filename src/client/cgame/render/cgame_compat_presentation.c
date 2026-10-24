@@ -1,5 +1,6 @@
 #include "../client_recovered.h"
 #include "client/common/client_video_settings.h"
+#include "client/menu/ui_menu_globals.h"
 #include "compat/coduo_native_x87.h"
 #include "../globals.h"
 
@@ -32,25 +33,29 @@ static vmCvar_t cgameCompatDrawFpsMode;
  * ui_mp/hud.menu (see cgame_compat_hud_authorship.c).  0 auto: stock-authored
  * menus keep the anchor model, a mod-authored set falls back to the stock
  * full-width stretch; 1 always stretch; 2 always centered canvas with every
- * anchor offset zero; 3 always the anchor model (legacy behavior). */
+ * anchor offset zero; 3 always the anchor model (legacy behavior); 4 stretches
+ * positions and graphics while keeping text proportional to screen height. */
 static vmCvar_t cgameCompatModHudPresentation;
 
 enum {
     CG_COMPAT_MOD_HUD_AUTO = 0,
     CG_COMPAT_MOD_HUD_STRETCH = 1,
     CG_COMPAT_MOD_HUD_CENTERED = 2,
-    CG_COMPAT_MOD_HUD_ANCHORED = 3
+    CG_COMPAT_MOD_HUD_ANCHORED = 3,
+    CG_COMPAT_MOD_HUD_PROPORTIONAL_TEXT = 4
 };
 
 /* NOT_FROM_ORIGINAL_SOURCE: the resolved presentation for ordinary cgame 2D.
  * ANCHORED is the widescreen anchor model; STRETCHED is the stock full-width
  * transform (positions and dimensions both scale with vidWidth/640, exactly
  * the retail presentation every HUD mod was authored against); CENTERED keeps
- * the proportional centered canvas with every anchor offset zero. */
+ * the proportional centered canvas with every anchor offset zero.
+ * PROPORTIONAL_TEXT stretches the canvas but preserves glyph proportions. */
 typedef enum {
     CGAME_COMPAT_HUD_PRESENTATION_ANCHORED = 0,
     CGAME_COMPAT_HUD_PRESENTATION_STRETCHED = 1,
-    CGAME_COMPAT_HUD_PRESENTATION_CENTERED = 2
+    CGAME_COMPAT_HUD_PRESENTATION_CENTERED = 2,
+    CGAME_COMPAT_HUD_PRESENTATION_PROPORTIONAL_TEXT = 3
 } cgameCompatHudPresentation_t;
 
 /* NOT_FROM_ORIGINAL_SOURCE_STORAGE_FILE: last stretch state published to the
@@ -138,6 +143,8 @@ static cgameCompatHudPresentation_t cgame_compat_resolved_hud_presentation(void)
         return CGAME_COMPAT_HUD_PRESENTATION_CENTERED;
     case CG_COMPAT_MOD_HUD_ANCHORED:
         return CGAME_COMPAT_HUD_PRESENTATION_ANCHORED;
+    case CG_COMPAT_MOD_HUD_PROPORTIONAL_TEXT:
+        return CGAME_COMPAT_HUD_PRESENTATION_PROPORTIONAL_TEXT;
     default:
         return cgame_compat_hud_menus_are_mod_authored() != qfalse
                    ? CGAME_COMPAT_HUD_PRESENTATION_STRETCHED
@@ -150,30 +157,59 @@ static cgameCompatHudPresentation_t cgame_compat_resolved_hud_presentation(void)
  * physical-pixel crosshair, and native full-screen effects are unaffected; every
  * canvas-relative mechanism (proportional scales, centered-canvas bias,
  * anchor offsets, hudElem snap, full-canvas shader expansion, optical
- * letterbox) collapses to the recovered stock transform. */
+ * letterbox) collapses to the recovered stock transform. Mode 4 uses that
+ * canvas transform with a separate proportional text-width correction. */
 qboolean cgame_compat_uses_stretched_hud(void)
 {
-    return cgame_compat_resolved_hud_presentation() ==
-                   CGAME_COMPAT_HUD_PRESENTATION_STRETCHED
-               ? qtrue
-               : qfalse;
+    const cgameCompatHudPresentation_t presentation = cgame_compat_resolved_hud_presentation();
+
+    return presentation == CGAME_COMPAT_HUD_PRESENTATION_STRETCHED ||
+           presentation == CGAME_COMPAT_HUD_PRESENTATION_PROPORTIONAL_TEXT;
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: express proportional glyph widths in the stretched
+ * virtual canvas before HUD-element alignment. Fixed-width fonts bypass the
+ * renderer's width syscall, so they need the same correction on the module side. */
+float cgame_compat_hud_text_width_scale(void)
+{
+    if (cgame_compat_resolved_hud_presentation() != CGAME_COMPAT_HUD_PRESENTATION_PROPORTIONAL_TEXT ||
+        cgameCompatAspectMode.integer != CODUOMP_ASPECT_MODE_WIDESCREEN ||
+        cgs_glconfig.vidWidth <= 0 || cgs_glconfig.vidHeight <= 0)
+        return 1.0f;
+
+    return ((float)cgs_glconfig.vidHeight / 480.0f) / ((float)cgs_glconfig.vidWidth / 640.0f);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: publish the resolved stretch state to the engine,
  * whose 2D command wrappers own the centered-canvas bias and the deferred
  * text transform. Republished only on change; the engine snapshots the cvar
- * at each cgame presentation scope open, so a mid-game policy flip changes
- * the complete next frame rather than part of the current one. */
+ * at scope open and refreshes an active scope when cgame publishes its new
+ * policy, before drawing with the corresponding module-side scales. */
 void cgame_compat_publish_hud_presentation(void)
 {
-    const int32_t active = cgame_compat_uses_stretched_hud() != qfalse ? 1 : 0;
+    const cgameCompatHudPresentation_t presentation = cgame_compat_resolved_hud_presentation();
+    const int32_t active = presentation == CGAME_COMPAT_HUD_PRESENTATION_PROPORTIONAL_TEXT
+        ? CODUOMP_HUD_STRETCH_PROPORTIONAL_TEXT
+        : (presentation == CGAME_COMPAT_HUD_PRESENTATION_STRETCHED
+            ? CODUOMP_HUD_STRETCH_ALL : CODUOMP_HUD_STRETCH_DISABLED);
 
     if (active == cgameCompatPublishedHudStretch)
         return;
 
     cgameCompatPublishedHudStretch = active;
     cgame_syscall(CG_CVAR_SET, (intptr_t)"cg_hudStretchActive",
-                  (intptr_t)(active != 0 ? "1" : "0"));
+                  (intptr_t)(active == CODUOMP_HUD_STRETCH_PROPORTIONAL_TEXT ? "2" :
+                      (active == CODUOMP_HUD_STRETCH_ALL ? "1" : "0")));
+
+    /* Item_SetTextExtents caches widths and aligned text origins. Recompute
+     * them after a policy switch so an open menu can change modes in place. */
+    for (int32_t menuIndex = 0; menuIndex < menuCount; ++menuIndex) {
+        menuDef_t *menu = &Menus[menuIndex];
+        for (int32_t itemIndex = 0; itemIndex < menu->itemCount; ++itemIndex) {
+            menu->items[itemIndex]->textRect.w = 0.0f;
+            menu->items[itemIndex]->textRect.h = 0.0f;
+        }
+    }
 
     /* The cgame picture pre-scale must flip together with the engine-side
      * transform this publication selects. CG_Init configures the scales

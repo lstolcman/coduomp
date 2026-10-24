@@ -207,6 +207,9 @@ qboolean coduomp_backend_cgame_2d_compat_active;
  * full-width HUD stretch policy recorded alongside it in the command
  * stream. */
 qboolean coduomp_backend_cgame_2d_stretch_active;
+/* NOT_FROM_ORIGINAL_SOURCE_STORAGE_FILE: command-ordered glyph-width scale;
+ * the backend must not read a live cvar after text has already been measured. */
+float coduomp_backend_cgame_text_width_scale = 1.0f;
 /* NOT_FROM_ORIGINAL_SOURCE_STORAGE_FILE: backend copy of the native-width
  * console scope recorded in the renderer command stream. */
 qboolean coduomp_backend_console_2d_compat_active;
@@ -757,6 +760,22 @@ void RB_Text_PaintChar(int32_t shaderHandle,
                       s1, t1, s2, t2, color);
 }
 
+/* NOT_FROM_ORIGINAL_SOURCE: retain the stretched string origin while scaling
+ * glyph geometry and spacing uniformly with screen height in HUD mode 4.
+ * Applying this to shadows and cursors also keeps their offsets proportional. */
+static void coduomp_rb_hud_text_char(float originX, int32_t shaderHandle,
+                                    float x, float y, float width, float height, float scale,
+                                    float s1, float t1, float s2, float t2,
+                                    const renderer_rgba8_t *color)
+{
+    if (coduomp_backend_cgame_2d_compat_active != qfalse &&
+        coduomp_backend_console_2d_compat_active == qfalse && coduomp_backend_cgame_text_width_scale != 1.0f) {
+        x = originX + (x - originX) * coduomp_backend_cgame_text_width_scale;
+        width *= coduomp_backend_cgame_text_width_scale;
+    }
+    RB_Text_PaintChar(shaderHandle, x, y, width, height, scale, s1, t1, s2, t2, color);
+}
+
 /* Source: CoDUOMP.exe 0x004c03a0..0x004c0900.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004c03a0_004c0900.mcode.
  * Name: same-module Mac symbol RB_Text_PaintWithCursor. */
@@ -889,7 +908,7 @@ int32_t RB_Text_PaintWithCursor(int32_t fontHandle, const char *text,
             const float shadowOffset =
                 textStyle == R_TEXT_STYLE_SHADOWED ? 1.0f : 2.0f;
 
-            RB_Text_PaintChar(glyph->glyph,
+            coduomp_rb_hud_text_char(x, glyph->glyph,
                               currentX + leftOffset + shadowOffset,
                               currentY - topOffset + shadowOffset,
                               (float)glyph->imageWidth,
@@ -898,7 +917,7 @@ int32_t RB_Text_PaintWithCursor(int32_t fontHandle, const char *text,
                               &shadowColor);
         }
 
-        RB_Text_PaintChar(glyph->glyph,
+        coduomp_rb_hud_text_char(x, glyph->glyph,
                           currentX + leftOffset, currentY - topOffset,
                           (float)glyph->imageWidth,
                           (float)glyph->imageHeight, characterScale,
@@ -909,7 +928,7 @@ int32_t RB_Text_PaintWithCursor(int32_t fontHandle, const char *text,
             ((Sys_Milliseconds() / R_CURSOR_BLINK_INTERVAL_MSEC) & 1u) != 0) {
             glyphInfo_t *cursorGlyph = &font->glyphs[cursorCharacter];
 
-            RB_Text_PaintChar(cursorGlyph->glyph,
+            coduomp_rb_hud_text_char(x, cursorGlyph->glyph,
                               currentX,
                               currentY - characterScale * cursorGlyph->top,
                               (float)cursorGlyph->imageWidth,
@@ -930,7 +949,7 @@ int32_t RB_Text_PaintWithCursor(int32_t fontHandle, const char *text,
         ((Sys_Milliseconds() / R_CURSOR_BLINK_INTERVAL_MSEC) & 1u) != 0) {
         glyphInfo_t *cursorGlyph = &font->glyphs[cursorCharacter];
 
-        RB_Text_PaintChar(cursorGlyph->glyph,
+        coduomp_rb_hud_text_char(x, cursorGlyph->glyph,
                           currentX,
                           currentY - effectiveScale * cursorGlyph->top,
                           (float)cursorGlyph->imageWidth,

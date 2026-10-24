@@ -57,6 +57,12 @@ float CG_HudElemStringWidth(const char *text, const cgAlignedDrawItem *item)
          * round it first under -fexcess-precision=standard (Class 4). The product's
          * raw st(0) return is inert: both callers FSTP it immediately (0x30029d6b,
          * 0x30029d80), so the float return is faithful. */
+        /* NOT_FROM_ORIGINAL_SOURCE: mode 4 keeps fixed-width text proportional
+         * too. Correct its layout width without changing the glyph advance
+         * passed to the renderer, which applies the correction while drawing. */
+        const float widthScale = cgame_compat_hud_text_width_scale();
+        if (widthScale != 1.0f)
+            return length * item->fontWidth * widthScale;
         return length * item->fontWidth;
     }
 

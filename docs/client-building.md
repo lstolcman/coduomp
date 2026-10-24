@@ -217,6 +217,29 @@ this also prevents the display itself from adding bars around a 4:3 mode.
 If the native resolution cannot be queried, the desktop resolution is used.
 Its selection persists when switching mods.
 
+#### Mod HUD presentation
+
+With `r_aspectMode 0`, `cg_modHudPresentation` selects the cgame HUD layout:
+
+| Value | Behavior |
+| --- | --- |
+| `0` | Default: anchor stock HUD menus; stretch mod-authored HUD menus. |
+| `1` | Stretch HUD positions, graphics, and text across the screen. |
+| `2` | Keep the HUD on a centered, proportional 640×480 canvas. |
+| `3` | Use the widescreen anchor model, including server HUD edge snapping when `cg_wideHudElems 1`. |
+| `4` | Stretch HUD positions and graphics across the screen; keep text proportional to screen height. |
+
+Use `set cg_modHudPresentation 4` for the continuous 640×480 mapping used by
+some CoD adapters. Text is measured at its proportional width before center or
+right alignment. Backgrounds and icons stretch horizontally, and outer margins
+grow with screen width. This mode does not classify center regions or snap HUD
+items to the edges. It covers cgame menus and server HUD elements; separate UI
+menus retain their existing presentation.
+
+The setting is archived and can be changed during play without restarting.
+`cg_modHudPresentation 0` restores automatic selection. Classic 4:3 retains its
+fitted viewport, and Fit Screen retains its original fully stretched canvas.
+
 #### macOS Wi-Fi latency
 
 Apple Wireless Direct Link (AWDL) can cause short periodic Wi-Fi latency spikes

@@ -47,6 +47,7 @@ static const void *coduomp_rb_set_cgame_2d_presentation(
 
     coduomp_backend_cgame_2d_compat_active = command->enabled;
     coduomp_backend_cgame_2d_stretch_active = command->stretched;
+    coduomp_backend_cgame_text_width_scale = command->textWidthScale;
     if (backEnd.projection2D != qfalse)
         coduomp_apply_2d_presentation_viewport();
 
@@ -120,6 +121,7 @@ const void *RB_DrawBuffer(const drawBufferCommand_t *command)
      * restores the neutral presentation state. */
     coduomp_backend_cgame_2d_compat_active = qfalse;
     coduomp_backend_cgame_2d_stretch_active = qfalse;
+    coduomp_backend_cgame_text_width_scale = 1.0f;
     coduomp_backend_console_2d_compat_active = qfalse;
     coduomp_backend_ui_2d_compat_active = qfalse;
     coduomp_backend_ui_2d_stretch_active = qfalse;

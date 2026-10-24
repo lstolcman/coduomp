@@ -18,8 +18,11 @@ qboolean coduomp_console_rendering_compat_active;
  * full-width HUD stretch policy, taken when a cgame presentation scope opens
  * (coduomp_queue_cgame_2d_presentation). While set, ordinary cgame 2D keeps
  * the recovered stock vidWidth/640 transform: no centered-canvas bias for
- * pictures and the stock stretch for deferred text. */
+ * pictures. Deferred text can optionally preserve its proportions. */
 qboolean coduomp_cgame_hud_stretch_active;
+/* NOT_FROM_ORIGINAL_SOURCE_STORAGE_FILE: horizontal glyph correction shared
+ * by frontend metrics and the scope snapshot sent to the deferred renderer. */
+float coduomp_cgame_hud_text_width_scale = 1.0f;
 
 /* NOT_FROM_ORIGINAL_SOURCE: the cgame module owns mod-HUD presentation policy
  * (authorship detection plus the cg_modHudPresentation cvar) and publishes
@@ -29,6 +32,31 @@ qboolean coduomp_cgame_hud_stretch_requested(void)
     const cvar_t *stretch = Cvar_FindVar("cg_hudStretchActive");
 
     return stretch != NULL && stretch->integer != 0 ? qtrue : qfalse;
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: mode 4 stretches text origins with the canvas but
+ * sizes glyphs from screen height. Convert glyph widths back into that canvas.
+ * Fitted 4:3 viewports and Fit Screen retain their existing text transforms. */
+float coduomp_cgame_hud_text_width_scale_requested(void)
+{
+    const cvar_t *stretch = Cvar_FindVar("cg_hudStretchActive");
+    const cvar_t *aspectMode = Cvar_FindVar("r_aspectMode");
+
+    if (stretch == NULL || stretch->integer != CODUOMP_HUD_STRETCH_PROPORTIONAL_TEXT ||
+        (aspectMode != NULL && aspectMode->integer != CODUOMP_ASPECT_MODE_WIDESCREEN) ||
+        cls.rendererConfig.vidWidth <= 0 || cls.rendererConfig.vidHeight <= 0)
+        return 1.0f;
+
+    return ((float)cls.rendererConfig.vidHeight / 480.0f) / ((float)cls.rendererConfig.vidWidth / 640.0f);
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: only cgame text inherits the optional correction;
+ * console and separate UI compositions keep their own presentation policy. */
+float coduomp_frontend_text_width_scale(void)
+{
+    if (coduomp_cgame_rendering_compat_active != qfalse && coduomp_console_rendering_compat_active == qfalse)
+        return coduomp_cgame_hud_text_width_scale;
+    return 1.0f;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: true when the in-game UI canvas follows the

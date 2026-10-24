@@ -1,6 +1,7 @@
 #include "backend.h"
 
 #include "gl_state.h"
+#include "../client/widescreen_2d_compat.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -137,6 +138,12 @@ int32_t RE_Text_Width(const char *text, int32_t fontHandle, float scale,
         ++glyphCount;
     }
 
+    /* NOT_FROM_ORIGINAL_SOURCE: alignment and wrapping use the width occupied
+     * by proportional glyphs in the stretched HUD canvas. Scale before the
+     * integer metric conversion to avoid an extra truncation. */
+    const float widthScale = coduomp_frontend_text_width_scale();
+    if (widthScale != 1.0f)
+        return (int32_t)(maximumWidth * finalScale * widthScale);
     return (int32_t)(maximumWidth * finalScale);
 }
 
@@ -383,7 +390,9 @@ int32_t RE_Text_ConsoleWidth(const uint16_t *encoded, int32_t fontHandle,
                 width += (float)RE_Text_Width(text, fontHandle, scale,
                                              fixedAdvance, encodedCount);
             } else {
-                width += (float)R_DrawStrlen(text) * fixedAdvance;
+                /* NOT_FROM_ORIGINAL_SOURCE: fixed advances and inline icons
+                 * occupy the same proportional canvas widths as glyphs. */
+                width += (float)R_DrawStrlen(text) * fixedAdvance * coduomp_frontend_text_width_scale();
             }
         }
 
@@ -395,7 +404,8 @@ int32_t RE_Text_ConsoleWidth(const uint16_t *encoded, int32_t fontHandle,
             R_Text_GetConsoleIcon(cursor, &encodedCount, &cursor, scale,
                                   &iconWidth, &iconHeight,
                                   &shaderHandle, NULL);
-            width += iconWidth;
+            /* NOT_FROM_ORIGINAL_SOURCE: match the inline icon's drawn width. */
+            width += iconWidth * coduomp_frontend_text_width_scale();
         }
     }
 
@@ -411,6 +421,9 @@ static void R_Text_PaintConsoleIcon(float x, float y,
                                     float width, float height,
                                     int32_t shaderHandle)
 {
+    /* NOT_FROM_ORIGINAL_SOURCE: inline text icons remain proportional with
+     * their neighboring glyphs, unlike standalone HUD background graphics. */
+    width *= coduomp_frontend_text_width_scale();
     ri.AdjustFrom640(&x, &y, &width, &height);
     RE_StretchPic(x, y, width, height,
                   0.0f, 0.0f, 1.0f, 1.0f, shaderHandle);
@@ -458,7 +471,9 @@ void RE_Text_ConsolePaint(float x, float y, int32_t fontHandle, float scale,
                 (iconHeight + scale * r_consoleIconBaselineHeight) * 0.5f;
             R_Text_PaintConsoleIcon(x + xOffset, iconY,
                                     iconWidth, iconHeight, shaderHandle);
-            xOffset += iconWidth;
+            /* NOT_FROM_ORIGINAL_SOURCE: the following string starts after the
+             * proportional icon, in the same stretched virtual coordinates. */
+            xOffset += iconWidth * coduomp_frontend_text_width_scale();
         }
     }
 }

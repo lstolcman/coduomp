@@ -297,6 +297,11 @@ intptr_t CL_CgameSystemCalls(intptr_t *arguments)
         return 0;
     case CG_CVAR_SET:
         Cvar_Set(CG_STRING(1), CG_STRING(2));
+        /* NOT_FROM_ORIGINAL_SOURCE: cgame updates its policy inside the frame
+         * scope, before drawing. Refresh both frontend and deferred transforms
+         * here so the first frame after a mode switch uses matching metrics. */
+        if (coduomp_cgame_rendering_compat_active != qfalse && strcmp(CG_STRING(1), "cg_hudStretchActive") == 0)
+            coduomp_queue_cgame_2d_presentation(qtrue);
         return 0;
     case CG_CVAR_SET_VALUE:
         Cvar_VMSet(CG_PTR(vmCvar_t, 1), CG_STRING(2));
@@ -458,18 +463,29 @@ intptr_t CL_CgameSystemCalls(intptr_t *arguments)
                                      CG_INT(4));
         return rendererExports.RegisterShaderNoMip(CG_STRING(1),
                                                     CG_INT(2));
-    case CG_R_TEXT_WIDTH:
+    case CG_R_TEXT_WIDTH: {
+        /* NOT_FROM_ORIGINAL_SOURCE: mode 4 measurements during menu loading
+         * need the same scope as the text eventually drawn from them. */
+        const qboolean pumpScope = coduomp_cgame_hud_text_width_scale_requested() != 1.0f
+            ? CL_CgamePump2dScopeBegin() : qfalse;
         /* 0x00402f5b..0x00402f73 passes the cgame's four payload words as
          * (text, font, scale, 0.0f, limit); fixedAdvance is inserted here and
          * is not a fifth cgame argument. */
-        return rendererExports.TextWidth(
+        const int32_t width = rendererExports.TextWidth(
             CG_STRING(1), CG_INT(2),
             CL_CgameSyscallFloatArgument(CG_ARG(3)),
             0.0f, CG_INT(4));
+        CL_CgamePump2dScopeEnd(pumpScope);
+        return width;
+    }
     case CG_R_TEXT_HEIGHT:
         return rendererExports.TextHeight(
             CG_INT(1), CL_CgameSyscallFloatArgument(CG_ARG(2)));
-    case CG_R_TEXT_PAINT:
+    case CG_R_TEXT_PAINT: {
+        /* NOT_FROM_ORIGINAL_SOURCE: mode 4 loading-pump text uses the same
+         * proportional glyph transform as frame-scoped text. */
+        const qboolean pumpScope = coduomp_cgame_hud_text_width_scale_requested() != 1.0f
+            ? CL_CgamePump2dScopeBegin() : qfalse;
         rendererExports.TextPaint(
             CL_CgameSyscallFloatArgument(CG_ARG(1)),
             CL_CgameSyscallFloatArgument(CG_ARG(2)), CG_INT(3),
@@ -477,8 +493,14 @@ intptr_t CL_CgameSystemCalls(intptr_t *arguments)
             CG_CONST_PTR(float, 5), CG_STRING(6),
             CL_CgameSyscallFloatArgument(CG_ARG(7)), CG_INT(8),
             CG_INT(9));
+        CL_CgamePump2dScopeEnd(pumpScope);
         return 0;
-    case CG_R_TEXT_PAINT_WITH_CURSOR:
+    }
+    case CG_R_TEXT_PAINT_WITH_CURSOR: {
+        /* NOT_FROM_ORIGINAL_SOURCE: mode 4 editable loading-menu text needs
+         * the cgame presentation scope as well. */
+        const qboolean pumpScope = coduomp_cgame_hud_text_width_scale_requested() != 1.0f
+            ? CL_CgamePump2dScopeBegin() : qfalse;
         /* 0x00402fef..0x00403021 consumes ten cgame payload words and
          * explicitly PUSHes 0 for the renderer's fixedAdvance parameter
          * between cursorCharacter and limit. */
@@ -489,7 +511,9 @@ intptr_t CL_CgameSystemCalls(intptr_t *arguments)
             CG_CONST_PTR(float, 5), CG_STRING(6), CG_INT(7),
             (uint8_t)CG_ARG(8),
             0.0f, CG_INT(9), CG_INT(10));
+        CL_CgamePump2dScopeEnd(pumpScope);
         return 0;
+    }
     case CG_SE_TRANSLATE_REFERENCE:
         return (intptr_t)SEH_StringEd_GetString(CG_STRING(1));
     case CG_SE_LOCALIZE_MESSAGE:

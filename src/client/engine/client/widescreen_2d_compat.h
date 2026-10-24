@@ -8,6 +8,7 @@
 extern qboolean coduomp_cgame_rendering_compat_active;
 extern qboolean coduomp_console_rendering_compat_active;
 extern qboolean coduomp_cgame_hud_stretch_active;
+extern float coduomp_cgame_hud_text_width_scale;
 extern qboolean coduomp_backend_cgame_2d_compat_active;
 extern qboolean coduomp_backend_console_2d_compat_active;
 extern qboolean coduomp_backend_cgame_2d_stretch_active;
@@ -15,6 +16,8 @@ extern qboolean coduomp_backend_ui_2d_compat_active;
 extern qboolean coduomp_backend_ui_2d_stretch_active;
 
 qboolean coduomp_cgame_hud_stretch_requested(void);
+float coduomp_cgame_hud_text_width_scale_requested(void);
+float coduomp_frontend_text_width_scale(void);
 qboolean coduomp_ui_hud_stretch_requested(void);
 void coduomp_scr_adjust_from_640_compat(float *x, float *y,
                                        float *width, float *height);

@@ -19,4 +19,12 @@ typedef enum coduomp_aspect_mode_e {
     CODUOMP_ASPECT_MODE_FIT_SCREEN = 2
 } coduomp_aspect_mode_t;
 
+/* NOT_FROM_ORIGINAL_SOURCE: internal cg_hudStretchActive values published by
+ * cgame. Both stretch modes fill the canvas; the second preserves glyph shape. */
+typedef enum coduomp_hud_stretch_e {
+    CODUOMP_HUD_STRETCH_DISABLED = 0,
+    CODUOMP_HUD_STRETCH_ALL = 1,
+    CODUOMP_HUD_STRETCH_PROPORTIONAL_TEXT = 2
+} coduomp_hud_stretch_t;
+
 #endif

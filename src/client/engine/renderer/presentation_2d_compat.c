@@ -97,6 +97,7 @@ void coduomp_queue_cgame_2d_presentation(qboolean enabled)
     if (enabled != qfalse) {
         coduomp_cgame_hud_stretch_active =
             coduomp_cgame_hud_stretch_requested();
+        coduomp_cgame_hud_text_width_scale = coduomp_cgame_hud_text_width_scale_requested();
     }
 
     command = (coduomp_cgame_2d_presentation_command_t *)R_GetCommandBuffer(
@@ -109,6 +110,7 @@ void coduomp_queue_cgame_2d_presentation(qboolean enabled)
     command->enabled = enabled;
     command->stretched =
         enabled != qfalse ? coduomp_cgame_hud_stretch_active : qfalse;
+    command->textWidthScale = enabled != qfalse ? coduomp_cgame_hud_text_width_scale : 1.0f;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: record a console presentation transition in the
