@@ -17,6 +17,8 @@
 #include "scr_vm.h"
 #include "qcommon/com_sprintf.h"
 #include "qcommon/q_string.h"
+#include "compat/coduo_native_x87.h"
+#include "compat/coduo_x87_eval.h"
 
 typedef struct hudelem_field_s hudelem_field_t;
 typedef void (*hudelem_field_callback_t)(game_hudElem_t *elem,
@@ -143,10 +145,20 @@ static uint8_t game_compat_hud_elem_color_byte_from_float(float value)
 /* NOT_FROM_ORIGINAL_SOURCE: factored ceil helper used by timer/clock methods. */
 static int game_compat_hud_elem_ceil_milliseconds(float value)
 {
+    volatile float milliseconds = value;
+
+#if defined(WINDOWS_BEHAVIOR)
+    /* Windows rounds the stored milliseconds to nearest after adding the
+     * binary64 bias 0.5 - 2^-30. This differs from ceil for small fractions
+     * and for large durations whose addition loses the bias's low bits. */
+    const double bias = 0.4999999990686774;
+    return coduo_x87_fistp_i32((WIDE_FLOAT)milliseconds + bias);
+#else
     /* 0x53373: the original static rounds via the CRT ceil() on the
      * widened double, then truncates; no float32/int round-trip. */
     return game_compat_int32_from_long_double_trunc(
-        (long double)ceil((double)value));
+        (long double)ceil((double)milliseconds));
+#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: factored round helper used by transition methods. */
@@ -518,7 +530,7 @@ static void HECmd_SetTimer_Internal(int elemIndex, int elemType, const char *met
             0,
             va("time %g should be > 0",
                /* 0x5296a: bare fild of targetTime, no float32 rounding. */
-               (double)(targetTime * HUDELEM_MILLISECONDS_TO_SECONDS)));
+               (double)((WIDE_FLOAT)targetTime * HUDELEM_MILLISECONDS_TO_SECONDS)));
     }
 
     HudElem_ClearTypeSettings(elem);
@@ -552,7 +564,7 @@ static void HECmd_SetClock_Internal(int elemIndex, int elemType, const char *met
             0,
             va("time %g should be > 0",
                /* 0x52a4f: bare fild of targetTime, no float32 rounding. */
-               (double)(targetTime * HUDELEM_MILLISECONDS_TO_SECONDS)));
+               (double)((WIDE_FLOAT)targetTime * HUDELEM_MILLISECONDS_TO_SECONDS)));
     }
 
     duration =
@@ -563,7 +575,7 @@ static void HECmd_SetClock_Internal(int elemIndex, int elemType, const char *met
             1,
             va("duration %g should be > 0",
                /* 0x52aa1: bare fild of duration, no float32 rounding. */
-               (double)(duration * HUDELEM_MILLISECONDS_TO_SECONDS)));
+               (double)((WIDE_FLOAT)duration * HUDELEM_MILLISECONDS_TO_SECONDS)));
     }
 
     materialIndex = G_ShaderIndex(Scr_GetString(2));
