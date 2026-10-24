@@ -252,11 +252,11 @@ void ClientUserinfoChanged(int clientNum)
                         client->cleanName,
                         CLIENT_NAME_SIZE);
     } else {
-        Q_strncpyz(oldName, client->userInfoName, sizeof(oldName));
+        Q_strncpyz(oldName, client->clientState.name, sizeof(oldName));
         ClientCleanName(Info_ValueForKey(userinfo, "name"),
-                        client->userInfoName,
+                        client->clientState.name,
                         CLIENT_NAME_SIZE);
-        Q_strncpyz(client->cleanName, client->userInfoName,
+        Q_strncpyz(client->cleanName, client->clientState.name,
                    CLIENT_NAME_SIZE);
     }
 
@@ -266,13 +266,13 @@ void ClientUserinfoChanged(int clientNum)
     }
 
     clientInfo->clientNum = clientNum;
-    Q_strncpyz(clientInfo->name, client->userInfoName,
+    Q_strncpyz(clientInfo->name, client->clientState.name,
                CLIENT_NAME_SIZE);
 
-    if (clientInfo->team != client->sessionTeam &&
+    if (clientInfo->team != client->clientState.team &&
         (client->ps.entityStateFlags & EF_IN_VEHICLE) != 0) {
         VEH_UnlinkPlayer(ent, 0);
     }
 
-    clientInfo->team = client->sessionTeam;
+    clientInfo->team = client->clientState.team;
 }

@@ -172,7 +172,7 @@ intptr_t vmMain(int32_t command, intptr_t arg0, intptr_t arg1, intptr_t arg2,
         break;
 
     case GAME_GET_CLIENT_STATE:
-        result = (intptr_t)&level.clients[(uint32_t)arg0].clientNum;
+        result = (intptr_t)&level.clients[(uint32_t)arg0].clientState;
         break;
 
     case GAME_GET_CLIENT_ARCHIVE_TIME:

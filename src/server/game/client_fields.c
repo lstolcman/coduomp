@@ -40,7 +40,7 @@ struct client_field_s {
 /* GENTITY_OFFSET_HEAD_ICON, HEAD_ICON_TEAM, MAX_SPEED -- all replaced
  * by gentity_t struct field access (headIcon, headIconTeam, maxSpeed). */
 #define CLIENT_FIELD_OFFSET(field) offsetof(gclient_t, field)
-#define CLIENT_FIELD_NAME CLIENT_FIELD_OFFSET(userInfoName)
+#define CLIENT_FIELD_NAME CLIENT_FIELD_OFFSET(clientState.name)
 #define CLIENT_FIELD_MAX_HEALTH CLIENT_FIELD_OFFSET(normalMaxHealth)
 #define CLIENT_FIELD_MAX_SPEED CLIENT_FIELD_OFFSET(maxSpeed)
 #define CLIENT_FIELD_HANDICAP CLIENT_FIELD_OFFSET(handicap)
@@ -77,13 +77,13 @@ void ClientScr_SetSessionTeam(gclient_t *client, gclient_t *self,
     (void)field;
 
     if (value == scr_const_axis) {
-        client->sessionTeam = TEAM_AXIS;
+        client->clientState.team = TEAM_AXIS;
     } else if (value == scr_const_allies) {
-        client->sessionTeam = TEAM_ALLIES;
+        client->clientState.team = TEAM_ALLIES;
     } else if (value == scr_const_spectator) {
-        client->sessionTeam = TEAM_SPECTATOR;
+        client->clientState.team = TEAM_SPECTATOR;
     } else if (value == scr_const_none) {
-        client->sessionTeam = TEAM_FREE;
+        client->clientState.team = TEAM_FREE;
     } else {
         Scr_Error(va("'%s' is an illegal sessionteam string. Must be allies, "
                      "axis, none, or spectator.",
@@ -101,13 +101,13 @@ void ClientScr_GetSessionTeam(gclient_t *client, gclient_t *self,
     (void)self;
     (void)field;
 
-    if (client->sessionTeam == TEAM_AXIS) {
+    if (client->clientState.team == TEAM_AXIS) {
         Scr_AddConstString(scr_const_axis);
-    } else if (client->sessionTeam == TEAM_FREE) {
+    } else if (client->clientState.team == TEAM_FREE) {
         Scr_AddConstString(scr_const_none);
-    } else if (client->sessionTeam == TEAM_ALLIES) {
+    } else if (client->clientState.team == TEAM_ALLIES) {
         Scr_AddConstString(scr_const_allies);
-    } else if (client->sessionTeam == TEAM_SPECTATOR) {
+    } else if (client->clientState.team == TEAM_SPECTATOR) {
         Scr_AddConstString(scr_const_spectator);
     }
 }

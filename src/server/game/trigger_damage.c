@@ -103,7 +103,7 @@ static int game_compat_trigger_damage_team(gentity_t *ent, int fallbackTeam)
         return fallbackTeam;
     }
 
-    return ent->client->sessionTeam;
+    return ent->client->clientState.team;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */

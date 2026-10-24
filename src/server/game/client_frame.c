@@ -35,9 +35,9 @@
  * DAMAGE_PITCH_BYTE -> client->ps.damagePitch, DAMAGE_COUNT -> client->ps.damageCount,
  * DAMAGE_ALPHA -> client->ps.aimSpreadScale, DAMAGE_FEEDBACK_MAX_HEALTH -> client->normalMaxHealth,
  * EVENTS -> client->ps.events, EVENT_PARMS -> client->ps.eventParms,
- * CLIENTINFO_BASE_MODEL -> client->baseModelIndex,
- * CLIENTINFO_ATTACH_MODELS -> client->attachModelIndices,
- * CLIENTINFO_ATTACH_TAGS -> client->attachTagIndices,
+ * CLIENTINFO_BASE_MODEL -> client->clientState.modelindex,
+ * CLIENTINFO_ATTACH_MODELS -> client->clientState.attachModelIndex,
+ * CLIENTINFO_ATTACH_TAGS -> client->clientState.attachTagIndex,
  * CLIENTEND_NONPVS_FRIENDLY_CLIENT -> client->nonpvsFriendlyClient,
  * CLIENTEND_NONPVS_TANK_CLIENT -> client->nonpvsTankClient,
  * CLIENTEND_TURRET_ENTITY -> client->ps.viewLockedEntityNum,
@@ -1225,7 +1225,7 @@ void G_UpdateClientInfo(gentity_t *ent)
     clientInfo->viewRoll = client->ps.viewAngles[2];
 
     modelName = G_ModelName(ent->modelIndex);
-    client->baseModelIndex = ent->modelIndex;
+    client->clientState.modelindex = ent->modelIndex;
     modelChanged = strcmp(clientInfo->modelName, modelName) != 0;
     if (modelChanged) {
         Q_strncpyz(clientInfo->modelName, modelName,
@@ -1242,13 +1242,13 @@ void G_UpdateClientInfo(gentity_t *ent)
             }
             clientInfo->attachModelNames[slot][0] = '\0';
             clientInfo->attachTagNames[slot][0] = '\0';
-            client->attachModelIndices[slot] = 0;
-            client->attachTagIndices[slot] = 0;
+            client->clientState.attachModelIndex[slot] = 0;
+            client->clientState.attachTagIndex[slot] = 0;
             continue;
         }
 
         modelName = G_ModelName(ent->attachModelIndex[slot]);
-        client->attachModelIndices[slot] = ent->attachModelIndex[slot];
+        client->clientState.attachModelIndex[slot] = ent->attachModelIndex[slot];
         if (strcmp(clientInfo->attachModelNames[slot], modelName) != 0) {
             modelChanged = 1;
             Q_strncpyz(clientInfo->attachModelNames[slot], modelName,
@@ -1256,7 +1256,7 @@ void G_UpdateClientInfo(gentity_t *ent)
         }
 
         const char *tagName = SL_ConvertToString(ent->attachTagIndex[slot]);
-        client->attachTagIndices[slot] = G_TagIndex(tagName);
+        client->clientState.attachTagIndex[slot] = G_TagIndex(tagName);
         if (strcmp(clientInfo->attachTagNames[slot], tagName) != 0) {
             modelChanged = 1;
             Q_strncpyz(clientInfo->attachTagNames[slot], tagName,
@@ -1276,7 +1276,7 @@ void G_UpdateClientInfo(gentity_t *ent)
 /* VERIFIED_DECOMPILER(0x45762, 55762_G_GetNonPVSFriendlyInfo.c, VERIFY-WAVE4-CLIENT-FRAME-LOCAL-2026-06-17): DATAFLOW_VERIFIED - team gates, 64-client ring scan, linked/live/team/snapshot filters, initial ROUND(delta + 0.5), scale clamp, signed quarter-offset packing, yaw packing, and entity-number bits checked. */
 int G_GetNonPVSFriendlyInfo(gentity_t *ent, const float *origin, int lastClient)
 {
-    team_t team = ent->client->sessionTeam;
+    team_t team = ent->client->clientState.team;
 
     if (team == TEAM_FREE ||
         team == TEAM_SPECTATOR) {
@@ -1296,7 +1296,7 @@ int G_GetNonPVSFriendlyInfo(gentity_t *ent, const float *origin, int lastClient)
 
         if (candidate->linked == 0 || candidateClient == 0 ||
             candidateClient->sessionState != 0 ||
-            candidateClient->sessionTeam != team || candidate == ent ||
+            candidateClient->clientState.team != team || candidate == ent ||
             trap_InSnapshot(origin, candidate->s.number) != 0) {
             continue;
         }
