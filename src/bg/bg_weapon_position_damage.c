@@ -87,10 +87,10 @@ static void bg_compat_add_view_kick_angles(
                  x87f_load_f32(WEAPON_VIEWKICK_ROLL_SCALE)),
         x87f_load_f32(angles[2])));
 #else
-    angles[0] += fraction * state->viewKickPitch *
+    angles[0] += (WIDE_FLOAT)fraction * state->viewKickPitch *
                  WEAPON_VIEWKICK_PITCH_SCALE;
-    angles[1] -= fraction * state->viewKickYaw;
-    angles[2] += fraction * state->viewKickYaw *
+    angles[1] -= (WIDE_FLOAT)fraction * state->viewKickYaw;
+    angles[2] += (WIDE_FLOAT)fraction * state->viewKickYaw *
                  WEAPON_VIEWKICK_ROLL_SCALE;
 #endif
 }
@@ -230,7 +230,7 @@ void BG_CalculateWeaponPosition_DamageKick(pm_weapon_angle_state_t *state,
                                   WEAPON_VIEWKICK_ADS_REDUCTION)))));
 #else
         scale *= 1.0f -
-                 adsFraction * WEAPON_VIEWKICK_ADS_REDUCTION;
+                 (WIDE_FLOAT)adsFraction * WEAPON_VIEWKICK_ADS_REDUCTION;
 #endif
     }
 
@@ -267,7 +267,7 @@ void BG_CalculateWeaponPosition_DamageKick(pm_weapon_angle_state_t *state,
                 x87f_load_f32(fadeOutTime))));
 #else
         fadeOutFraction =
-            1.0f - (elapsed - fadeInTime) / fadeOutTime;
+            1.0f - ((WIDE_FLOAT)elapsed - fadeInTime) / fadeOutTime;
 #endif
         if (fadeOutFraction > 0.0f) {
             float fadeOutLean;

@@ -80,8 +80,8 @@ static void bg_compat_add_view_kick_pitch_roll(
                  x87f_load_f32(state->viewKickRoll)),
         x87f_load_f32(angles[2])));
 #else
-    angles[0] += fraction * state->viewKickPitch;
-    angles[2] += fraction * state->viewKickRoll;
+    angles[0] += (WIDE_FLOAT)fraction * state->viewKickPitch;
+    angles[2] += (WIDE_FLOAT)fraction * state->viewKickRoll;
 #endif
 }
 #endif
@@ -214,7 +214,7 @@ void BG_CalculateView_DamageKick(bg_view_angle_state_t *state,
                          x87f_load_f32(VIEWKICK_ADS_SCALE)),
                 x87f_load_f32(1.0f))));
 #else
-        scale *= adsFraction * VIEWKICK_ADS_SCALE + 1.0f;
+        scale *= (WIDE_FLOAT)adsFraction * VIEWKICK_ADS_SCALE + 1.0f;
 #endif
     }
 
@@ -252,7 +252,7 @@ void BG_CalculateView_DamageKick(bg_view_angle_state_t *state,
                 x87f_load_f32(VIEWKICK_FADE_OUT_MS))));
 #else
         fadeOutFraction =
-            1.0f - (elapsed - VIEWKICK_FADE_IN_MS) /
+            1.0f - ((WIDE_FLOAT)elapsed - VIEWKICK_FADE_IN_MS) /
                        VIEWKICK_FADE_OUT_MS;
 #endif
         if (fadeOutFraction > 0.0f) {

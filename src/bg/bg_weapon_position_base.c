@@ -186,8 +186,8 @@ void BG_CalculateWeaponPosition_BasePosition_angles(
                      x87f_load_f32(threshold))));
 #else
         fraction =
-            (state->speed - threshold) /
-            ((long double)ps->speed - threshold);
+            ((WIDE_FLOAT)state->speed - threshold) /
+            ((WIDE_FLOAT)ps->speed - threshold);
 #endif
         if (fraction < 0.0f) {
             fraction = 0.0f;
@@ -223,7 +223,7 @@ void BG_CalculateWeaponPosition_BasePosition_angles(
                          x87f_load_f32(state->frameTime)),
                 x87f_load_f32(rate)));
 #else
-            step = (target[axis] - state->moveOffset[axis]) *
+            step = ((WIDE_FLOAT)target[axis] - state->moveOffset[axis]) *
                    state->frameTime * rate;
 #endif
 
@@ -235,7 +235,7 @@ void BG_CalculateWeaponPosition_BasePosition_angles(
                     step = state->frameTime * 0.1f;
                 }
 #else
-                if (step < state->frameTime * 0.1f) {
+                if (step < (WIDE_FLOAT)state->frameTime * 0.1f) {
                     step = state->frameTime * 0.1f;
                 }
 #endif
@@ -252,7 +252,7 @@ void BG_CalculateWeaponPosition_BasePosition_angles(
                     step = state->frameTime * -0.1f;
                 }
 #else
-                if (state->frameTime * -0.1f < step) {
+                if ((WIDE_FLOAT)state->frameTime * -0.1f < step) {
                     step = state->frameTime * -0.1f;
                 }
 #endif
@@ -283,9 +283,9 @@ void BG_CalculateWeaponPosition_BasePosition_angles(
 #else
         const float fraction =
             1.0f - (ps->adsFraction + ps->adsFraction);
-        angles[0] += state->moveOffset[0] * fraction;
-        angles[1] += state->moveOffset[1] * fraction;
-        angles[2] += state->moveOffset[2] * fraction;
+        angles[0] += (WIDE_FLOAT)state->moveOffset[0] * fraction;
+        angles[1] += (WIDE_FLOAT)state->moveOffset[1] * fraction;
+        angles[2] += (WIDE_FLOAT)state->moveOffset[2] * fraction;
 #endif
     }
 #endif

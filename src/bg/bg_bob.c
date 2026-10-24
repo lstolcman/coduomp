@@ -25,9 +25,10 @@
  *
  * Linux game retains the same state tests and waveforms at RVAs 0x00037b2d,
  * 0x00037b7c, and 0x00037c5f.  Its original source/compiler boundary stores
- * the public results and intermediate sine terms as binary32, while Windows
- * returns live PC=53 x87 values.  Complete platform bodies preserve that real
- * computational difference; EMULATE_X87 remains an independent host axis.
+ * the cycle/vertical results and intermediate sine terms as binary32. Its
+ * horizontal product remains live in x87; Windows returns live PC=53 values.
+ * Complete platform bodies preserve that real computational difference;
+ * EMULATE_X87 remains an independent host axis.
  */
 
 #if defined(WINDOWS_BEHAVIOR)
@@ -147,10 +148,10 @@ float BG_GetBobCycle(const playerState_t *ps)
         x87f_add(x87f_add(phase, phase),
                  x87f_load_f64(6.283185307179586)));
 #else
-    const long double phase =
-        (long double)(uint8_t)ps->bobCycle / 255.0f *
-        3.141592653589793L;
-    return (float)(phase + phase + 6.283185307179586L);
+    const WIDE_FLOAT phase =
+        (WIDE_FLOAT)(uint8_t)ps->bobCycle / 255.0f *
+        3.141592653589793;
+    return (float)(phase + phase + 6.283185307179586);
 #endif
 }
 
@@ -190,15 +191,15 @@ float BG_GetVerticalBobFactor(const playerState_t *ps, float phase,
 #else
     fundamental = (float)CoduoLibm_Sin((double)(phase + phase));
     harmonic = (float)CoduoLibm_Sin(
-        (double)((long double)phase * 4.0f + 1.5707963267948966L));
-    fundamental = fundamental + harmonic * 0.2f;
+        (double)((WIDE_FLOAT)phase * 4.0f + 1.5707963267948966));
+    fundamental = fundamental + (WIDE_FLOAT)harmonic * 0.2f;
     fundamental = 0.75f * fundamental;
     return fundamental * clampedAmplitude;
 #endif
 }
 
-float BG_GetHorizontalBobFactor(const playerState_t *ps, float phase,
-                                float amplitude, float maxAmplitude)
+WIDE_FLOAT BG_GetHorizontalBobFactor(const playerState_t *ps, float phase,
+                                     float amplitude, float maxAmplitude)
 {
     float clampedAmplitude;
 
@@ -218,7 +219,7 @@ float BG_GetHorizontalBobFactor(const playerState_t *ps, float phase,
         x87f_load_f64(CoduoLibm_Sin((double)phase)),
         x87f_load_f32(clampedAmplitude)));
 #else
-    return (float)CoduoLibm_Sin((double)phase) * clampedAmplitude;
+    return (WIDE_FLOAT)(float)CoduoLibm_Sin((double)phase) * clampedAmplitude;
 #endif
 }
 

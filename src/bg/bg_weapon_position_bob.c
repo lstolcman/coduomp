@@ -29,6 +29,7 @@
 #include "bg_vehicle.h"
 #include "bg_weapon.h"
 #include "compat/coduo_int32_bits.h"
+#include "compat/coduo_native_x87.h"
 #include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
@@ -98,7 +99,7 @@ void BG_CalculateWeaponPosition_BobOffset(pm_weapon_angle_state_t *state,
         amp2 = (long double)BG_SWAY_MAX_BOB_AMP;
     }
     float yaw = (float)(
-        sinl((long double)phase) * amp2 * -1.0L);
+        coduo_x87_sinl((long double)phase) * amp2 * -1.0L);
 
     /* 0x300153b6..0x300153c8: roll phase, shifted by 0.47123894 (0x3007bf5c =
      * 0x3ef1463b; 0.4712389f would be 1 ULP low at 0x3ef1463a), and the 1.5x
@@ -124,7 +125,7 @@ void BG_CalculateWeaponPosition_BobOffset(pm_weapon_angle_state_t *state,
      * (FCOMP against 0.0 @0x3007bcec / TEST AH,0x5 / JP skips when the product is
      * >= 0). Otherwise the roll is 0.0. rollAmp is non-negative, so this selects
      * the negative half of sin(rollPhase). */
-    long double sinRollWide = sinl((long double)rollPhase);
+    long double sinRollWide = coduo_x87_sinl((long double)rollPhase);
     float sinRoll = (float)sinRollWide; /* 0x3001540b FST retained */
     long double roll;
     if (sinRollWide * rollAmp < 0.0L) {
@@ -181,21 +182,22 @@ void BG_CalculateWeaponPosition_BobOffset(pm_weapon_angle_state_t *state,
                  x87f_load_f64(0.7853981633974483)),
         x87f_load_f64(6.283185307179586)));
 #else
-    phase = (float)((long double)phase +
-                    0.7853981633974483L +
-                    6.283185307179586L);
+    phase = (float)((WIDE_FLOAT)phase +
+                    0.7853981633974483 +
+                    6.283185307179586);
 #endif
 
     pitch = -BG_GetVerticalBobFactor(ps, phase, speed,
                                      (float)BG_SWAY_MAX_BOB_AMP);
     yaw = -BG_GetHorizontalBobFactor(ps, phase, speed,
                                     (float)BG_SWAY_MAX_BOB_AMP);
-    roll = BG_GetHorizontalBobFactor(
-        ps, phase - 0.47123889803846897,
-        speed * 1.5f, (float)BG_SWAY_MAX_BOB_AMP);
-    if (roll < 0.0f) {
+    /* The sign test consumes the live return before the selected roll stores.
+     * The binary64 phase offset retains the source's binary32 0.15 factor. */
+    if (BG_GetHorizontalBobFactor(
+            ps, (WIDE_FLOAT)phase - 0.4712389167638204,
+            speed * 1.5f, (float)BG_SWAY_MAX_BOB_AMP) < 0.0f) {
         roll = BG_GetHorizontalBobFactor(
-            ps, phase - 0.47123889803846897,
+            ps, (WIDE_FLOAT)phase - 0.4712389167638204,
             speed * 1.5f, (float)BG_SWAY_MAX_BOB_AMP);
     } else {
         roll = 0.0f;
@@ -203,7 +205,7 @@ void BG_CalculateWeaponPosition_BobOffset(pm_weapon_angle_state_t *state,
 
     if (ps->adsFraction != 0.0f) {
         const float adsScale =
-            1.0f - (1.0f - weapon->adsBobFactor) * ps->adsFraction;
+            1.0f - ((WIDE_FLOAT)1.0f - weapon->adsBobFactor) * ps->adsFraction;
 
         pitch *= adsScale;
         yaw *= adsScale;
