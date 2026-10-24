@@ -1,6 +1,7 @@
 #include "cgame.h"
 #include "console.h"
 
+#include "compat/coduo_posix.h"
 #include "filesystem/filesystem.h"
 #include "../filesystem/server_namespace.h"
 #include "filesystem/filesystem_path_security.h"
