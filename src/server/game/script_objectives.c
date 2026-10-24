@@ -6,6 +6,7 @@
  */
 
 #include <stdint.h>
+#include "compat/coduo_fp_conversion.h"
 
 #include "recovered_game.h"
 #include "game_globals.h"
@@ -116,14 +117,16 @@ void SetObjectiveIcon(objective_t *objective, uint32_t paramIndex)
 
 static void game_compat_objective_set_rounded_origin(objective_t *objective, uint32_t paramIndex)
 {
-    /* NOT_FROM_ORIGINAL_SOURCE: factored vector read plus x87 fistp RC=truncate stores. */
+    /* NOT_FROM_ORIGINAL_SOURCE: factored vector read and platform-selected
+     * integer conversion. Each binary32 component is loaded independently,
+     * converted to the signed low dword, then stored back as binary32. */
     Scr_GetVector(paramIndex, objective->origin);
     objective->origin[0] =
-        (float)game_compat_int32_from_float_trunc(objective->origin[0]);
+        (float)coduo_fp_to_i32_extended((long double)objective->origin[0]);
     objective->origin[1] =
-        (float)game_compat_int32_from_float_trunc(objective->origin[1]);
+        (float)coduo_fp_to_i32_extended((long double)objective->origin[1]);
     objective->origin[2] =
-        (float)game_compat_int32_from_float_trunc(objective->origin[2]);
+        (float)coduo_fp_to_i32_extended((long double)objective->origin[2]);
 }
 
 /* VERIFIED_DECOMPILER(0x69f70, 79f70_script_func_objective_add.c, VERIFY-SCRIPT-OBJECTIVES-PACKET-2026-06-17): DATAFLOW_VERIFIED - parameter-count usage check, index validation, prior entity clear, state parse/error path, optional rounded origin/icon, entity reset, and team reset checked against current decompiler output. */
