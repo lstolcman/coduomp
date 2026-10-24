@@ -1,5 +1,7 @@
 #include "q_math.h"
 
+#include "compat/coduo_math_sqrt.h"
+
 #include <math.h>
 
 #if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
@@ -77,7 +79,7 @@ float RadiusFromBounds(const vec3_t mins, const vec3_t maxs)
     squared = x87f_add(
         squared,
         x87f_mul(x87f_load_f32(corner[2]), x87f_load_f32(corner[2])));
-    return (float)sqrt(x87f_store_f64(squared));
+    return (float)coduomp_math_sqrt(x87f_store_f64(squared));
 #else
     const long double xy =
         (long double)corner[0] * (long double)corner[0] +
@@ -85,7 +87,7 @@ float RadiusFromBounds(const vec3_t mins, const vec3_t maxs)
     const long double squared =
         xy + (long double)corner[2] * (long double)corner[2];
 
-    return (float)sqrt((double)squared);
+    return (float)coduomp_math_sqrt((double)squared);
 #endif
 }
 #endif
