@@ -196,7 +196,15 @@ if(CODUOMP_BUILD_SERVER)
 		"${CMAKE_SOURCE_DIR}/src/qcommon/bindings/default"
 		"${CMAKE_SOURCE_DIR}/src"
 		"${CMAKE_SOURCE_DIR}/vendor/softfloat/source/include"
+		# POSIX names the MinGW build gets from its C library.
+		"${CMAKE_SOURCE_DIR}/cmake/msvc-posix"
 		${CODUOMP_ZLIB_INCLUDE_DIRS})
+
+	target_compile_options(coduo_dedicated_recovered PRIVATE
+		# Windows SDK 10.0.19041 winbase.h expands "defined" inside a macro,
+		# which MSVC C11 reports as C5105 for every translation unit.
+		/wd5105
+		"SHELL:/FI\"${CMAKE_SOURCE_DIR}/cmake/msvc-posix/coduomp_posix_compat.h\"")
 
 	if(CODUOMP_ZLIB_FOUND)
 		target_link_libraries(coduo_dedicated_recovered PRIVATE

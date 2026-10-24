@@ -284,9 +284,9 @@ cmake -G "NMake Makefiles" -DBUNDLED_LIBS=YES .. && nmake
 The executable is written to `build/bin/Release/CoDUOMP.exe` and its modules to
 `build/bin/Release/uo/`. This build links the bundled libraries and the MSVC
 runtime statically, and it uses the built-in Miniaudio backend, so it does not
-load the retail 32-bit `mss32.dll`. The dedicated server project is disabled by
-default because its Windows configuration relies on MinGW's POSIX headers; use
-the Makefile target below for it.
+load the retail 32-bit `mss32.dll`. The dedicated server executable is staged in
+the same directory and uses `cmake/msvc-posix/` for the POSIX names that MinGW
+provides.
 
 ### Makefile
 

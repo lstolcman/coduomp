@@ -20,10 +20,13 @@ endif()
 
 include("${CMAKE_SOURCE_DIR}/libs/CMakeLists.txt")
 
-# zlib
+# zlib (also used by the dedicated server)
 set(CODUOMP_ZLIB_FOUND TRUE)
 set(CODUOMP_ZLIB_INCLUDE_DIRS "")
 set(CODUOMP_ZLIB_LIBRARIES ZLIB::ZLIBSTATIC)
+
+# Client-only dependencies
+if(CODUOMP_BUILD_CLIENT)
 
 # minizip (from the vendored zlib)
 set(CODUOMP_MINIZIP_FOUND TRUE)
@@ -48,3 +51,5 @@ set(CODUOMP_CURL_LIBRARIES libcurl)
 
 # Khronos GL extension headers fetched into libs/gl
 set(CODUOMP_GL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/libs/gl")
+
+endif()

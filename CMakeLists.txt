@@ -19,9 +19,9 @@
 # MSVC-specific adaptations stay next to the code they affect: the
 # offsetof(<type>, <member>[<index>]) layout checks are GCC/clang-only, the game
 # module selects src/compat/libm/coduo_libm_msvc.c because MSVC has no 80-bit
-# long double or GNU inline assembly, and cmake/CoduompMsvcCompat.h supplies the
-# Microsoft CRT names the shared sources use. The dedicated server target is off
-# by default because its Windows build relies on the Makefile's MinGW target.
+# long double or GNU inline assembly, cmake/CoduompMsvcCompat.h supplies the
+# Microsoft CRT names the shared sources use, and the dedicated server uses
+# cmake/msvc-posix/ for the POSIX names MinGW provides.
 #
 # Targets:
 #   CoDUOMP                   client executable
@@ -78,11 +78,7 @@ set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMake")
 #-----------------------------------------------------------------
 option(CODUOMP_BUILD_CLIENT		"Build the CoDUOMP client executable"						ON)
 option(CODUOMP_BUILD_MODULES	"Build the cgame, UI and listen-server game modules"		ON)
-# The standalone server reproduces the Linux server and relies on POSIX
-# headers (unistd.h, dirent.h, sys/time.h) that MSVC does not provide. Its
-# Windows build is the Makefile's MinGW target; enable this once an MSVC POSIX
-# shim exists.
-option(CODUOMP_BUILD_SERVER		"Build the dedicated server executable"					OFF)
+option(CODUOMP_BUILD_SERVER		"Build the dedicated server executable"					ON)
 
 option(CODUOMP_STATIC_VCRT		"Link the MSVC runtime statically (/MT)"					ON)
 option(BUNDLED_LIBS				"Build the third-party libraries bundled in libs/"			ON)
