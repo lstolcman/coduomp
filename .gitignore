@@ -6,6 +6,9 @@
 __pycache__/
 *.pyc
 
+# Local game installation used for manual client and server runs.
+/_GAME/
+
 *.o
 *.d
 *.a
