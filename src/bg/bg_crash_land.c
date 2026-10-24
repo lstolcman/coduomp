@@ -22,7 +22,7 @@
 #include "compat/coduo_x87emu.h"
 
 #if defined(LINUX_BEHAVIOR)
-#include "compat/libm/coduo_libm.h"
+#include "compat/coduo_math_sqrt.h"
 #endif
 
 #include <math.h>
@@ -448,12 +448,12 @@ void PM_CrashLand(void)
         return;
     }
 
-    /* glibc sqrt returns binary64. Linux then continues in x87 width but
+    /* glibc sqrt rounds once at binary64 precision. Linux then continues in x87 width but
      * stores impactTime, impactVelocity, and fallHeight to binary32 in turn. */
 #if EMULATE_X87
     impactTime = x87f_store_f32(x87f_div(
         x87f_sub(x87f_neg(x87f_load_f32(fallVelocity)),
-                 x87f_load_f64(CoduoLibm_Sqrt((double)discriminant))),
+                 x87f_load_f64(coduomp_math_sqrt((double)discriminant))),
         x87f_add(x87f_load_f32(halfNegativeGravity),
                  x87f_load_f32(halfNegativeGravity))));
     impactVelocity = x87f_store_f32(x87f_neg(x87f_add(
@@ -468,7 +468,7 @@ void PM_CrashLand(void)
 #else
     impactTime = (float)(
         (-(long double)fallVelocity -
-         (long double)CoduoLibm_Sqrt((double)discriminant)) /
+         (long double)coduomp_math_sqrt((double)discriminant)) /
         ((long double)halfNegativeGravity +
          (long double)halfNegativeGravity));
     impactVelocity = (float)(-
