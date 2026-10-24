@@ -1,6 +1,7 @@
 #include "q_math.h"
 
 #include "compat/coduo_int32_bits.h"
+#include "compat/coduo_x87_eval.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -557,6 +558,8 @@ void _VectorScale(const vec3_t vector, float scale, vec3_t result)
  * binary32.  The addresses are the `_VectorScale` addresses above plus 0x20
  * on Windows, and 0x38 in both Linux binaries (0x08066455 and RVA 0x00039e86).
  * The x87 backend, not a second function body, selects PC=53 or PC=64.
+ * Native C retains the product and sum in WIDE_FLOAT and rounds only the
+ * completed lane to float; a float product or float FMA changes that boundary.
  */
 void _VectorMA(const vec3_t start, float scale, const vec3_t direction,
                vec3_t result)
@@ -572,9 +575,9 @@ void _VectorMA(const vec3_t start, float scale, const vec3_t direction,
         x87f_mul(x87f_load_f32(scale), x87f_load_f32(direction[2])),
         x87f_load_f32(start[2])));
 #else
-    result[0] = start[0] + scale * direction[0];
-    result[1] = start[1] + scale * direction[1];
-    result[2] = start[2] + scale * direction[2];
+    result[0] = (float)((WIDE_FLOAT)start[0] + (WIDE_FLOAT)scale * (WIDE_FLOAT)direction[0]);
+    result[1] = (float)((WIDE_FLOAT)start[1] + (WIDE_FLOAT)scale * (WIDE_FLOAT)direction[1]);
+    result[2] = (float)((WIDE_FLOAT)start[2] + (WIDE_FLOAT)scale * (WIDE_FLOAT)direction[2]);
 #endif
 }
 
