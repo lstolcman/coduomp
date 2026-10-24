@@ -18,6 +18,8 @@
 #include "scr_vm.h"
 #include "game_functions.h"
 #include "compat/crt/atof_compat.h"
+#include "compat/coduo_fp_conversion.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #define TRIGGER_HURT_DEFAULT_SOUND "world_hurt_me"
@@ -36,6 +38,7 @@
 
 #define TRIGGER_DAMAGE_HEALTH_SENTINEL 32000
 #define TRIGGER_DAMAGE_FREE_DELAY_MS 100
+#define TRIGGER_DAMAGE_DURATION_SCALE 1000.0f
 #define TRIGGER_DAMAGE_SPAWNFLAG_IGNORE_PISTOL 0x01u
 #define TRIGGER_DAMAGE_SPAWNFLAG_IGNORE_RIFLE 0x02u
 #define TRIGGER_DAMAGE_SPAWNFLAG_IGNORE_GRENADE_PROJECTILE_ARTILLERY 0x04u
@@ -367,7 +370,7 @@ void Activate_trigger_damage(gentity_t *trigger, gentity_t *activator,
          Respond_trigger_damage(trigger, mod) != 0 &&
          (game_compat_trigger_damage_health_threshold(trigger) == 0 ||
           game_compat_trigger_damage_health_threshold(trigger) <=
-              TRIGGER_DAMAGE_HEALTH_SENTINEL - trigger->health))) {
+              coduo_int32_from_bits((uint32_t)TRIGGER_DAMAGE_HEALTH_SENTINEL - (uint32_t)trigger->health)))) {
         trigger->triggerActivator = activator;
 
         if (mod != -1) {
@@ -378,29 +381,35 @@ void Activate_trigger_damage(gentity_t *trigger, gentity_t *activator,
             /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
             if (trigger->itemWait > 0.0f) {
                 trigger->think = multi_wait;
-                /* Stock 0x76dd0..0x76e14: (randSigned*itemRandom + itemWait) *
-                 * 1000.0f(float const) kept 80-bit, fistp-direct truncate. */
-#if EMULATE_X87
+                /* Keep the random product and wait sum wide. Windows truncates
+                 * the negated millisecond value to a signed qword and subtracts
+                 * its low dword; Linux truncates the positive value to a signed
+                 * dword (0x76dd0..0x76e14). Timer arithmetic wraps at 32 bits. */
+#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
                 trigger->nextthink =
-                    level.time +
-                    x87f_store_i32_trunc(x87f_mul(
+                    coduo_int32_from_bits((uint32_t)level.time +
+                    (uint32_t)x87f_store_i32_trunc(x87f_mul(
                         x87f_add(
                             x87f_mul(x87f_load_f64(
                                          coduo_server_rand_signed_unit()),
                                      x87f_load_f32(trigger->itemRandom)),
                             x87f_load_f32(trigger->itemWait)),
-                        x87f_load_f32(1000.0f)));
+                        x87f_load_f32(TRIGGER_DAMAGE_DURATION_SCALE))));
 #else
-                trigger->nextthink =
-                    level.time +
-                    (int32_t)(((long double)trigger->itemWait +
-                               (long double)coduo_server_rand_signed_unit() *
-                                   (long double)trigger->itemRandom) *
-                              1000.0L);
+                volatile WIDE_FLOAT randomOffset =
+                    (WIDE_FLOAT)coduo_server_rand_signed_unit() * trigger->itemRandom;
+                WIDE_FLOAT waitSeconds = randomOffset + (WIDE_FLOAT)trigger->itemWait;
+#if defined(WINDOWS_BEHAVIOR)
+                trigger->nextthink = coduo_int32_from_bits((uint32_t)level.time -
+                    coduo_fp_to_u32_extended(waitSeconds * -TRIGGER_DAMAGE_DURATION_SCALE));
+#else
+                trigger->nextthink = coduo_int32_from_bits((uint32_t)level.time +
+                    coduo_fp_to_u32_extended(waitSeconds * TRIGGER_DAMAGE_DURATION_SCALE));
+#endif
 #endif
             } else {
                 trigger->touch = NULL;
-                trigger->nextthink = level.time + TRIGGER_DAMAGE_FREE_DELAY_MS;
+                trigger->nextthink = coduo_int32_from_bits((uint32_t)level.time + TRIGGER_DAMAGE_FREE_DELAY_MS);
                 trigger->think = G_FreeEntity;
             }
         }
@@ -418,7 +427,7 @@ void Use_trigger_damage(gentity_t *ent, gentity_t *other, gentity_t *activator)
 {
     (void)activator;
 
-    Activate_trigger_damage(ent, other, game_compat_trigger_damage_health_threshold(ent) + 1,
+    Activate_trigger_damage(ent, other, coduo_int32_from_bits((uint32_t)game_compat_trigger_damage_health_threshold(ent) + 1u),
                             -1);
 }
 
