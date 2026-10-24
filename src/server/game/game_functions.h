@@ -207,7 +207,7 @@ extern qboolean infront(gentity_t *self, gentity_t *other);
 extern int DebugLine(void);
 extern void Weapon_Melee(gentity_t *ent, const float *muzzlePoints);
 extern void SnapVectorTowards(float *point, const float *towards);
-extern float Damage_Falloff(float distance, float maxDamage, float minDamagePercent,
+extern WIDE_FLOAT Damage_Falloff(float distance, float maxDamage, float minDamagePercent,
                             int minRange, int maxRange);
 extern const char *BG_GetWeaponTypeName(int weaponType);
 extern void G_CheckHitTriggerDamage(gentity_t *activator, const float *start,
@@ -222,7 +222,7 @@ extern gentity_t *fire_grenade(gentity_t *self, float *start, float *dir,
                                int weapon);
 extern gentity_t *fire_rocket(gentity_t *self, float *start, float *dir);
 extern gentity_t *fire_artillery(gentity_t *self, float *origin, int delay);
-extern void fire_artillery_barrage(gentity_t *self, float *origin, int weapon);
+extern gentity_t *fire_artillery_barrage(gentity_t *self, float *origin, int weapon);
 extern qboolean Bullet_Fire(gentity_t *ent, float spread, int damage,
                             weapon_muzzle_t *muzzlePoints,
                             gentity_t *attacker);

@@ -681,7 +681,7 @@ void G_MissileImpact(gentity_t *ent, trace_t *trace, float *dir)
     gentity_t *inflictor;
     gentity_t *attacker;
     float distance;
-    float damage;
+    volatile float damage;
     vec3_t velocity;
     float speed;
     int hitLogged;
@@ -1412,7 +1412,7 @@ gentity_t *fire_artillery(gentity_t *self, float *origin, int delay)
 /* ------------------------------------------------------------------ */
 
 /* VERIFIED_DECOMPILER(0x601fb, 701fb_fire_artillery_barrage.c, VERIFY-MISSILE-REMAINING-2026-06-17): DATAFLOW_VERIFIED */
-void fire_artillery_barrage(gentity_t *self, float *origin, int weapon)
+gentity_t *fire_artillery_barrage(gentity_t *self, float *origin, int weapon)
 {
     const weaponInfo_t *weaponInfo;
     gentity_t *barrage;
@@ -1440,4 +1440,5 @@ void fire_artillery_barrage(gentity_t *self, float *origin, int weapon)
 
     Scr_AddVector(origin);
     Scr_Notify(self, scr_const_artillery_impact, 1);
+    return barrage;
 }
