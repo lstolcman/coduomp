@@ -669,19 +669,11 @@ char *Com_ParseRestOfLine(char **data)
  * to binary32 and reloads it before returning. The wider Windows host carrier
  * preserves that proved difference without changing the i386 ST0 ABI.
  */
-#if defined(WINDOWS_BEHAVIOR)
 long double Com_ParseFloat(char **data)
 {
     char *token = Com_Parse(data);
     return token[0] == '\0' ? 0.0L : (long double)coduo_compat_atof(token);
 }
-#else
-float Com_ParseFloat(char **data)
-{
-    char *token = Com_Parse(data);
-    return token[0] == '\0' ? 0.0f : (float)coduo_compat_atof(token);
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x0044f060..0x0044f0aa, recovered from an executable
  * gap. Name and signature: same-family Com_ParseInt. */

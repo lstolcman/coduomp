@@ -9,13 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR)
 void *GetMemory(size_t size);
-#elif defined(LINUX_BEHAVIOR)
-void *Com_ZoneDebugAlloc(size_t size);
-#else
-#error "precompiler_tokenizer.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 #define PC_NUMBER_FLOAT_BASE 10.0L
 
@@ -87,15 +81,9 @@ void SetScriptPunctuations(script_t *script,
                            punctuation_t *punctuations)
 {
     if (script->punctuationTable == NULL) {
-#if defined(WINDOWS_BEHAVIOR)
         script->punctuationTable = GetMemory(
             PC_PUNCTUATION_BUCKET_COUNT *
             sizeof(*script->punctuationTable));
-#else
-        script->punctuationTable = Com_ZoneDebugAlloc(
-            PC_PUNCTUATION_BUCKET_COUNT *
-            sizeof(*script->punctuationTable));
-#endif
     }
 
     memset(script->punctuationTable, 0,
@@ -415,7 +403,6 @@ qboolean PS_ReadName(script_t *script, token_t *token)
     return qtrue;
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 /* Source: CoDUOMP.exe 0x00447820..0x00447977.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00447820_00447977.mcode.
  * Name: exact same-module Mac symbol NumberValue. */
@@ -481,161 +468,6 @@ void NumberValue(const char *string, int32_t subtype,
     *floatValue = (double)value;
 }
 
-#else
-/* coduo_lnxded 0x0807de30..0x0807e0d0 carries the numeric accumulator as an
- * x87 TBYTE and stores that ten-byte payload in the token's twelve-byte slot.
- * The whole body remains separate because changing only its field access
- * would silently change the arithmetic precision and conversion width. */
-void NumberValue(const char *string, int32_t subtype,
-                 int32_t *intValue,
-                 uint8_t floatValue[PC_TOKEN_FLOAT_VALUE_SIZE])
-{
-#if EMULATE_X87
-    x87f numberValue = x87f_load_f32(0.0f);
-#else
-    long double numberValue = 0.0L;
-    size_t numberValueCopySize = sizeof(numberValue);
-    if (numberValueCopySize > PC_X87_EXTENDED_TBYTE_SIZE) {
-        numberValueCopySize = PC_X87_EXTENDED_TBYTE_SIZE;
-    }
-#endif
-
-    *intValue = 0;
-    memset(floatValue, 0, PC_TOKEN_FLOAT_VALUE_SIZE);
-
-    if ((subtype & PC_TOKEN_SUBTYPE_FLOAT) != 0) {
-        uint32_t divisor = 0;
-
-        for (; *string != '\0'; ++string) {
-            if (*string == '.') {
-                if (divisor != 0) {
-#if EMULATE_X87
-                    coduo_pc_store_token_float80(floatValue,
-                                                 numberValue);
-#else
-                    /* Stock clears the 12-byte token slot, then fstp writes
-                     * only the 10-byte x87 TBYTE payload.  Relaxed non-x87
-                     * hosts copy only their valid native long-double bytes. */
-                    memcpy(floatValue, &numberValue,
-                           numberValueCopySize);
-#endif
-                    return;
-                }
-                /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-                divisor = 10;
-                string++;
-            }
-
-            if (divisor == 0) {
-#if EMULATE_X87
-                /* fild(digit) + fld(10.0L)*numberValue */
-                numberValue = x87f_add(
-                    x87f_load_i32(*string - '0'),
-                    x87f_mul(x87f_load_f64((double)PC_NUMBER_FLOAT_BASE),
-                             numberValue));
-#else
-                numberValue =
-                    (long double)(*string - '0') +
-                    PC_NUMBER_FLOAT_BASE * numberValue;
-#endif
-            } else {
-#if EMULATE_X87
-                /* numberValue += fild(digit) / (uint32->80)divisor */
-                numberValue = x87f_add(
-                    numberValue,
-                    x87f_div(x87f_load_i32(*string - '0'),
-                             x87f_load_f64((double)divisor)));
-#else
-                numberValue += (long double)(*string - '0') /
-                               (long double)divisor;
-#endif
-                divisor *= 10;
-            }
-        }
-
-        /* 0x807df16: fistp QWORD + low dword = unsigned-int conversion,
-         * not the fistp DWORD a direct (int32_t) cast would emit. */
-#if EMULATE_X87
-        *intValue = (int32_t)(uint32_t)extF80_to_i64(
-            numberValue, softfloat_round_minMag, false);
-        coduo_pc_store_token_float80(floatValue, numberValue);
-#else
-        *intValue = (int32_t)(uint32_t)numberValue;
-        memcpy(floatValue, &numberValue, numberValueCopySize);
-#endif
-        return;
-    }
-
-    if ((subtype & PC_TOKEN_SUBTYPE_DECIMAL) != 0) {
-        for (; *string != '\0'; ++string) {
-            uint32_t value = (uint32_t)*intValue;
-            value = value * 10 + (uint32_t)(*string - '0');
-            *intValue = (int32_t)value;
-        }
-#if EMULATE_X87
-        numberValue = x87f_load_f64((double)(uint32_t)*intValue);
-        coduo_pc_store_token_float80(floatValue, numberValue);
-#else
-        numberValue = (long double)(uint32_t)*intValue;
-        memcpy(floatValue, &numberValue, numberValueCopySize);
-#endif
-        return;
-    }
-
-    if ((subtype & PC_TOKEN_SUBTYPE_HEX) != 0) {
-        for (string += 2; *string != '\0'; ++string) {
-            uint32_t value = (uint32_t)*intValue << 4;
-            if (*string >= 'a' && *string <= 'f') {
-                value += (uint32_t)(*string - 'a' + 10);
-            } else if (*string >= 'A' && *string <= 'F') {
-                value += (uint32_t)(*string - 'A' + 10);
-            } else {
-                value += (uint32_t)(*string - '0');
-            }
-            *intValue = (int32_t)value;
-        }
-#if EMULATE_X87
-        numberValue = x87f_load_f64((double)(uint32_t)*intValue);
-        coduo_pc_store_token_float80(floatValue, numberValue);
-#else
-        numberValue = (long double)(uint32_t)*intValue;
-        memcpy(floatValue, &numberValue, numberValueCopySize);
-#endif
-        return;
-    }
-
-    if ((subtype & PC_TOKEN_SUBTYPE_OCTAL) != 0) {
-        while (*++string != '\0') {
-            uint32_t value = (uint32_t)*intValue;
-            value = value * 8 + (uint32_t)(*string - '0');
-            *intValue = (int32_t)value;
-        }
-#if EMULATE_X87
-        numberValue = x87f_load_f64((double)(uint32_t)*intValue);
-        coduo_pc_store_token_float80(floatValue, numberValue);
-#else
-        numberValue = (long double)(uint32_t)*intValue;
-        memcpy(floatValue, &numberValue, numberValueCopySize);
-#endif
-        return;
-    }
-
-    if ((subtype & PC_TOKEN_SUBTYPE_BINARY) != 0) {
-        for (string += 2; *string != '\0'; ++string) {
-            uint32_t value = (uint32_t)*intValue;
-            value = value * 2 + (uint32_t)(*string - '0');
-            *intValue = (int32_t)value;
-        }
-#if EMULATE_X87
-        numberValue = x87f_load_f64((double)(uint32_t)*intValue);
-        coduo_pc_store_token_float80(floatValue, numberValue);
-#else
-        numberValue = (long double)(uint32_t)*intValue;
-        memcpy(floatValue, &numberValue, numberValueCopySize);
-#endif
-    }
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00447980..0x00447c4b.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00447980_00447c4b.mcode.
@@ -739,11 +571,7 @@ qboolean PS_ReadNumber(script_t *script, token_t *token)
 
     token->string[length] = '\0';
     NumberValue(token->string, token->subtype, &token->intValue,
-#if defined(WINDOWS_BEHAVIOR)
                 &token->floatValue);
-#else
-                token->floatValue);
-#endif
     if ((token->subtype & PC_TOKEN_SUBTYPE_FLOAT) == 0)
         token->subtype |= PC_TOKEN_SUBTYPE_INTEGER;
     return qtrue;
@@ -1107,11 +935,7 @@ void PS_UnreadToken(script_t *script,
  * coduomp/mcode/CoDUOMP/FUN_00448600_0044861b.mcode.
  * Name: same-family symbol PS_ReadWhitespaceChar. The PE writes only AL on
  * both returns, proving that this client build's return type is one byte. */
-#if defined(WINDOWS_BEHAVIOR)
 char PS_ReadWhitespaceChar(script_t *script)
-#else
-int32_t PS_ReadWhitespaceChar(script_t *script)
-#endif
 {
     if (script->whitespaceStart == script->whitespaceEnd)
         return '\0';
@@ -1150,7 +974,6 @@ void StripSingleQuotes(char *string)
         string[length - 1] = '\0';
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 /* Source: CoDUOMP.exe 0x004486c0..0x0044877b.
  * Evidence: repaired executable-gap record
  * coduomp/mcode/CoDUOMP/FUN_004486c0_0044877b.mcode.
@@ -1173,48 +996,6 @@ double PS_ReadFloat(script_t *script)
     return sign * token.floatValue;
 }
 
-#else
-long double PS_ReadFloat(script_t *script)
-{
-    token_t token;
-    /* 0x807f0b8/0x807f105: sign is an x87 long double constant
-     * ({0,0x80000000,0x3fff/0xbfff} immediate stores), not an int. */
-#if EMULATE_X87
-    x87f sign = x87f_load_f32(1.0f);
-#else
-    long double sign = 1.0L;
-#endif
-
-    PS_ReadTokenOrError(script, &token);
-    if (strcmp(token.string, "-") == 0) {
-#if EMULATE_X87
-        sign = x87f_load_f32(-1.0f);
-#else
-        sign = -1.0L;
-#endif
-        PS_ExpectTokenType(script, PC_TOKEN_TYPE_NUMBER, PC_TOKEN_SUBTYPE_NONE,
-                     &token);
-    } else if (token.type != PC_TOKEN_TYPE_NUMBER) {
-        ScriptError(script, "expected float value, found %s\n",
-                     token.string);
-    }
-
-#if EMULATE_X87
-    /* fld TBYTE(token) * sign(±1.0), returned narrowed to the long double ABI
-     * (double off x87). No in-tree callers; kept faithful for completeness. */
-    x87f value = coduo_pc_load_token_float80(token.floatValue);
-    return (long double)x87f_store_f64(x87f_mul(sign, value));
-#else
-    long double value = 0.0L;
-    size_t valueSize = sizeof(value);
-    if (PC_TOKEN_FLOAT_VALUE_SIZE < valueSize) {
-        valueSize = PC_TOKEN_FLOAT_VALUE_SIZE;
-    }
-    memcpy(&value, token.floatValue, valueSize);
-    return sign * value;
-#endif
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00448780..0x00448847.
  * Evidence: repaired executable-gap record

@@ -1,15 +1,9 @@
 #include "q_math.h"
 
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 
 #include <math.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /*
  * Complete direction-to-angle conversion bank.  Each Windows instruction
@@ -36,49 +30,17 @@
  * binary64 argument to sqrt.  Those narrow differences are retained below.
  */
 
-#if defined(WINDOWS_BEHAVIOR)
 #define Q_DIRECTION_PI 3.1415927410125732
-#else
-#define Q_DIRECTION_PI 3.141592653589793
-#endif
 
-#if EMULATE_X87
-#define Q_DIRECTION_DEGREES(y, x, scale)                                    \
-    x87f_store_f32(x87f_div(                                                \
-        x87f_mul(x87f_load_f64(atan2((double)(y), (double)(x))),           \
-                 x87f_load_f64((double)(scale))),                           \
-        x87f_load_f64(Q_DIRECTION_PI)))
-#if defined(WINDOWS_BEHAVIOR)
-#define Q_DIRECTION_HORIZONTAL(x, y)                                        \
-    x87f_store_f32(x87f_sqrt(                                               \
-        x87f_add(x87f_mul(x87f_load_f32(x), x87f_load_f32(x)),             \
-                 x87f_mul(x87f_load_f32(y), x87f_load_f32(y)))))
-#else
-#define Q_DIRECTION_HORIZONTAL(x, y)                                        \
-    ((float)sqrt(x87f_store_f64(                                            \
-        x87f_add(x87f_mul(x87f_load_f32(x), x87f_load_f32(x)),             \
-                 x87f_mul(x87f_load_f32(y), x87f_load_f32(y))))))
-#endif
-#define Q_DIRECTION_WRAP(value)                                             \
-    x87f_store_f32(                                                         \
-        x87f_add(x87f_load_f32(value), x87f_load_f32(360.0f)))
-#else
 #define Q_DIRECTION_DEGREES(y, x, scale)                                    \
     ((float)(((long double)atan2((double)(y), (double)(x)) *               \
               (long double)(scale)) /                                       \
              (long double)Q_DIRECTION_PI))
-#if defined(WINDOWS_BEHAVIOR)
 #define Q_DIRECTION_HORIZONTAL(x, y)                                        \
     ((float)coduo_x87_sqrtl((long double)(x) * (long double)(x) +          \
                             (long double)(y) * (long double)(y)))
-#else
-#define Q_DIRECTION_HORIZONTAL(x, y)                                        \
-    ((float)sqrt((double)((long double)(x) * (long double)(x) +            \
-                          (long double)(y) * (long double)(y))))
-#endif
 #define Q_DIRECTION_WRAP(value)                                             \
     ((float)((long double)(value) + 360.0L))
-#endif
 
 float vectoyaw(const vec3_t direction)
 {

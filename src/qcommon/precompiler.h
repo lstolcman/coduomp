@@ -133,16 +133,8 @@ qboolean PS_ReadEscapeCharacter(script_t *script, char *out);
 qboolean PS_ReadString(script_t *script, token_t *token,
                        int32_t quote);
 qboolean PS_ReadName(script_t *script, token_t *token);
-#if defined(WINDOWS_BEHAVIOR)
 void NumberValue(const char *string, int32_t subtype,
                  int32_t *intValue, double *floatValue);
-#elif defined(LINUX_BEHAVIOR)
-void NumberValue(const char *string, int32_t subtype,
-                 int32_t *intValue,
-                 uint8_t floatValue[PC_TOKEN_FLOAT_VALUE_SIZE]);
-#else
-#error "precompiler.h requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 qboolean PS_ReadNumber(script_t *script, token_t *token);
 qboolean PS_ReadLiteral(script_t *script, token_t *token);
 qboolean PS_ReadPunctuation(script_t *script,
@@ -163,18 +155,10 @@ qboolean PS_SkipUntilString(script_t *script, const char *string);
 void PS_UnreadLastToken(script_t *script);
 void PS_UnreadToken(script_t *script,
                     const token_t *token);
-#if defined(WINDOWS_BEHAVIOR)
 char PS_ReadWhitespaceChar(script_t *script);
-#else
-int32_t PS_ReadWhitespaceChar(script_t *script);
-#endif
 void StripDoubleQuotes(char *string);
 void StripSingleQuotes(char *string);
-#if defined(WINDOWS_BEHAVIOR)
 double PS_ReadFloat(script_t *script);
-#else
-long double PS_ReadFloat(script_t *script);
-#endif
 int32_t PS_ReadInteger(script_t *script);
 void SetScriptFlags(script_t *script, int32_t flags);
 int32_t GetScriptFlags(const script_t *script);

@@ -135,23 +135,14 @@ static inline void bg_compat_animation_set_rate(XAnimTree *tree,
 static inline void bg_compat_update_anim_slot_range_error(
     int32_t entryCount, uint32_t animIndex)
 {
-#if defined(WINDOWS_BEHAVIOR)
     G_Error("\x15Player animation index out of range (%i): %i", entryCount,
             animIndex);
-#else
-    Com_Error(ERR_DROP, "\x15Player animation index out of range (%i): %i",
-              entryCount, animIndex);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: retain the platform-specific death-loop error. */
 static inline void bg_compat_death_animation_loop_error(const char *name)
 {
-#if defined(WINDOWS_BEHAVIOR)
     G_Error("death animation '%s' is looping", name);
-#else
-    Com_Error(ERR_DROP, "death animation '%s' is looping", name);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: normalize the module-specific animation-script
@@ -220,25 +211,15 @@ static inline qboolean bg_compat_xanim_is_looped(uint16_t animTree,
 static inline void bg_compat_anim_index_error(uint32_t animIndex,
                                               int32_t entryCount)
 {
-#if defined(WINDOWS_BEHAVIOR)
     G_Error("\x15Player animation index %i out of 0 to %i range", animIndex,
             entryCount);
-#else
-    Com_Error(ERR_DROP, "\x15Player animation index %i out of 0 to %i range",
-              animIndex, entryCount);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: retain the module-specific original error edge.
  * Windows uses G_Error; Linux uses Com_Error(ERR_DROP, ...). */
 static inline void bg_compat_get_animation_index_error(void)
 {
-#if defined(WINDOWS_BEHAVIOR)
     G_Error("\x15" "BG_GetAnimationForIndex: index out of bounds");
-#else
-    Com_Error(ERR_DROP,
-              "\x15" "BG_GetAnimationForIndex: index out of bounds");
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: retain the module-specific fatal edge used by
@@ -246,16 +227,9 @@ static inline void bg_compat_get_animation_index_error(void)
 static inline void bg_compat_player_state_vehicle_type_error(
     int32_t vehicleType)
 {
-#if defined(WINDOWS_BEHAVIOR)
     G_Error(
         "\x15" "BG_AnimUpdatePlayerStateConditions: Vehicle type unknown: %i",
         vehicleType);
-#else
-    Com_Error(
-        ERR_DROP,
-        "\x15" "BG_AnimUpdatePlayerStateConditions: Vehicle type unknown: %i",
-        vehicleType);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: retain the same platform split for the entity
@@ -263,14 +237,8 @@ static inline void bg_compat_player_state_vehicle_type_error(
 static inline void bg_compat_player_entity_vehicle_type_error(
     int32_t vehicleType)
 {
-#if defined(WINDOWS_BEHAVIOR)
     G_Error("\x15" "BG_AnimPlayerConditions: Vehicle type unknown: %i",
             vehicleType);
-#else
-    Com_Error(ERR_DROP,
-              "\x15" "BG_AnimPlayerConditions: Vehicle type unknown: %i",
-              vehicleType);
-#endif
 }
 
 #endif

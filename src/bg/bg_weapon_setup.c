@@ -2,7 +2,6 @@
 
 #include "bg_weapon_binding.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "qcommon/q_string.h"
 
 #include <stddef.h>
@@ -56,27 +55,15 @@ void BG_SetupWeaponADSRates(void)
         weaponInfo_t *weaponInfo = bg_weaponInfos[weapon];
 
         if (weaponInfo->adsInTime > 0) {
-#if EMULATE_X87
-            weaponInfo->adsFireDelayRate = x87f_store_f32(x87f_div(
-                x87f_load_f32(1.0f),
-                x87f_load_i32(weaponInfo->adsInTime)));
-#else
             weaponInfo->adsFireDelayRate = (float)(
                 1.0L / (long double)weaponInfo->adsInTime);
-#endif
         } else {
             weaponInfo->adsFireDelayRate = BG_DEFAULT_ADS_IN_RATE;
         }
 
         if (weaponInfo->adsOutTime > 0) {
-#if EMULATE_X87
-            weaponInfo->adsFireDelayOutRate = x87f_store_f32(x87f_div(
-                x87f_load_f32(1.0f),
-                x87f_load_i32(weaponInfo->adsOutTime)));
-#else
             weaponInfo->adsFireDelayOutRate = (float)(
                 1.0L / (long double)weaponInfo->adsOutTime);
-#endif
         } else {
             weaponInfo->adsFireDelayOutRate = BG_DEFAULT_ADS_OUT_RATE;
         }

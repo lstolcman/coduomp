@@ -21,7 +21,6 @@
 #include "compat/crt/atof_compat.h"
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_x87_eval.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
 #include "compat/libm/coduo_libm.h"
 #include "math/q_math.h"
@@ -509,18 +508,8 @@ static int game_compat_g_mover_angle_to_short(float angle)
 {
     /* Linux truncates the live product to a signed dword; Windows takes the
      * low word of the CRT's signed-qword conversion for both push and rollback. */
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-    int32_t packed = (int32_t)(uint32_t)x87f_store_i64_trunc(x87f_mul(
-        x87f_load_f32(angle), x87f_load_f32(MOVER_ANGLE_SHORT_SCALE)));
-#else
-    int32_t packed = x87f_store_i32_trunc(x87f_mul(
-        x87f_load_f32(angle), x87f_load_f32(MOVER_ANGLE_SHORT_SCALE)));
-#endif
-#else
     int32_t packed = coduo_fp_to_i32_extended(
         (long double)angle * MOVER_ANGLE_SHORT_SCALE);
-#endif
     return packed & 0xffff;
 }
 
@@ -684,25 +673,11 @@ void multi_trigger(gentity_t *ent, gentity_t *activator)
          * Linux truncates positive milliseconds to a signed dword. Negating
          * before truncation and subtracting its low word is equivalent to
          * adding the positive conversion modulo 2^32. */
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-        {
-            x87f randSigned =
-                x87f_load_f64(coduo_server_rand_signed_unit());
-            ent->nextthink =
-                coduo_int32_from_bits((uint32_t)level.time +
-                (uint32_t)x87f_store_i32_trunc(x87f_mul(
-                    x87f_add(x87f_load_f32(ent->itemWait),
-                             x87f_mul(randSigned,
-                                      x87f_load_f32(ent->itemRandom))),
-                    x87f_load_f32(TRIGGER_DURATION_SCALE))));
-        }
-#else
         volatile WIDE_FLOAT randomOffset =
             (WIDE_FLOAT)coduo_server_rand_signed_unit() * ent->itemRandom;
         WIDE_FLOAT waitSeconds = randomOffset + (WIDE_FLOAT)ent->itemWait;
         ent->nextthink = coduo_int32_from_bits((uint32_t)level.time +
             coduo_fp_to_u32_extended(waitSeconds * TRIGGER_DURATION_SCALE));
-#endif
     } else {
         ent->touch = NULL;
         ent->nextthink = coduo_int32_from_bits((uint32_t)level.time + TRIGGER_FREE_DELAY_MS);
@@ -745,17 +720,12 @@ void SP_trigger_multiple(gentity_t *ent)
     double random;
 
     G_SpawnFloat("wait", TRIGGER_DEFAULT_WAIT, &ent->itemWait);
-#if defined(WINDOWS_BEHAVIOR)
     const char *randomText;
 
     G_SpawnString("random", TRIGGER_DEFAULT_RANDOM, &randomText);
     random = coduo_compat_atof(randomText);
     ent->itemRandom = (float)random;
     /* The Windows clamp compares the parsed value before float rounding. */
-#else
-    G_SpawnFloat("random", TRIGGER_DEFAULT_RANDOM, &ent->itemRandom);
-    random = ent->itemRandom;
-#endif
 
     if (ent->itemWait >= 0.0f && ent->itemWait <= random) {
         /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
@@ -927,11 +897,7 @@ void G_RotatePoint(float *point, float matrix[3][3])
 
     /* Keep each dot product wide until its float store. The standalone
      * Windows body adds Z/Y before X; Linux adds X/Y before Z. */
-#if defined(WINDOWS_BEHAVIOR)
     const int first = 2, last = 0;
-#else
-    const int first = 0, last = 2;
-#endif
     for (int i = 0; i < 3; i++) {
         point[i] = ((WIDE_FLOAT)matrix[i][first] * original[first] + (WIDE_FLOAT)matrix[i][1] * original[1])
                    + (WIDE_FLOAT)matrix[i][last] * original[last];
@@ -977,13 +943,9 @@ int G_TryPushingEntity(gentity_t *ent, gentity_t *mover,
      * but X/Z before Y in the third. Linux adds X/Y before Z. Cancellation
      * can expose the association difference; each row rounds once to float. */
     for (int row = 0; row < 3; row++) {
-#if defined(WINDOWS_BEHAVIOR)
         const int first = row == 2 ? 0 : 2;
         const int second = row == 2 ? 2 : 1;
         const int last = row == 2 ? 1 : 0;
-#else
-        const int first = 0, second = 1, last = 2;
-#endif
         relativeOrigin[row] = ((WIDE_FLOAT)transposeMatrix[row][first] * originalRelativeOrigin[first]
                              + (WIDE_FLOAT)transposeMatrix[row][second] * originalRelativeOrigin[second])
                              + (WIDE_FLOAT)transposeMatrix[row][last] * originalRelativeOrigin[last];
@@ -1156,15 +1118,11 @@ int G_MoverPush(gentity_t *mover, float *posDelta, float *angDelta,
              * Windows adds the translation before the other positive term;
              * Linux adds the radius to the origin first. */
             finalMins[axis] = (float)(((WIDE_FLOAT)mover->currentOrigin[axis] - radius) + posDelta[axis]);
-#if defined(WINDOWS_BEHAVIOR)
             if (axis == 1) {
                 finalMaxs[axis] = (float)(((WIDE_FLOAT)radius + posDelta[axis]) + mover->currentOrigin[axis]);
             } else {
                 finalMaxs[axis] = (float)(((WIDE_FLOAT)mover->currentOrigin[axis] + posDelta[axis]) + radius);
             }
-#else
-            finalMaxs[axis] = (float)(((WIDE_FLOAT)mover->currentOrigin[axis] + radius) + posDelta[axis]);
-#endif
             queryMins[axis] = mover->currentOrigin[axis] - radius;
             queryMaxs[axis] = mover->currentOrigin[axis] + radius;
         }
@@ -1391,12 +1349,7 @@ static void game_compat_g_binary_mover_set_pos_move(gentity_t *ent, const float 
     /* Stock 0x61923: 1000.0f / duration, duration via fild (int->80, exact, no
      * (float)duration round) -> single divide, shim. delta subs and the
      * delta*scale trDelta muls are single ops stored to floats (native). */
-#if EMULATE_X87
-    scale = x87f_store_f32(x87f_div(x87f_load_f32(1000.0f),
-                                    x87f_load_i32(duration)));
-#else
     scale = (float)((long double)1000.0f / (long double)duration);
-#endif
     ent->s.pos.trDelta[0] = delta[0] * scale;
     ent->s.pos.trDelta[1] = delta[1] * scale;
     ent->s.pos.trDelta[2] = delta[2] * scale;
@@ -1428,22 +1381,12 @@ static void game_compat_g_binary_mover_set_rotate_move_to_pos2(gentity_t *ent, i
     /* Stock 0x61c6c/0x61c93: const / moverDuration, moverDuration via fild
      * (int->80, exact) -> single divide, shim. */
     if (slow == 0) {
-#if EMULATE_X87
-        scale = x87f_store_f32(x87f_div(x87f_load_f32(1000.0f),
-                                        x87f_load_i32(ent->moverDuration)));
-#else
         scale = (float)((long double)1000.0f /
                         (long double)ent->moverDuration);
-#endif
         ent->s.apos.trDuration = ent->moverDuration;
     } else {
-#if EMULATE_X87
-        scale = x87f_store_f32(x87f_div(x87f_load_f32(500.0f),
-                                        x87f_load_i32(ent->moverDuration)));
-#else
         scale = (float)((long double)500.0f /
                         (long double)ent->moverDuration);
-#endif
         ent->s.apos.trDuration = coduo_int32_from_bits(
             (uint32_t)ent->moverDuration * UINT32_C(2));
     }
@@ -1451,17 +1394,9 @@ static void game_compat_g_binary_mover_set_rotate_move_to_pos2(gentity_t *ent, i
     /* 0x61cbc..0x61d07: stock multiplies scale*doorYawOffset first, then by
      * damageDir -- keep that 80-bit grouping (fmul is not associative) -> shim
      * each (scale*doorYawOffset)*damageDir[i] 2-mul cascade. */
-#if EMULATE_X87
-    for (int i = 0; i < 3; i++) {
-        ent->s.apos.trDelta[i] = x87f_store_f32(x87f_mul(
-            x87f_mul(x87f_load_f32(scale), x87f_load_f32(ent->doorYawOffset)),
-            x87f_load_f32(ent->damageDir[i])));
-    }
-#else
     ent->s.apos.trDelta[0] = scale * ent->doorYawOffset * ent->damageDir[0];
     ent->s.apos.trDelta[1] = scale * ent->doorYawOffset * ent->damageDir[1];
     ent->s.apos.trDelta[2] = scale * ent->doorYawOffset * ent->damageDir[2];
-#endif
     ent->s.apos.trType = TR_LINEAR_STOP;
 }
 
@@ -1474,13 +1409,8 @@ static void game_compat_g_binary_mover_set_rotate_move_to_pos1(gentity_t *ent, i
      * exact) -> single divide, shim. trBase = damageDir*doorYawOffset,
      * scale*=0.5 (exact) and trDelta = -trBase*scale (negate + single mul) all
      * native. */
-#if EMULATE_X87
-    float scale = x87f_store_f32(x87f_div(x87f_load_f32(1000.0f),
-                                          x87f_load_i32(ent->moverDuration)));
-#else
     float scale = (float)((long double)1000.0f /
                           (long double)ent->moverDuration);
-#endif
 
     ent->s.apos.trBase[0] = ent->damageDir[0] * ent->doorYawOffset;
     ent->s.apos.trBase[1] = ent->damageDir[1] * ent->doorYawOffset;
@@ -1780,16 +1710,9 @@ static int IsBinaryMoverBlocked(gentity_t *ent, gentity_t *other,
      * stored float) -> shim the dot, native compare. center = absMin+absMax
      * (single add stored) then *0.5 (exact power-of-two scale) stay native. */
     {
-#if EMULATE_X87
-        float dot = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(toActivator[0]), x87f_load_f32(forward[0])),
-                     x87f_mul(x87f_load_f32(toActivator[1]), x87f_load_f32(forward[1]))),
-            x87f_mul(x87f_load_f32(toActivator[2]), x87f_load_f32(forward[2]))));
-#else
         float dot = toActivator[0] * forward[0] +
                     toActivator[1] * forward[1] +
                     toActivator[2] * forward[2];
-#endif
 
         return dot >= 0.0f;
     }
@@ -1994,16 +1917,9 @@ void InitMover(gentity_t *ent)
     /* Stock 0x630bd..0x630d6: the delta.delta dot is computed in 80 bits
      * (fmul;faddp chain, no per-term double rounding) and stored to a QWORD once
      * for sqrt -> shim (store_f64), then (float)sqrt. */
-#if EMULATE_X87
-    distance = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(delta[0]), x87f_load_f32(delta[0])),
-                 x87f_mul(x87f_load_f32(delta[1]), x87f_load_f32(delta[1]))),
-        x87f_mul(x87f_load_f32(delta[2]), x87f_load_f32(delta[2])))));
-#else
     distance = (float)CoduoLibm_Sqrt((double)delta[0] * (double)delta[0] +
                            (double)delta[1] * (double)delta[1] +
                            (double)delta[2] * (double)delta[2]);
-#endif
 
     if ((*game_compat_g_binary_mover_speed(ent)) == 0.0f) {
         (*game_compat_g_binary_mover_speed(ent)) =
@@ -2014,15 +1930,9 @@ void InitMover(gentity_t *ent)
      * DIRECTLY on the quotient (no float spill) -> truncate the 80-bit quotient.
      * The #else forces the 80-bit product/quotient with a long double multiply
      * (1000 exact) so the reference build also fistp's directly. */
-#if EMULATE_X87
-    duration = x87f_store_i32_trunc(x87f_div(
-        x87f_mul(x87f_load_f32(distance), x87f_load_f32(1000.0f)),
-        x87f_load_f32(*game_compat_g_binary_mover_speed(ent))));
-#else
     duration = game_compat_int32_from_long_double_trunc(
         (long double)distance * 1000.0f /
         (*game_compat_g_binary_mover_speed(ent)));
-#endif
     if (duration < 1) {
         duration = 1;
     }
@@ -2034,14 +1944,8 @@ void InitMover(gentity_t *ent)
     if (game_compat_g_binary_mover_has_alt_speed(ent) != 0) {
         /* Same as the primary duration: distance*1000 / doorAltSpeed kept 80-bit,
          * fistp directly on the quotient. */
-#if EMULATE_X87
-        duration = x87f_store_i32_trunc(x87f_div(
-            x87f_mul(x87f_load_f32(distance), x87f_load_f32(1000.0f)),
-            x87f_load_f32(ent->doorAltSpeed)));
-#else
         duration = game_compat_int32_from_long_double_trunc(
             (long double)distance * 1000.0f / ent->doorAltSpeed);
-#endif
         if (duration < 1) {
             duration = 1;
         }
@@ -2521,34 +2425,14 @@ void SP_func_door(gentity_t *ent)
     /* Stock 0x640e9..0x64102: fabsf(moverDir[i]) and size[i] are pre-stored to
      * floats (native), then the dot minus lip is kept 80-bit until the store ->
      * shim ((m0+m1)+m2) - lip. */
-#if EMULATE_X87
-    moveDistance = x87f_store_f32(x87f_sub(
-        x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(fabsf(ent->moverDir[0])),
-                              x87f_load_f32(size[0])),
-                     x87f_mul(x87f_load_f32(fabsf(ent->moverDir[1])),
-                              x87f_load_f32(size[1]))),
-            x87f_mul(x87f_load_f32(fabsf(ent->moverDir[2])),
-                     x87f_load_f32(size[2]))),
-        x87f_load_f32(lip)));
-#else
     moveDistance =
         fabsf(ent->moverDir[0]) * size[0] +
         fabsf(ent->moverDir[1]) * size[1] +
         fabsf(ent->moverDir[2]) * size[2] -
         lip;
-#endif
 
     /* pos2[i] = pos1[i] + moverDir[i]*moveDistance: mul then add, 80-bit, one
      * store per component -> shim. */
-#if EMULATE_X87
-    for (int i = 0; i < 3; i++) {
-        pos2[i] = x87f_store_f32(x87f_add(
-            x87f_load_f32(pos1[i]),
-            x87f_mul(x87f_load_f32(ent->moverDir[i]),
-                     x87f_load_f32(moveDistance))));
-    }
-#else
     pos2[0] = pos1[0] +
               ent->moverDir[0] *
                   moveDistance;
@@ -2558,7 +2442,6 @@ void SP_func_door(gentity_t *ent)
     pos2[2] = pos1[2] +
               ent->moverDir[2] *
                   moveDistance;
-#endif
     game_compat_door_copy_vector_to_ent(ent->moverPos2, pos2);
 
     if ((ent->spawnflags & DOOR_SPAWNFLAG_START_OPEN) != 0) {
@@ -2648,18 +2531,9 @@ void Static_Pain(gentity_t *ent, gentity_t *attacker, int damage,
      * -fexcess-precision=fast (fild direct, no round) and would deviate. */
     {
         const float levelTimeFloat = (float)level.time;
-#if EMULATE_X87
-        if (x87f_lt(
-                x87f_add(x87f_add(x87f_load_f32(nextPainTime),
-                                  x87f_load_i32(coduo_server_randrange(
-                                      0, STATIC_PAIN_RANDOM_MS))),
-                         x87f_load_f32(STATIC_PAIN_BASE_DELAY_MS)),
-                x87f_load_f32(levelTimeFloat))) {
-#else
         if (nextPainTime + coduo_server_randrange(0, STATIC_PAIN_RANDOM_MS) +
                 STATIC_PAIN_BASE_DELAY_MS <
             levelTimeFloat) {
-#endif
         ent->itemWait = (float)level.time;
 
         if ((ent->spawnflags & STATIC_PAIN_DAMAGE_POINT_FLAG) != 0) {
@@ -2824,19 +2698,12 @@ void SP_func_bobbing(gentity_t *ent)
      * trDuration(fild)*phase (80-bit) each feed fistp DIRECTLY (no float spill)
      * -> truncate the 80-bit product; the #else long double casts force the
      * 80-bit product so the ref build fistp's directly too. */
-#if EMULATE_X87
-    ent->s.pos.trDuration = x87f_store_i32_trunc(x87f_mul(
-        x87f_load_f32(*game_compat_g_binary_mover_speed(ent)), x87f_load_f32(1000.0f)));
-    ent->s.pos.trTime = x87f_store_i32_trunc(x87f_mul(
-        x87f_load_i32(ent->s.pos.trDuration), x87f_load_f32(phase)));
-#else
     ent->s.pos.trDuration =
         game_compat_int32_from_long_double_trunc(
             (long double)(*game_compat_g_binary_mover_speed(ent)) *
             (long double)1000.0f);
     ent->s.pos.trTime = game_compat_int32_from_long_double_trunc(
         (long double)ent->s.pos.trDuration * (long double)phase);
-#endif
     ent->s.pos.trType = TR_SINE;
 
     if ((ent->spawnflags & FUNC_BOBBING_SPAWNFLAG_X_AXIS) != 0) {
@@ -2878,18 +2745,7 @@ void SP_func_pendulum(gentity_t *ent)
      * a QWORD for CoduoLibm_Sqrt (0x64aa5) -> gravityFrequency float; frequency =
      * gravityFrequency(float) * FREQ_SCALE(QWORD double) kept 80-bit -> float;
      * duration = 1000.0/frequency, fistp DIRECTLY on the 80-bit quotient. */
-#if EMULATE_X87
-    gravityFrequency = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_div(
-        x87f_load_f32(g_gravity.value),
-        x87f_mul(x87f_load_f32(length),
-                 x87f_load_f32(FUNC_PENDULUM_GRAVITY_SCALE)))));
-    frequency = x87f_store_f32(x87f_mul(
-        x87f_load_f32(gravityFrequency),
-        x87f_load_f64(FUNC_PENDULUM_FREQ_SCALE)));
-    duration = x87f_store_i32_trunc(x87f_div(x87f_load_f32(1000.0f),
-                                             x87f_load_f32(frequency)));
-    (void)gravityRatio;
-#elif defined(__i386__) || defined(__x86_64__)
+#if   defined(__i386__) || defined(__x86_64__)
     gravityRatio =
         (long double)g_gravity.value /
         ((long double)length * (long double)FUNC_PENDULUM_GRAVITY_SCALE);
@@ -2921,14 +2777,7 @@ void SP_func_pendulum(gentity_t *ent)
 
     /* 0x64b65..0x64b7a: duration enters through bare fild and the product
      * feeds truncating fistp directly. */
-#if EMULATE_X87
-    ent->s.apos.trDuration =
-        x87f_store_i32_trunc(x87f_div(x87f_load_f32(1000.0f),
-                                      x87f_load_f32(frequency)));
-    ent->s.apos.trTime = x87f_store_i32_trunc(
-        x87f_mul(x87f_load_i32(ent->s.apos.trDuration),
-                 x87f_load_f32(phase)));
-#elif defined(__i386__) || defined(__x86_64__)
+#if   defined(__i386__) || defined(__x86_64__)
     {
         static const float numerator = 1000.0f;
         coduo_x87_truncation_control_t durationControl;
@@ -3011,19 +2860,9 @@ void SP_func_door_rotating(gentity_t *ent)
     /* 0x64d6e..0x64daa: stock rounds the 80-bit sum to DOUBLE at the
      * CoduoLibm_Sqrt() call boundary, then the result to float -- sqrtf() would
      * round the argument to float instead. */
-#if EMULATE_X87
-    axisLength = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(ent->damageDir[0]),
-                          x87f_load_f32(ent->damageDir[0])),
-                 x87f_mul(x87f_load_f32(ent->damageDir[1]),
-                          x87f_load_f32(ent->damageDir[1]))),
-        x87f_mul(x87f_load_f32(ent->damageDir[2]),
-                 x87f_load_f32(ent->damageDir[2])))));
-#else
     axisLength = (float)CoduoLibm_Sqrt((double)ent->damageDir[0] * (double)ent->damageDir[0] +
                              (double)ent->damageDir[1] * (double)ent->damageDir[1] +
                              (double)ent->damageDir[2] * (double)ent->damageDir[2]);
-#endif
     if (axisLength > 1.0f) {
         G_Error(FUNC_DOOR_ROTATING_AXIS_ERROR);
         ent->damageDir[0] = 0.0f;

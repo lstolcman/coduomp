@@ -2,7 +2,6 @@
 
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 
 /*
  * Complete pmove foliage-sound subsystem.  The Windows cgame/game bodies are
@@ -47,26 +46,6 @@ void PM_FoliageSounds(void)
         return;
     }
 
-#if defined(WINDOWS_BEHAVIOR)
-#if EMULATE_X87
-    {
-        x87f fraction = x87f_div(
-            x87f_sub(x87f_load_f32(speed),
-                     x87f_load_i32(bg_foliagesnd_minspeed.integer)),
-            x87f_load_i32(speedRange));
-        x87f intervalValue;
-
-        if (x87f_lt_signaling(x87f_load_f32(PM_FOLIAGE_FRACTION_MAX),
-                              fraction)) {
-            fraction = x87f_load_f32(PM_FOLIAGE_FRACTION_MAX);
-        }
-        intervalValue = x87f_add(
-            x87f_mul(x87f_load_i32(intervalRange), fraction),
-            x87f_load_i32(slowInterval));
-        interval = coduo_int32_from_bits(
-            (uint32_t)x87f_store_i64_trunc(intervalValue));
-    }
-#else
     {
         long double fraction =
             ((long double)speed -
@@ -80,38 +59,6 @@ void PM_FoliageSounds(void)
             (long double)intervalRange * fraction +
             (long double)slowInterval);
     }
-#endif
-#else
-    {
-        float fraction;
-
-#if EMULATE_X87
-        fraction = x87f_store_f32(x87f_div(
-            x87f_sub(x87f_load_f32(speed),
-                     x87f_load_i32(bg_foliagesnd_minspeed.integer)),
-            x87f_load_i32(speedRange)));
-#else
-        fraction = (float)(
-            ((long double)speed -
-             (long double)bg_foliagesnd_minspeed.integer) /
-            (long double)speedRange);
-#endif
-        if (fraction > PM_FOLIAGE_FRACTION_MAX) {
-            fraction = PM_FOLIAGE_FRACTION_MAX;
-        }
-
-#if EMULATE_X87
-        interval = x87f_store_i32_trunc(x87f_add(
-            x87f_mul(x87f_load_i32(intervalRange),
-                     x87f_load_f32(fraction)),
-            x87f_load_i32(slowInterval)));
-#else
-        interval = coduo_fp_to_i32_extended(
-            (long double)intervalRange * (long double)fraction +
-            (long double)slowInterval);
-#endif
-    }
-#endif
 
     if (coduo_int32_from_bits((uint32_t)pm->ps->foliageSoundTime +
                               (uint32_t)interval) >=

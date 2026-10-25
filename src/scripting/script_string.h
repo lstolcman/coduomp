@@ -24,24 +24,13 @@ uint16_t SL_FindString(const char *text);
 uint16_t SL_FindLowercaseString(const char *text);
 uint16_t SL_GetStringOfLen(const char *text, uint8_t user,
                            size_t size, int32_t type);
-#if defined(WINDOWS_BEHAVIOR)
 uint16_t SL_GetString_(const char *text, int32_t user, int32_t type);
 uint16_t SL_GetString(const char *text, int32_t user);
-#else
-uint16_t SL_GetString_(const char *text, uint8_t user, int32_t type);
-uint16_t SL_GetString(const char *text, uint8_t user);
-#endif
 uint16_t SL_GetLowercaseStringOfLen(const char *text, uint8_t user,
                                     size_t size, int32_t type);
-#if defined(WINDOWS_BEHAVIOR)
 uint16_t SL_GetLowercaseString_(const char *text, int32_t user,
                                int32_t type);
 uint16_t SL_GetLowercaseString(const char *text, int32_t user);
-#else
-uint16_t SL_GetLowercaseString_(const char *text, uint8_t user,
-                               int32_t type);
-uint16_t SL_GetLowercaseString(const char *text, uint8_t user);
-#endif
 void SL_Init(void);
 void SL_AddRefToString(uint16_t string);
 void SL_TransferRefToString(uint16_t string, uint8_t user);

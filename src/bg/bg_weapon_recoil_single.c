@@ -50,7 +50,6 @@
 #include "bg_vehicle.h"
 #include "bg_weapon.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 #include <math.h>
 
@@ -62,7 +61,6 @@ qboolean BG_CalculateWeaponPosition_GunRecoil_SingleAngle(float *pValue /*EDX*/,
                              float dampCoef,    /* [esp+0x1c] */
                              float dampAccel)   /* [esp+0x20] */
 {
-#if defined(WINDOWS_BEHAVIOR)
     /* [esp+0x4] scratch: the float-rounded integrated value, reused by the
      * lower-bound compare at 0x3001567e. The upper-bound compare at 0x30015650
      * instead consumes the still-live x87 value before that value is popped. */
@@ -149,93 +147,4 @@ qboolean BG_CalculateWeaponPosition_GunRecoil_SingleAngle(float *pValue /*EDX*/,
     }
     /* 0x30015757 in-range path discards -velLimit (FSTP ST0). */
     return qfalse;                           /* MOV EAX,ESI (0) */
-#else
-    if (fabsf(*pValue) < 0.25f && fabsf(*pRate) < 1.0f) {
-        *pValue = 0.0f;
-        *pRate = 0.0f;
-        return qtrue;
-    }
-
-#if EMULATE_X87
-    *pValue = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(*pRate), x87f_load_f32(dt)),
-        x87f_load_f32(*pValue)));
-#else
-    *pValue += *pRate * dt;
-#endif
-    if (*pValue > posLimit) {
-        *pValue = posLimit;
-        if (*pRate > 0.0f) {
-            *pRate = 0.0f;
-        }
-    } else if (*pValue < -posLimit) {
-        *pValue = -posLimit;
-        if (*pRate < 0.0f) {
-            *pRate = 0.0f;
-        }
-    }
-
-    if (*pValue > 0.0f) {
-#if EMULATE_X87
-        *pRate = x87f_store_f32(x87f_sub(
-            x87f_load_f32(*pRate),
-            x87f_mul(x87f_load_f32(springAccel),
-                     x87f_load_f32(dt))));
-#else
-        *pRate -= springAccel * dt;
-#endif
-    } else if (*pValue < 0.0f) {
-#if EMULATE_X87
-        *pRate = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_load_f32(springAccel),
-                     x87f_load_f32(dt)),
-            x87f_load_f32(*pRate)));
-#else
-        *pRate += springAccel * dt;
-#endif
-    }
-
-#if EMULATE_X87
-    *pRate = x87f_store_f32(x87f_sub(
-        x87f_load_f32(*pRate),
-        x87f_mul(
-            x87f_mul(x87f_load_f32(*pRate),
-                     x87f_load_f32(dampCoef)),
-            x87f_load_f32(dt))));
-#else
-    *pRate -= *pRate * dampCoef * dt;
-#endif
-    if (*pRate > 0.0f) {
-#if EMULATE_X87
-        *pRate = x87f_store_f32(x87f_sub(
-            x87f_load_f32(*pRate),
-            x87f_mul(x87f_load_f32(dampAccel),
-                     x87f_load_f32(dt))));
-#else
-        *pRate -= dampAccel * dt;
-#endif
-        if (*pRate < 0.0f) {
-            *pRate = 0.0f;
-        }
-    } else {
-#if EMULATE_X87
-        *pRate = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_load_f32(dampAccel),
-                     x87f_load_f32(dt)),
-            x87f_load_f32(*pRate)));
-#else
-        *pRate += dampAccel * dt;
-#endif
-        if (*pRate > 0.0f) {
-            *pRate = 0.0f;
-        }
-    }
-
-    if (*pRate > velLimit) {
-        *pRate = velLimit;
-    } else if (*pRate < -velLimit) {
-        *pRate = -velLimit;
-    }
-    return qfalse;
-#endif
 }

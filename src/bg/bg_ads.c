@@ -2,7 +2,6 @@
 
 #include "bg_weapon.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "qcommon/entity_event_types.h"
 #include "math/q_math.h"
 
@@ -27,8 +26,8 @@ enum {
  * The Linux game bodies at RVAs 0x00032c0b, 0x0003346f, and 0x0003349e
  * preserve the same decisions and stored binary32 results.  Its unoptimized
  * bodies expose calls which MSVC inlined, but do not establish a different
- * source contract.  EMULATE_X87 is therefore an execution-mode choice, not a
- * Windows/Linux behavior split.
+ * source contract. The maintained body follows the Windows operation graph
+ * with native arithmetic on every host.
  */
 
 void PM_UpdateAimDownSightFlag(void)
@@ -90,18 +89,9 @@ void PM_UpdateAimDownSightFlag(void)
         int32_t contents;
 
         AngleVectors(yawAngles, forward, NULL, NULL);
-#if EMULATE_X87
-        for (int32_t lane = 0; lane < 3; ++lane) {
-            probe[lane] = x87f_store_f32(x87f_add(
-                x87f_mul(x87f_load_f32(forward[lane]),
-                         x87f_load_f32(15.0f)),
-                x87f_load_f32(ps->psOrigin[lane])));
-        }
-#else
         probe[0] = forward[0] * 15.0f + ps->psOrigin[0];
         probe[1] = forward[1] * 15.0f + ps->psOrigin[1];
         probe[2] = forward[2] * 15.0f + ps->psOrigin[2];
-#endif
         /* The original stores the Z sum before performing this addition. */
         probe[2] += 1.0f;
 
@@ -231,29 +221,15 @@ void PM_UpdateAimDownSightLerp(void)
         ps->vehiclePosition == VEHICLE_POSITION_ADS_SNAP) {
         ps->adsFraction = wantAds != qfalse ? 1.0f : 0.0f;
     } else if (wantAds != qfalse) {
-#if EMULATE_X87
-        ps->adsFraction = x87f_store_f32(x87f_add(
-            x87f_load_f32(ps->adsFraction),
-            x87f_mul(x87f_load_i32(pml.msec),
-                     x87f_load_f32(weaponInfo->adsFireDelayRate))));
-#else
         ps->adsFraction = (float)(
             (long double)ps->adsFraction +
             (long double)pml.msec *
                 (long double)weaponInfo->adsFireDelayRate);
-#endif
     } else {
-#if EMULATE_X87
-        ps->adsFraction = x87f_store_f32(x87f_sub(
-            x87f_load_f32(ps->adsFraction),
-            x87f_mul(x87f_load_i32(pml.msec),
-                     x87f_load_f32(weaponInfo->adsFireDelayOutRate))));
-#else
         ps->adsFraction = (float)(
             (long double)ps->adsFraction -
             (long double)pml.msec *
                 (long double)weaponInfo->adsFireDelayOutRate);
-#endif
     }
 
     if (ps->adsFraction >= 1.0f) {

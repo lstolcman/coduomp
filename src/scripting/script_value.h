@@ -79,11 +79,7 @@ const char *Scr_GetIString(uint32_t index);
 uint16_t Scr_GetConstIString(uint32_t index);
 void Scr_GetVector(uint32_t index, vec3_t vector);
 uint32_t Scr_GetFunc(uint32_t index);
-#if defined(WINDOWS_BEHAVIOR)
 uint16_t Scr_GetEntityNum(uint32_t index, int32_t *classNum);
-#else
-uint32_t Scr_GetEntityNum(uint32_t index, int32_t *classNum);
-#endif
 script_variable_type_t Scr_GetType(uint32_t index);
 script_variable_type_t Scr_GetPointerType(uint32_t index);
 
@@ -105,11 +101,7 @@ void Scr_AddArray(void);
 void Scr_AddArrayStringIndexed(uint16_t name);
 
 scr_anim_t Scr_GetAnim(uint32_t index, XAnimTree *runtimeTree);
-#if defined(WINDOWS_BEHAVIOR)
 XAnim *Scr_GetAnimTree(uint32_t index);
-#else
-script_anim_tree_ref_t Scr_GetAnimTree(uint32_t index);
-#endif
 uint32_t CODUO_SCRIPT_CDECL Scr_GetAnimsIndex(XAnim *tree);
 XAnim *Scr_GetAnims(uint32_t treeIndex);
 
@@ -121,11 +113,7 @@ void Scr_TerminalError(const char *message);
 void Scr_ErrorWithDialogMessage(const char *message, const char *source);
 void Scr_ParamError(int32_t index, const char *message);
 void Scr_ObjectError(const char *message);
-#if defined(WINDOWS_BEHAVIOR)
 qboolean Scr_IsSystemActive(qboolean unused);
-#else
-qboolean Scr_IsSystemActive(uint8_t unused);
-#endif
 uint32_t Scr_GetNumParam(void);
 void Scr_RunCurrentThreads(void);
 void Scr_ResetTimeout(void);

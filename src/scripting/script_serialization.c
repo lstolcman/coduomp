@@ -6,11 +6,7 @@
 #include "script_value.h"
 #include "script_variable.h"
 
-#include "compat/coduo_fp_platform.h"
 
-#if EMULATE_X87
-#include "compat/coduo_x87emu.h"
-#endif
 
 #include <string.h>
 
@@ -26,11 +22,6 @@ enum {
     SCRIPT_SERIALIZATION_MT_PERMANENT = 1
 };
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 typedef enum script_serialization_child_name_type_e {
     SCRIPT_CHILD_NAME_SHORT = 0,
@@ -196,14 +187,7 @@ float ReadFloat(void)
 
     memcpy(&value, script_serializationCursor, sizeof(value));
     script_serializationCursor += sizeof(value);
-#if EMULATE_X87
-    /* CoDUOMP.exe 0x004863b0 and coduo_lnxded 0x080a8f4e return the FLDS
-     * result through ST0. Their callers then FSTPS the value, including the
-     * original signaling-NaN conversion and status effects. */
-    return x87f_store_f32(x87f_load_f32(value));
-#else
     return value;
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x004863c0..0x0048642e.
@@ -220,7 +204,6 @@ void ScriptSave_WriteVector(const vec3_t vector)
 uintptr_t ScriptLoad_ReadVector(void)
 {
     vec3_t vector;
-#if defined(WINDOWS_BEHAVIOR)
     script_vector_storage_t *storage;
 
     /* CoDUOMP.exe 0x00486430 copies all three dwords without entering the x87
@@ -232,14 +215,6 @@ uintptr_t ScriptLoad_ReadVector(void)
     storage->refCount = 0;
     memcpy(storage->value, vector, sizeof(vector));
     return (uintptr_t)storage->value;
-#else
-    /* coduo_lnxded 0x080a8fa6 calls ReadFloat and stores each returned ST0
-     * value before AllocVectorCopy.  Keep the per-lane conversion boundary. */
-    vector[0] = ReadFloat();
-    vector[1] = ReadFloat();
-    vector[2] = ReadFloat();
-    return (uintptr_t)AllocVectorCopy(vector);
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x00486490..0x004864b2.
@@ -351,12 +326,7 @@ VariableStackBuffer *ScriptLoad_ReadStack(void)
     uint16_t entryCount = ReadShort();
     size_t frameSize = offsetof(VariableStackBuffer, entries) +
                        (size_t)entryCount * sizeof(VariableStackBufferEntry);
-#if defined(WINDOWS_BEHAVIOR)
     VariableStackBuffer *frame = MT_Alloc(frameSize);
-#else
-    VariableStackBuffer *frame =
-        MT_Alloc(frameSize, SCRIPT_SERIALIZATION_MT_PERMANENT);
-#endif
 
     frame->size = entryCount;
     frame->time = (uint32_t)ScriptLoad_ReadInt();

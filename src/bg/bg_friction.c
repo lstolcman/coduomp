@@ -29,20 +29,11 @@
 #include "bg_pmove.h"
 
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 
-#if defined(LINUX_BEHAVIOR)
-#include "compat/libm/coduo_libm.h"
-#endif
 
 #include <math.h>
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /* Friction tuning constants used by this step. Natural float forms of the
  * .rdata single-precision literals the machine code loads (raw hex kept for
@@ -72,7 +63,6 @@ enum { PM_JUMP_FRICTION_SCALE_SATURATE_MS = 1700 };
  * both Windows DLLs (cgame 0x30008410/0x30008440, game
  * 0x200081c0/0x200081f0).  The optimized Windows jump body inlines the second;
  * Linux calls both at RVAs 0x0002342d and 0x0002348e. */
-#if defined(WINDOWS_BEHAVIOR)
 long double PM_GetSlowdownFriction(void)
 {
     const int32_t time = pm->ps->pmTime;
@@ -96,55 +86,7 @@ long double PM_GetJumpFactor(void)
                (long double)PM_JUMP_FRICTION_SCALE_SLOPE +
            (long double)PM_JUMP_FRICTION_SCALE_BASE;
 }
-#else
-long double PM_GetSlowdownFriction(void)
-{
-    float value;
 
-    if (pm->ps->pmTime >= PM_JUMP_FRICTION_SCALE_SATURATE_MS) {
-        return PM_JUMP_FRICTION_SCALE_MAX;
-    }
-#if EMULATE_X87
-    value = x87f_store_f32(x87f_add(
-        x87f_mul(
-            x87f_mul(x87f_load_i32(pm->ps->pmTime),
-                     x87f_load_f32(1.5f)),
-            x87f_load_f32(PM_JUMP_FRICTION_TIME_SCALE)),
-        x87f_load_f32(PM_JUMP_FRICTION_SCALE_BASE)));
-#else
-    value = (float)(
-        (long double)pm->ps->pmTime * 1.5L *
-            (long double)PM_JUMP_FRICTION_TIME_SCALE +
-        (long double)PM_JUMP_FRICTION_SCALE_BASE);
-#endif
-    return value;
-}
-
-long double PM_GetJumpFactor(void)
-{
-    float value;
-
-    if (pm->ps->pmTime >= PM_JUMP_FRICTION_SCALE_SATURATE_MS) {
-        return PM_JUMP_FRICTION_SCALE_MAX;
-    }
-#if EMULATE_X87
-    value = x87f_store_f32(x87f_add(
-        x87f_mul(
-            x87f_mul(x87f_load_i32(pm->ps->pmTime),
-                     x87f_load_f32(1.5f)),
-            x87f_load_f32(PM_JUMP_FRICTION_TIME_SCALE)),
-        x87f_load_f32(PM_JUMP_FRICTION_SCALE_BASE)));
-#else
-    value = (float)(
-        (long double)pm->ps->pmTime * 1.5L *
-            (long double)PM_JUMP_FRICTION_TIME_SCALE +
-        (long double)PM_JUMP_FRICTION_SCALE_BASE);
-#endif
-    return value;
-}
-#endif
-
-#if defined(WINDOWS_BEHAVIOR)
 void PM_Friction(void)
 {
     pmove_t   *move = pm;                 /* ESI = [0x30539850] */
@@ -267,151 +209,3 @@ void PM_Friction(void)
     ps->velocity[1] = newspeed * ps->velocity[1];            /* FLD ST0; FMUL [EDX+0x24]; FSTP */
     ps->velocity[2] = newspeed * ps->velocity[2];            /* FMUL [EDX+0x28]; FSTP */
 }
-#else
-void PM_Friction(void)
-{
-    playerState_t *const ps = pm->ps;
-    float verticalVelocity = ps->velocity[2];
-    float speed;
-    float drop = 0.0f;
-    float newSpeed;
-    int32_t lane;
-
-    if (pml.walking != 0) {
-        verticalVelocity = 0.0f;
-    }
-
-    /* Linux stores the squared sum as binary64 for the glibc sqrt call and
-     * stores the returned speed as binary32 before the threshold comparison. */
-#if EMULATE_X87
-    speed = (float)CoduoLibm_SqrtGlibc(x87f_store_f64(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(ps->velocity[0]),
-                          x87f_load_f32(ps->velocity[0])),
-                 x87f_mul(x87f_load_f32(ps->velocity[1]),
-                          x87f_load_f32(ps->velocity[1]))),
-        x87f_mul(x87f_load_f32(verticalVelocity),
-                 x87f_load_f32(verticalVelocity)))));
-#else
-    speed = (float)CoduoLibm_SqrtGlibc((double)(
-        ((long double)ps->velocity[0] *
-             (long double)ps->velocity[0] +
-         (long double)ps->velocity[1] *
-             (long double)ps->velocity[1]) +
-        (long double)verticalVelocity *
-            (long double)verticalVelocity));
-#endif
-
-    if (speed < 1.0f) {
-        ps->velocity[2] = 0.0f;
-        ps->velocity[1] = 0.0f;
-        ps->velocity[0] = 0.0f;
-        return;
-    }
-
-    if (pm->waterlevel <= PM_FRICTION_WATERLEVEL_MAX &&
-        pml.walking != 0 &&
-        (pml.groundTrace.surfaceFlags & SURF_SLICK) == 0 &&
-        (ps->playerStateFlags & PMF_NO_GROUNDFRICTION) == 0) {
-        float control = speed;
-        float multiplier;
-
-        if (control < PM_STOPSPEED) {
-            control = PM_STOPSPEED;
-        }
-        multiplier = control;
-
-        if ((ps->playerStateFlags & PMF_LAND_STUN) != 0) {
-#if EMULATE_X87
-            multiplier = x87f_store_f32(x87f_mul(
-                x87f_load_f32(control),
-                x87f_load_f32(PM_LAND_STUN_FRICTION)));
-#else
-            multiplier = (float)((long double)control *
-                                 (long double)PM_LAND_STUN_FRICTION);
-#endif
-        } else if ((ps->playerStateFlags & PMF_WALLJUMP) != 0) {
-            if (ps->pmTime <= PM_JUMP_FRICTION_WINDOW_MS) {
-#if EMULATE_X87
-                multiplier = x87f_store_f32(x87f_mul(
-                    x87f_load_f32(control),
-                    x87f_load_f32((float)PM_GetSlowdownFriction())));
-#else
-                multiplier = (float)(
-                    (long double)control * PM_GetSlowdownFriction());
-#endif
-            } else {
-                ps->playerStateFlags &= ~(uint32_t)PMF_WALLJUMP;
-                ps->jumpOriginZ = 0.0f;
-            }
-        }
-
-        /* The Linux body stores the ground-friction contribution in `drop`
-         * after the complete multiply chain. */
-#if EMULATE_X87
-        drop = x87f_store_f32(x87f_mul(
-            x87f_mul(x87f_load_f32(multiplier),
-                     x87f_load_f32(PM_FRICTION)),
-            x87f_load_f32(pml.frametime)));
-#else
-        drop = (float)((long double)multiplier *
-                       (long double)PM_FRICTION *
-                       (long double)pml.frametime);
-#endif
-    }
-
-    if (pm->waterlevel != 0) {
-#if EMULATE_X87
-        drop = x87f_store_f32(x87f_add(
-            x87f_load_f32(drop),
-            x87f_mul(
-                x87f_mul(x87f_load_i32((int32_t)pm->waterlevel),
-                         x87f_load_f32(speed)),
-                x87f_load_f32(pml.frametime))));
-#else
-        drop = (float)((long double)drop +
-                       (long double)(int32_t)pm->waterlevel *
-                           (long double)speed *
-                           (long double)pml.frametime);
-#endif
-    }
-
-    if (ps->pmType == PM_TYPE_SPECTATOR) {
-#if EMULATE_X87
-        drop = x87f_store_f32(x87f_add(
-            x87f_load_f32(drop),
-            x87f_mul(
-                x87f_mul(x87f_load_f32(speed),
-                         x87f_load_f32(PM_SPECTATORFRICTION)),
-                x87f_load_f32(pml.frametime))));
-#else
-        drop = (float)((long double)drop +
-                       (long double)speed *
-                           (long double)PM_SPECTATORFRICTION *
-                           (long double)pml.frametime);
-#endif
-    }
-
-    newSpeed = (float)((long double)speed - (long double)drop);
-    if (newSpeed < 0.0f) {
-        newSpeed = 0.0f;
-    }
-#if EMULATE_X87
-    newSpeed = x87f_store_f32(
-        x87f_div(x87f_load_f32(newSpeed), x87f_load_f32(speed)));
-#else
-    newSpeed = (float)((long double)newSpeed / (long double)speed);
-#endif
-
-    for (lane = 0; lane < 3; ++lane) {
-#if EMULATE_X87
-        ps->velocity[lane] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(ps->velocity[lane]),
-            x87f_load_f32(newSpeed)));
-#else
-        ps->velocity[lane] = (float)(
-            (long double)ps->velocity[lane] *
-            (long double)newSpeed);
-#endif
-    }
-}
-#endif

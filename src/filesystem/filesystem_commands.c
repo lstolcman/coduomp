@@ -5,11 +5,6 @@
 
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "filesystem_commands.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /*
  * The console-facing filesystem command cluster is common to both engines.
@@ -17,7 +12,6 @@
  * registration order and localized search-path display behavior.
  */
 
-#if defined(WINDOWS_BEHAVIOR)
 /* Source: CoDUOMP.exe 0x0042f5a0..0x0042f75f.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0042f5a0_0042f760.mcode.
  * Name and argument role: exact same-module Mac symbol FS_DisplayPath. A true
@@ -88,53 +82,6 @@ void FS_DisplayPath(qboolean localizedFilter)
         }
     }
 }
-#else
-void FS_DisplayPath(qboolean localizedFilter)
-{
-    const searchpath_t *searchpath;
-    const pack_t *pack;
-    const directory_t *dir;
-    int32_t handle;
-
-    if (fs_ignoreLocalized->integer != 0) {
-        Com_Printf("    localized assets are being ignored\n");
-    }
-
-    Com_Printf("Current search path:\n");
-    for (searchpath = fs_searchpaths; searchpath != NULL;
-         searchpath = searchpath->next) {
-        if (filesystem_compat_server_scope_allows_searchpath(searchpath) ==
-            qfalse) {
-            continue;
-        }
-        if (localizedFilter == 0 || FS_UseSearchPath(searchpath) != 0) {
-            if (searchpath->pack != NULL) {
-                pack = searchpath->pack;
-                Com_Printf("%s (%i files)\n", pack->pakFilename,
-                           pack->numFiles);
-                if (fs_numServerPaks != 0) {
-                    if (FS_PakIsPure(pack) == 0) {
-                        Com_Printf("    not on the pure list\n");
-                    } else {
-                        Com_Printf("    on the pure list\n");
-                    }
-                }
-            } else {
-                dir = searchpath->dir;
-                Com_Printf("%s/%s\n", dir->path, dir->gamedir);
-            }
-        }
-    }
-
-    Com_Printf("\nFile Handles:\n");
-    for (handle = 1; handle < FS_HANDLE_COUNT; handle++) {
-        if (fs_handleFiles[handle].ioObject != NULL) {
-            Com_Printf("handle %i: %s\n", handle,
-                       fs_handleFiles[handle].name);
-        }
-    }
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x0042f760..0x0042f766.
  * Evidence: repaired executable-gap boundary and exact same-module Mac symbol
@@ -144,7 +91,6 @@ void FS_Path_f(void)
     FS_DisplayPath(qfalse);
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 /* Source: CoDUOMP.exe 0x0042f770..0x0042f779.
  * Evidence: repaired executable-gap boundary and exact same-module Mac symbol
  * FS_FullPath_f. Unlike the ordinary path command, this requests localized
@@ -153,12 +99,6 @@ void FS_FullPath_f(void)
 {
     FS_DisplayPath(qtrue);
 }
-#else
-void FS_FullPath_f(void)
-{
-    FS_DisplayPath(qfalse);
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00440180..0x00440251; coduo_lnxded
  * 0x0807596b..0x08075a5e. Name and command contract: exact same-module Mac
@@ -228,7 +168,6 @@ void FS_TouchFile_f(void)
     (void)FS_TouchFile(Cmd_Argv(1));
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 /* Source: CoDUOMP.exe 0x00440930..0x0044097e.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00440930_0044097f.mcode.
  * Name and registration order: exact same-module Mac symbol
@@ -241,16 +180,6 @@ void FS_AddCommands(void)
     Cmd_AddCommand("fdir", FS_NewDir_f);
     Cmd_AddCommand("touchFile", FS_TouchFile_f);
 }
-#else
-void FS_AddCommands(void)
-{
-    Cmd_AddCommand("path", FS_Path_f);
-    Cmd_AddCommand("fullpath", FS_FullPath_f);
-    Cmd_AddCommand("dir", FS_Dir_f);
-    Cmd_AddCommand("fdir", FS_NewDir_f);
-    Cmd_AddCommand("touchFile", FS_TouchFile_f);
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00440900..0x0044092b.
  * Exact source symbol is absent from the Mac traceback table; named by its

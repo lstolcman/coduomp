@@ -7,13 +7,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 enum {
     COLOR_BYTE_SCALE = 255,
@@ -24,44 +18,7 @@ enum {
     COLOR_FISTP_I16_MAXIMUM_EXCLUSIVE = 32768
 };
 
-#if defined(WINDOWS_BEHAVIOR) && EMULATE_X87
-/* NOT_FROM_ORIGINAL_SOURCE: low-dword adapter for the original Windows
- * `_ftol2` call sites below.  The live x87 product must not pass through a
- * binary64 store before conversion. */
-static uint32_t coduo_color_ftol2_low_u32(x87f value)
-{
-#if EMULATE_X87_BACKEND == EMU_X87_SOFTFLOAT
-    const int64_t nearest =
-        extF80_to_i64(value, softfloat_round_near_even, false);
 
-    /* `_ftol2` first executes a nearest-mode signed-qword FISTP.  A masked
-     * invalid conversion yields INT64_MIN, whose low dword is zero. */
-    if (nearest == INT64_MIN) {
-        return 0;
-    }
-    return (uint32_t)(uint64_t)
-        extF80_to_i64(value, softfloat_round_minMag, false);
-#else
-    return (uint32_t)coduo_fp_to_i32_extended((long double)value);
-#endif
-}
-#endif
-
-#if defined(LINUX_BEHAVIOR) && !EMULATE_X87 && \
-    !((defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__)))
-/* NOT_FROM_ORIGINAL_SOURCE: native C result adapter for signed-word
- * truncation. Keep the channel product wide until conversion; an invalid
- * conversion has the signed-word indefinite value and therefore a zero byte. */
-static int16_t coduomp_color_truncate_i16(WIDE_FLOAT value)
-{
-    if (!(value > (WIDE_FLOAT)COLOR_FISTP_I16_MINIMUM_EXCLUSIVE &&
-          value < (WIDE_FLOAT)COLOR_FISTP_I16_MAXIMUM_EXCLUSIVE)) {
-        return INT16_MIN;
-    }
-    return (int16_t)value;
-}
-#endif
 
 /*
  * The four authoritative Windows bodies are instruction-identical apart from
@@ -81,18 +38,8 @@ static int16_t coduomp_color_truncate_i16(WIDE_FLOAT value)
  * destination makes overflow/NaN produce integer-indefinite 0x8000, whose low
  * byte is zero, rather than the Windows `_ftol2` low-dword result.
  */
-#if defined(WINDOWS_BEHAVIOR)
 uint32_t ColorBytes3(float red, float green, float blue)
 {
-#if EMULATE_X87
-    const x87f scale = x87f_load_f32((float)COLOR_BYTE_SCALE);
-    const uint32_t redByte = (uint8_t)coduo_color_ftol2_low_u32(
-        x87f_mul(x87f_load_f32(red), scale));
-    const uint32_t greenByte = (uint8_t)coduo_color_ftol2_low_u32(
-        x87f_mul(x87f_load_f32(green), scale));
-    const uint32_t blueByte = (uint8_t)coduo_color_ftol2_low_u32(
-        x87f_mul(x87f_load_f32(blue), scale));
-#else
     const double scale = (double)(float)COLOR_BYTE_SCALE;
     const uint32_t redByte =
         (uint8_t)coduo_fp_to_i32_extended((long double)((double)red * scale));
@@ -100,7 +47,6 @@ uint32_t ColorBytes3(float red, float green, float blue)
         (uint8_t)coduo_fp_to_i32_extended((long double)((double)green * scale));
     const uint32_t blueByte =
         (uint8_t)coduo_fp_to_i32_extended((long double)((double)blue * scale));
-#endif
 
     return redByte | (greenByte << COLOR_GREEN_SHIFT) |
            (blueByte << COLOR_BLUE_SHIFT) |
@@ -109,17 +55,6 @@ uint32_t ColorBytes3(float red, float green, float blue)
 
 uint32_t ColorBytes4(float red, float green, float blue, float alpha)
 {
-#if EMULATE_X87
-    const x87f scale = x87f_load_f32((float)COLOR_BYTE_SCALE);
-    const uint32_t redByte = (uint8_t)coduo_color_ftol2_low_u32(
-        x87f_mul(x87f_load_f32(red), scale));
-    const uint32_t greenByte = (uint8_t)coduo_color_ftol2_low_u32(
-        x87f_mul(x87f_load_f32(green), scale));
-    const uint32_t blueByte = (uint8_t)coduo_color_ftol2_low_u32(
-        x87f_mul(x87f_load_f32(blue), scale));
-    const uint32_t alphaByte = (uint8_t)coduo_color_ftol2_low_u32(
-        x87f_mul(x87f_load_f32(alpha), scale));
-#else
     const double scale = (double)(float)COLOR_BYTE_SCALE;
     const uint32_t redByte =
         (uint8_t)coduo_fp_to_i32_extended((long double)((double)red * scale));
@@ -129,119 +64,11 @@ uint32_t ColorBytes4(float red, float green, float blue, float alpha)
         (uint8_t)coduo_fp_to_i32_extended((long double)((double)blue * scale));
     const uint32_t alphaByte =
         (uint8_t)coduo_fp_to_i32_extended((long double)((double)alpha * scale));
-#endif
 
     return redByte | (greenByte << COLOR_GREEN_SHIFT) |
            (blueByte << COLOR_BLUE_SHIFT) |
            (alphaByte << COLOR_ALPHA_SHIFT);
 }
-#else
-#if EMULATE_X87
-/* NOT_FROM_ORIGINAL_SOURCE: portable result adapter for the Linux FISTP m16
- * sites above.  The original instruction returns 0x8000 for every invalid
- * conversion; the general x87 emulator otherwise converts to signed dword. */
-static int16_t coduo_color_fistp_i16(x87f value)
-{
-    const x87f minimumExclusive =
-        x87f_load_i32(COLOR_FISTP_I16_MINIMUM_EXCLUSIVE);
-    const x87f maximumExclusive =
-        x87f_load_i32(COLOR_FISTP_I16_MAXIMUM_EXCLUSIVE);
-
-    /* RECONSTRUCTION_FIX: the former engine/game emulation converted to i32
-     * and merely cast to int16_t.  The original FISTP m16 instead produces
-     * signed-word integer-indefinite for every out-of-range result. */
-    if (!x87f_lt(minimumExclusive, value) ||
-        !x87f_lt(value, maximumExclusive)) {
-#if EMULATE_X87_BACKEND == EMU_X87_SOFTFLOAT
-        softfloat_raiseFlags(softfloat_flag_invalid);
-#endif
-        return INT16_MIN;
-    }
-    return (int16_t)x87f_store_i32_trunc(value);
-}
-#endif
-
-uint32_t ColorBytes3(float red, float green, float blue)
-{
-    uint32_t redByte;
-    uint32_t greenByte;
-    uint32_t blueByte;
-
-#if EMULATE_X87
-    const x87f scale = x87f_load_f32((float)COLOR_BYTE_SCALE);
-
-    redByte = (uint8_t)coduo_color_fistp_i16(
-        x87f_mul(x87f_load_f32(red), scale));
-    greenByte = (uint8_t)coduo_color_fistp_i16(
-        x87f_mul(x87f_load_f32(green), scale));
-    blueByte = (uint8_t)coduo_color_fistp_i16(
-        x87f_mul(x87f_load_f32(blue), scale));
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
-    static const float scale = (float)COLOR_BYTE_SCALE;
-    coduo_x87_truncation_control_t control;
-
-    redByte = (uint8_t)CODUO_X87_TRUNCATE_I16_FIRST(
-        &control, (long double)red * (long double)scale);
-    greenByte = (uint8_t)CODUO_X87_TRUNCATE_I16_NEXT(
-        &control, (long double)green * (long double)scale);
-    blueByte = (uint8_t)CODUO_X87_TRUNCATE_I16_NEXT(
-        &control, (long double)blue * (long double)scale);
-#else
-    /* Native platforms keep the product wide until signed-word truncation. */
-    redByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)red * COLOR_BYTE_SCALE);
-    greenByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)green * COLOR_BYTE_SCALE);
-    blueByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)blue * COLOR_BYTE_SCALE);
-#endif
-
-    return redByte | (greenByte << COLOR_GREEN_SHIFT) |
-           (blueByte << COLOR_BLUE_SHIFT) |
-           (UINT32_C(255) << COLOR_ALPHA_SHIFT);
-}
-
-uint32_t ColorBytes4(float red, float green, float blue, float alpha)
-{
-    uint32_t redByte;
-    uint32_t greenByte;
-    uint32_t blueByte;
-    uint32_t alphaByte;
-
-#if EMULATE_X87
-    const x87f scale = x87f_load_f32((float)COLOR_BYTE_SCALE);
-
-    redByte = (uint8_t)coduo_color_fistp_i16(
-        x87f_mul(x87f_load_f32(red), scale));
-    greenByte = (uint8_t)coduo_color_fistp_i16(
-        x87f_mul(x87f_load_f32(green), scale));
-    blueByte = (uint8_t)coduo_color_fistp_i16(
-        x87f_mul(x87f_load_f32(blue), scale));
-    alphaByte = (uint8_t)coduo_color_fistp_i16(
-        x87f_mul(x87f_load_f32(alpha), scale));
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
-    static const float scale = (float)COLOR_BYTE_SCALE;
-    coduo_x87_truncation_control_t control;
-
-    redByte = (uint8_t)CODUO_X87_TRUNCATE_I16_FIRST(
-        &control, (long double)red * (long double)scale);
-    greenByte = (uint8_t)CODUO_X87_TRUNCATE_I16_NEXT(
-        &control, (long double)green * (long double)scale);
-    blueByte = (uint8_t)CODUO_X87_TRUNCATE_I16_NEXT(
-        &control, (long double)blue * (long double)scale);
-    alphaByte = (uint8_t)CODUO_X87_TRUNCATE_I16_NEXT(
-        &control, (long double)alpha * (long double)scale);
-#else
-    redByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)red * COLOR_BYTE_SCALE);
-    greenByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)green * COLOR_BYTE_SCALE);
-    blueByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)blue * COLOR_BYTE_SCALE);
-    alphaByte = (uint8_t)coduomp_color_truncate_i16((WIDE_FLOAT)alpha * COLOR_BYTE_SCALE);
-#endif
-
-    return redByte | (greenByte << COLOR_GREEN_SHIFT) |
-           (blueByte << COLOR_BLUE_SHIFT) |
-           (alphaByte << COLOR_ALPHA_SHIFT);
-}
-#endif
 
 /*
  * NormalizeColor is instruction-identical within the four Windows images at
@@ -256,42 +83,21 @@ float NormalizeColor(const vec3_t input, vec3_t output)
     float maximum;
     memcpy(&maximum, &input[0], sizeof(maximum));
 
-#if EMULATE_X87
-    if (x87f_lt(x87f_load_f32(maximum), x87f_load_f32(input[1]))) {
-#else
     if (maximum < input[1]) {
-#endif
         memcpy(&maximum, &input[1], sizeof(maximum));
     }
-#if EMULATE_X87
-    if (x87f_lt(x87f_load_f32(maximum), x87f_load_f32(input[2]))) {
-#else
     if (maximum < input[2]) {
-#endif
         memcpy(&maximum, &input[2], sizeof(maximum));
     }
 
-#if EMULATE_X87
-    if (x87f_eq(x87f_load_f32(maximum), x87f_load_f32(0.0f))) {
-#else
     if (maximum == 0.0f) {
-#endif
         output[2] = 0.0f;
         output[1] = 0.0f;
         output[0] = 0.0f;
     } else {
-#if EMULATE_X87
-        output[0] = x87f_store_f32(x87f_div(
-            x87f_load_f32(input[0]), x87f_load_f32(maximum)));
-        output[1] = x87f_store_f32(x87f_div(
-            x87f_load_f32(input[1]), x87f_load_f32(maximum)));
-        output[2] = x87f_store_f32(x87f_div(
-            x87f_load_f32(input[2]), x87f_load_f32(maximum)));
-#else
         output[0] = (float)((long double)input[0] / (long double)maximum);
         output[1] = (float)((long double)input[1] / (long double)maximum);
         output[2] = (float)((long double)input[2] / (long double)maximum);
-#endif
     }
     return maximum;
 }
@@ -311,50 +117,25 @@ float ColorNormalize(const vec3_t input, vec3_t output)
     float maximum;
     memcpy(&maximum, &input[0], sizeof(maximum));
 
-#if EMULATE_X87
-    if (x87f_lt(x87f_load_f32(maximum), x87f_load_f32(input[1]))) {
-#else
     if (maximum < input[1]) {
-#endif
         memcpy(&maximum, &input[1], sizeof(maximum));
     }
-#if EMULATE_X87
-    if (x87f_lt(x87f_load_f32(maximum), x87f_load_f32(input[2]))) {
-#else
     if (maximum < input[2]) {
-#endif
         memcpy(&maximum, &input[2], sizeof(maximum));
     }
 
-#if EMULATE_X87
-    if (x87f_eq(x87f_load_f32(maximum), x87f_load_f32(0.0f))) {
-#else
     if (maximum == 0.0f) {
-#endif
         output[2] = 1.0f;
         output[1] = 1.0f;
         output[0] = 1.0f;
         return 0.0f;
     }
 
-#if EMULATE_X87
-    {
-        const float scale = x87f_store_f32(x87f_div(
-            x87f_load_f32(1.0f), x87f_load_f32(maximum)));
-        output[0] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(input[0]), x87f_load_f32(scale)));
-        output[1] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(input[1]), x87f_load_f32(scale)));
-        output[2] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(input[2]), x87f_load_f32(scale)));
-    }
-#else
     {
         const float scale = (float)(1.0L / (long double)maximum);
         output[0] = (float)((long double)input[0] * (long double)scale);
         output[1] = (float)((long double)input[1] * (long double)scale);
         output[2] = (float)((long double)input[2] * (long double)scale);
     }
-#endif
     return maximum;
 }

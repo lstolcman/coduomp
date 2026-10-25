@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "recovered_game.h"
 #include "game_globals.h"
 #include "scr_vm.h"
@@ -133,13 +132,8 @@ static uint8_t game_compat_hud_elem_color_byte_from_float(float value)
 
     /* Stock helper 0x53335..0x53372 adds 0.5f and truncates the still-live
      * x87 sum. The helper argument itself is already rounded to float. */
-#if EMULATE_X87
-    return (uint8_t)x87f_store_i32_trunc(
-        x87f_add(x87f_load_f32(value), x87f_load_f32(0.5f)));
-#else
     return (uint8_t)game_compat_int32_from_long_double_trunc(
         (long double)value + 0.5L);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: factored ceil helper used by timer/clock methods. */
@@ -147,18 +141,11 @@ static int game_compat_hud_elem_ceil_milliseconds(float value)
 {
     volatile float milliseconds = value;
 
-#if defined(WINDOWS_BEHAVIOR)
     /* Windows rounds the stored milliseconds to nearest after adding the
      * binary64 bias 0.5 - 2^-30. This differs from ceil for small fractions
      * and for large durations whose addition loses the bias's low bits. */
     const double bias = 0.4999999990686774;
     return coduo_x87_fistp_i32((WIDE_FLOAT)milliseconds + bias);
-#else
-    /* 0x53373: the original static rounds via the CRT ceil() on the
-     * widened double, then truncates; no float32/int round-trip. */
-    return game_compat_int32_from_long_double_trunc(
-        (long double)ceil((double)milliseconds));
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: factored round helper used by transition methods. */
@@ -166,13 +153,8 @@ static int game_compat_hud_elem_round_milliseconds(float value)
 {
     /* Same stock helper at 0x53335: no binary32 spill between faddp and
      * truncating fistp. */
-#if EMULATE_X87
-    return x87f_store_i32_trunc(
-        x87f_add(x87f_load_f32(value), x87f_load_f32(0.5f)));
-#else
     return game_compat_int32_from_long_double_trunc(
         (long double)value + 0.5L);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: shared fade/scale/move time validation. */

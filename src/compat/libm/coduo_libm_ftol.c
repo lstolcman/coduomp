@@ -24,9 +24,9 @@
  * float32 residual is strictly negative (-0.0 does not trigger it).
  */
 #include "coduo_libm.h"
-#include "compat/coduo_x87emu.h"
 
 #include <string.h>
+#include "coduo_wide_math.h"
 
 #define FTOL_CARRY_THRESHOLD 0x80000001u
 #define FTOL_SIGN_MASK       0x80000000u
@@ -45,29 +45,28 @@ int64_t CoduoLibm_FloatToInt64(double value)
     uint32_t residualBits;
     int64_t rounded;
 
-#if EMULATE_X87
-    x87f x = x87f_load_f64(value);
-
-    /* fst DWORD: x narrowed to float32, kept only for its sign bit. */
-    valueBits = CoduoLibm_Float32Bits(x87f_store_f32(x));
-
-    /* fistp QWORD: ambient rounding is round-to-nearest-even. */
-    rounded = (int64_t)extF80_to_i64(x, softfloat_round_near_even, false);
-
-    /* fild QWORD then fsubp: residual r = x - n, then stored as float32. */
-    residualBits = CoduoLibm_Float32Bits(
-        x87f_store_f32(x87f_sub(x, x87f_load_f64((double)rounded))));
-#else
     long double x = (long double)value;
 
     valueBits = CoduoLibm_Float32Bits((float)x);
 
-    /* FISTP QWORD with the ambient rounding mode. Emitted directly rather than
-     * via llrintl(), so this carries no dependency on the platform libm. */
+    /* FISTP QWORD with the ambient rounding mode. Use the native instruction
+     * where available; other targets retain the nearest-integer boundary and
+     * signed-qword invalid result through their native C arithmetic. */
+#if (defined(__i386__) || defined(__x86_64__)) && (defined(__GNUC__) || defined(__clang__))
     __asm__ __volatile__("fistpll %0" : "=m"(rounded) : "t"(x) : "st");
+#else
+    {
+#if CODUO_X87_MATH_AVAILABLE
+        const long double nearest = coduomp_x87_round(x);
+#else
+        const long double nearest = rintl(x);
+#endif
+        rounded = nearest >= -9223372036854775808.0L && nearest < 9223372036854775808.0L
+            ? (int64_t)nearest : INT64_MIN;
+    }
+#endif
 
     residualBits = CoduoLibm_Float32Bits((float)(x - (long double)rounded));
-#endif
 
     /* 0x20069cab: when the low dword is zero and the high dword carries no
      * magnitude bits, n is either 0 or the x87 indefinite value; both are

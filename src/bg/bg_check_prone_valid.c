@@ -184,13 +184,8 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
     start[2] = origin[2] + height;
     /* Windows 0x300071a1..0x300071ad rounds proneLength - 6 to a binary32
      * slot once. Linux retains the unrounded value in the x87 domain. */
-#if defined(WINDOWS_BEHAVIOR)
     const float proneReach = (float)((long double)proneLength -
                                      BG_PRONE_TRACE_RADIUS);
-#else
-    const long double proneReach =
-        (long double)proneLength - BG_PRONE_TRACE_RADIUS;
-#endif
     end[0] = (float)((long double)start[0] +
                      (long double)proneReach * (long double)forward[0]);
     end[1] = (float)((long double)start[1] +
@@ -210,11 +205,7 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
     }
 
     if (trace.fraction < BG_PRONE_TRACE_FULL_FRACTION) {
-#if defined(WINDOWS_BEHAVIOR)
         float minimumForwardClearance;
-#else
-        long double minimumForwardClearance;
-#endif
 
         if (allowFallback == qfalse) {
             BG_PRONE_DEBUG_LINE(start, trace.endpos, BG_PRONE_DEBUG_RED);
@@ -256,9 +247,6 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
                 frontClearance = (float)retryClearance;
                 /* Windows compares the live sum after storing a float copy;
                  * Linux reloads the stored clearance before comparing. */
-#if !defined(WINDOWS_BEHAVIOR)
-                retryClearance = frontClearance;
-#endif
                 if (retryClearance < (long double)minimumForwardClearance) {
                     BG_PRONE_DEBUG_LINE(start, trace.endpos,
                                         BG_PRONE_DEBUG_RED);
@@ -289,30 +277,17 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
                      (long double)forward[0] * BG_PRONE_FORWARD_PROBE);
     end[1] = (float)((long double)origin[1] +
                      (long double)forward[1] * BG_PRONE_FORWARD_PROBE);
-#if defined(LINUX_BEHAVIOR)
-    /* Linux 0x21fe6..0x22004 stores origin+forward*24 before adding height. */
-    end[2] = (float)((long double)origin[2] +
-                     (long double)forward[2] * BG_PRONE_FORWARD_PROBE);
-    end[2] = (float)((long double)end[2] + (long double)height);
-#else
     end[2] = (float)((long double)origin[2] +
                      (long double)forward[2] * BG_PRONE_FORWARD_PROBE +
                      (long double)height);
-#endif
     start[0] = end[0];
     start[1] = end[1];
     start[2] = end[2];
     /* Windows 0x30007513 stores this depth as binary32. Linux retains the same
      * value in the x87 domain through the trace and slope calculation. */
-#if defined(WINDOWS_BEHAVIOR)
     const float groundTraceDepth = (float)(
         ((long double)radius * BG_PRONE_GROUND_TRACE_SCALE +
          (long double)height) - BG_PRONE_TRACE_RADIUS);
-#else
-    const long double groundTraceDepth =
-        ((long double)radius * BG_PRONE_GROUND_TRACE_SCALE +
-         (long double)height) - BG_PRONE_TRACE_RADIUS;
-#endif
     end[2] = (float)((long double)start[2] -
                      (long double)groundTraceDepth);
     traceFunc(&trace, start, mins, maxs, end, clientNum,
@@ -336,10 +311,6 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
         /* Keep the live drop through both sides of the slope comparison. */
         WIDE_FLOAT slopeDrop =
             (WIDE_FLOAT)groundTraceDepth * trace.fraction + BG_PRONE_TRACE_RADIUS;
-#if defined(LINUX_BEHAVIOR)
-        /* The Linux path stores and reloads this intermediate as binary32. */
-        slopeDrop = coduo_round_f32(slopeDrop);
-#endif
 
         if ((long double)frontClearance - (long double)slopeDrop <
             (long double)slopeDrop * BG_PRONE_MAX_SLOPE_RATIO) {
@@ -349,20 +320,6 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
 
         BG_PRONE_DEBUG_LINE(frontHit, middleHit,
                             BG_PRONE_DEBUG_MEDIUM_CYAN);
-#if defined(LINUX_BEHAVIOR)
-        /* Linux 0x22236..0x222ce stores every subtraction and subsequent
-         * product-add separately, including the final Z-radius add. */
-        delta[0] = (float)((long double)frontHit[0] - middleHit[0]);
-        delta[1] = (float)((long double)frontHit[1] - middleHit[1]);
-        delta[2] = (float)((long double)frontHit[2] - middleHit[2]);
-        delta[0] = (float)((long double)delta[0] +
-                           (long double)forward[0] * BG_PRONE_TRACE_RADIUS);
-        delta[1] = (float)((long double)delta[1] +
-                           (long double)forward[1] * BG_PRONE_TRACE_RADIUS);
-        delta[2] = (float)((long double)delta[2] +
-                           (long double)forward[2] * BG_PRONE_TRACE_RADIUS);
-        delta[2] = (float)((long double)delta[2] + BG_PRONE_TRACE_RADIUS);
-#else
         delta[0] = (float)(
             ((long double)frontHit[0] - middleHit[0]) +
             (long double)forward[0] * BG_PRONE_TRACE_RADIUS);
@@ -375,28 +332,8 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
         delta[2] = (float)((long double)deltaZ +
                            (long double)forward[2] * BG_PRONE_TRACE_RADIUS +
                            BG_PRONE_TRACE_RADIUS);
-#endif
         VectorNormalize(delta);
 
-#if defined(LINUX_BEHAVIOR)
-        /* Linux 0x222e4..0x2238f stores all three connector coordinates before
-         * reloading X and Y for the midpoint averages. */
-        end[0] = (float)((long double)start[0] +
-                         ((long double)proneReach - BG_PRONE_FORWARD_PROBE) *
-                             (long double)delta[0]);
-        end[1] = (float)((long double)start[1] +
-                         ((long double)proneReach - BG_PRONE_FORWARD_PROBE) *
-                             (long double)delta[1]);
-        end[2] = (float)((long double)start[2] +
-                         ((long double)proneReach - BG_PRONE_FORWARD_PROBE) *
-                             (long double)delta[2]);
-        end[0] = (float)(((long double)proneReach * forward[0] +
-                          (long double)origin[0] + end[0]) *
-                         BG_PRONE_MIDPOINT_SCALE);
-        end[1] = (float)(((long double)proneReach * forward[1] +
-                          (long double)origin[1] + end[1]) *
-                         BG_PRONE_MIDPOINT_SCALE);
-#else
         /* Windows 0x300077cf stores only the Y connector term before the outer
          * sum; the X connector term remains in x87. */
         const float connectMid1 = (float)(
@@ -412,7 +349,6 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
         end[1] = (float)(
             ((long double)proneReach * forward[1] + origin[1] + connectMid1) *
             BG_PRONE_MIDPOINT_SCALE);
-#endif
 
         traceFunc(&trace, start, mins, maxs, end, clientNum,
                   (int32_t)contentMask);
@@ -444,20 +380,11 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
     start[2] = frontHit[2];
     end[0] = frontHit[0];
     end[1] = frontHit[1];
-#if defined(LINUX_BEHAVIOR)
-    /* Linux 0x226d8..0x22722 forms the doubled drop as difference+difference;
-     * Windows uses one multiply by 2.0f. */
-    end[2] = (float)(
-        (long double)frontHit[2] -
-        (((long double)frontHit[2] - middleHit[2]) +
-         ((long double)frontHit[2] - middleHit[2]) + radius));
-#else
     end[2] = (float)(
         (long double)frontHit[2] -
         (((long double)frontHit[2] - middleHit[2]) *
              BG_PRONE_FRONT_DROP_SCALE +
          radius));
-#endif
     traceFunc(&trace, start, mins, maxs, end, clientNum,
               (int32_t)contentMask);
     if (trace.fraction == BG_PRONE_TRACE_FULL_FRACTION) {
@@ -536,17 +463,9 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
 
     /* 0x30007c64..0x30007e04: point traces between the three samples, five
      * units above the ground. */
-#if defined(LINUX_BEHAVIOR)
-    /* Linux 0x229ef..0x22a08 materializes the three point-trace minima by
-     * toggling the sign bit of positive zero. Windows stores positive zero. */
-    mins[0] = -0.0f;
-    mins[1] = -0.0f;
-    mins[2] = -0.0f;
-#else
     mins[0] = 0.0f;
     mins[1] = 0.0f;
     mins[2] = 0.0f;
-#endif
     maxs[0] = 0.0f;
     maxs[1] = 0.0f;
     maxs[2] = 0.0f;

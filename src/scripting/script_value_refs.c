@@ -24,7 +24,6 @@ static int16_t coduomp_script_vector_ref_from_bits(uint16_t bits)
 /* Source: CoDUOMP.exe 0x00484150..0x0048416a and coduo_lnxded
  * 0x080a6c6a..0x080a6c8a.  The Linux allocator's second argument is its
  * original unused allocation tag. */
-#if defined(WINDOWS_BEHAVIOR)
 float *AllocVector(void)
 {
     script_vector_storage_t *storage = MT_Alloc(sizeof(*storage));
@@ -32,16 +31,6 @@ float *AllocVector(void)
     storage->refCount = 0;
     return storage->value;
 }
-#else
-float *AllocVector(void)
-{
-    script_vector_storage_t *storage =
-        MT_Alloc(sizeof(*storage), SCRIPT_VECTOR_ALLOC_TAG);
-
-    storage->refCount = 0;
-    return storage->value;
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00484170..0x0048419a and the corresponding Linux
  * body immediately following AllocVector. Name and signature: exact Mac

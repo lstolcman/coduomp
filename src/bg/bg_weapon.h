@@ -61,13 +61,8 @@ int32_t BG_GetWeaponSlotForName(const char *name);
 const char *BG_GetWeaponSlotNameForIndex(int32_t slot);
 int32_t BG_GetWeaponIndexForName(const char *name);
 qboolean BG_IsAimDownSightWeapon(int32_t weapon);
-#if defined(WINDOWS_BEHAVIOR)
 long double BG_GetMinSpreadForWeapon(const playerState_t *ps, int32_t weapon,
                                      int32_t time, int32_t isAds);
-#else
-float BG_GetMinSpreadForWeapon(const playerState_t *ps, int32_t weapon,
-                               int32_t time, int32_t isAds);
-#endif
 qboolean BG_ParseWeaponInfoSpecificFieldType(void *weaponInfoBase,
                                               const char *value,
                                               int32_t fieldType);

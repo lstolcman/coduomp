@@ -31,7 +31,7 @@
  * PM_BeginAimDownSight/PM_EndAimDownSight spellings are normalized to the
  * canonical names exported by both Mac modules.  All floating-point operands
  * here are values already stored as binary32; no expression retains a live x87
- * intermediate, so this subsystem has no platform or EMULATE_X87 variant.
+ * intermediate; the same native arithmetic applies on every host.
  */
 
 void PM_BeginWeaponDeploy(void)

@@ -7,15 +7,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR)
 void *GetMemory(size_t size);
 void FreeMemory(void *memory);
-#elif defined(LINUX_BEHAVIOR)
-void *Com_ZoneDebugAlloc(size_t size);
-void Com_DebugFree(void *pointer);
-#else
-#error "precompiler_core.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /* Original Windows live copied-token count at 0x04927e84. */
 int32_t pc_tokenNodeCount;
@@ -64,11 +57,7 @@ void SourceWarning(source_t *source, const char *format, ...)
 void PC_PushIndent(source_t *source, int32_t type, qboolean skip)
 {
     indent_t *indent;
-#if defined(WINDOWS_BEHAVIOR)
     indent = GetMemory(sizeof(*indent));
-#else
-    indent = Com_ZoneDebugAlloc(sizeof(*indent));
-#endif
     indent->type = type;
     indent->skip = skip != qfalse ? qtrue : qfalse;
     indent->script = source->scriptStack;
@@ -93,11 +82,7 @@ void PC_PopIndent(source_t *source, int32_t *type, qboolean *skip)
     *skip = indent->skip;
     source->indentStack = indent->next;
     source->skip -= indent->skip;
-#if defined(WINDOWS_BEHAVIOR)
     FreeMemory(indent);
-#else
-    Com_DebugFree(indent);
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x00442a30..0x00442a85.
@@ -131,11 +116,7 @@ void PC_InitTokenHeap(void)
 token_t *PC_CopyToken(const token_t *token)
 {
     token_t *copy;
-#if defined(WINDOWS_BEHAVIOR)
     copy = GetMemory(sizeof(*copy));
-#else
-    copy = Com_ZoneDebugAlloc(sizeof(*copy));
-#endif
     if (copy == NULL) {
         Com_Error(ERR_FATAL, "EXE_ERR_OUT_OF_MEMORY");
         return NULL;
@@ -153,11 +134,7 @@ token_t *PC_CopyToken(const token_t *token)
  * Name: exact same-module Mac symbol PC_FreeToken. */
 void PC_FreeToken(token_t *token)
 {
-#if defined(WINDOWS_BEHAVIOR)
     FreeMemory(token);
-#else
-    Com_DebugFree(token);
-#endif
     --pc_tokenNodeCount;
 }
 

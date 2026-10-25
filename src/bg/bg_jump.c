@@ -2,7 +2,6 @@
 #include "bg_weapon.h"
 
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <stddef.h>
@@ -96,11 +95,6 @@
 #define PM_CHECKJUMP_SPREAD_ADD 64.0f
 #define PM_CHECKJUMP_SPREAD_MAX 255.0f
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 qboolean PM_CheckJump(void)
 {
@@ -176,21 +170,6 @@ qboolean PM_CheckJump(void)
 
         /* Both targets compare this dot without a binary32 spill.  Windows
          * folds X,Z,Y; Linux folds X,Y,Z. */
-#if defined(WINDOWS_BEHAVIOR)
-#if EMULATE_X87
-        {
-            const x87f rawDot = x87f_add(
-                x87f_add(
-                    x87f_mul(x87f_load_f32(pml.forward[0]),
-                             x87f_load_f32(surfacePs->ladderNormal[0])),
-                    x87f_mul(x87f_load_f32(pml.forward[2]),
-                             x87f_load_f32(surfacePs->ladderNormal[2]))),
-                x87f_mul(x87f_load_f32(pml.forward[1]),
-                         x87f_load_f32(surfacePs->ladderNormal[1])));
-            movingIntoSurface =
-                x87f_lt(rawDot, x87f_load_f32(0.0f)) ? qtrue : qfalse;
-        }
-#else
         {
             const long double rawDot =
                 ((long double)pml.forward[0] *
@@ -201,34 +180,6 @@ qboolean PM_CheckJump(void)
                     (long double)surfacePs->ladderNormal[1];
             movingIntoSurface = rawDot < 0.0L ? qtrue : qfalse;
         }
-#endif
-#else
-#if EMULATE_X87
-        {
-            const x87f rawDot = x87f_add(
-                x87f_add(
-                    x87f_mul(x87f_load_f32(pml.forward[0]),
-                             x87f_load_f32(surfacePs->ladderNormal[0])),
-                    x87f_mul(x87f_load_f32(pml.forward[1]),
-                             x87f_load_f32(surfacePs->ladderNormal[1]))),
-                x87f_mul(x87f_load_f32(pml.forward[2]),
-                         x87f_load_f32(surfacePs->ladderNormal[2])));
-            movingIntoSurface =
-                x87f_lt(rawDot, x87f_load_f32(0.0f)) ? qtrue : qfalse;
-        }
-#else
-        {
-            const long double rawDot =
-                ((long double)pml.forward[0] *
-                     (long double)surfacePs->ladderNormal[0] +
-                 (long double)pml.forward[1] *
-                     (long double)surfacePs->ladderNormal[1]) +
-                (long double)pml.forward[2] *
-                    (long double)surfacePs->ladderNormal[2];
-            movingIntoSurface = rawDot < 0.0L ? qtrue : qfalse;
-        }
-#endif
-#endif
 
         float h0, h1;
         if (movingIntoSurface != qfalse) {
@@ -239,27 +190,6 @@ qboolean PM_CheckJump(void)
              * a float slot, so both are carried long double. The reflected[] stores
              * (FSTP at 0x30008e16/0x30008e1c/0x30008e20) are the only roundings. */
             vec3_t reflected;
-#if defined(WINDOWS_BEHAVIOR)
-#if EMULATE_X87
-            {
-                const x87f nDot = x87f_add(
-                    x87f_add(
-                        x87f_mul(x87f_load_f32(forward[0]),
-                                 x87f_load_f32(surfacePs->ladderNormal[0])),
-                        x87f_mul(x87f_load_f32(forward[2]),
-                                 x87f_load_f32(surfacePs->ladderNormal[2]))),
-                    x87f_mul(x87f_load_f32(forward[1]),
-                             x87f_load_f32(surfacePs->ladderNormal[1])));
-                const x87f redirect = x87f_mul(
-                    x87f_load_f32(PM_CHECKJUMP_REFLECT_SCALE), nDot);
-                for (int32_t lane = 0; lane < 3; ++lane) {
-                    reflected[lane] = x87f_store_f32(x87f_add(
-                        x87f_load_f32(forward[lane]),
-                        x87f_mul(redirect, x87f_load_f32(
-                            surfacePs->ladderNormal[lane]))));
-                }
-            }
-#else
             {
                 const long double nDot =
                     ((long double)forward[0] *
@@ -277,48 +207,6 @@ qboolean PM_CheckJump(void)
                             (long double)surfacePs->ladderNormal[lane]);
                 }
             }
-#endif
-#else
-#if EMULATE_X87
-            {
-                const float nDot = x87f_store_f32(x87f_add(
-                    x87f_add(
-                        x87f_mul(x87f_load_f32(forward[0]),
-                                 x87f_load_f32(surfacePs->ladderNormal[0])),
-                        x87f_mul(x87f_load_f32(forward[1]),
-                                 x87f_load_f32(surfacePs->ladderNormal[1]))),
-                    x87f_mul(x87f_load_f32(forward[2]),
-                             x87f_load_f32(surfacePs->ladderNormal[2]))));
-                for (int32_t lane = 0; lane < 3; ++lane) {
-                    reflected[lane] = x87f_store_f32(x87f_add(
-                        x87f_load_f32(forward[lane]),
-                        x87f_mul(
-                            x87f_mul(x87f_load_f32(nDot),
-                                     x87f_load_f32(
-                                         PM_CHECKJUMP_REFLECT_SCALE)),
-                            x87f_load_f32(
-                                surfacePs->ladderNormal[lane]))));
-                }
-            }
-#else
-            {
-                const float nDot = (float)(
-                    ((long double)forward[0] *
-                         (long double)surfacePs->ladderNormal[0] +
-                     (long double)forward[1] *
-                         (long double)surfacePs->ladderNormal[1]) +
-                    (long double)forward[2] *
-                        (long double)surfacePs->ladderNormal[2]);
-                for (int32_t lane = 0; lane < 3; ++lane) {
-                    reflected[lane] = (float)(
-                        (long double)forward[lane] +
-                        (long double)nDot *
-                            (long double)PM_CHECKJUMP_REFLECT_SCALE *
-                            (long double)surfacePs->ladderNormal[lane]);
-                }
-            }
-#endif
-#endif
             (void)VectorNormalize(reflected);
 
             h0 = reflected[0];

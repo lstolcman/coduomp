@@ -41,22 +41,22 @@
  *   +-inf -> indefinite QNaN (domain error)
  *   NaN   -> quieted
  *
- * EMULATION STATUS: none. These depend on FSIN and FCOS, which have no
- * SoftFloat equivalent and await the x87 transcendental reverse engineering. On
- * EMULATE_X87 builds they fall through to the platform libm -- a known,
- * deliberate gap; see the table in coduo_libm.h.
+ * Native x87 builds execute FSIN and FCOS directly. Other supported
+ * targets use the shared native wide-math adapters at the same double boundary.
  */
 #include "coduo_libm.h"
-#include "compat/coduo_x87emu.h"
 
 #include <math.h>
 #include <string.h>
+
+#include "coduo_wide_math.h"
+
+#if (defined(__i386__) || defined(__x86_64__)) && (defined(__GNUC__) || defined(__clang__)) && LDBL_MANT_DIG == 64
 
 #define SINCOS_HIGH_EXPONENT_MASK 0x7ff00000u
 #define SINCOS_HIGH_MANTISSA_MASK 0x000fffffu
 #define SINCOS_CONTROL_WORD       0x027fu /* ds:0x200a1778 -- PC = 53-bit */
 
-#if !EMULATE_X87
 /* TBYTE ds:0x200a177a — pi * 2^62, built from the stock bytes so it is exact. */
 static const union {
     unsigned char raw[sizeof(long double)];
@@ -107,14 +107,9 @@ static void SinCosRestoreControlWord(unsigned short saved)
 {
     __asm__ __volatile__("fldcw %0" : : "m"(saved));
 }
-#endif /* !EMULATE_X87 */
 
 double CoduoLibm_Sin(double value)
 {
-#if EMULATE_X87
-    /* No emulation: depends on FSIN. Documented gap; platform libm is used. */
-    return sin(value);
-#else
     const uint32_t high = SinCosHighDword(value);
     const uint32_t low = SinCosLowDword(value);
     unsigned short saved;
@@ -147,15 +142,10 @@ double CoduoLibm_Sin(double value)
                          : "eax", "cc", "st(1)");
     SinCosRestoreControlWord(saved);
     return (double)result;
-#endif
 }
 
 double CoduoLibm_Cos(double value)
 {
-#if EMULATE_X87
-    /* No emulation: depends on FCOS. Documented gap; platform libm is used. */
-    return cos(value);
-#else
     const uint32_t high = SinCosHighDword(value);
     const uint32_t low = SinCosLowDword(value);
     unsigned short saved;
@@ -188,5 +178,20 @@ double CoduoLibm_Cos(double value)
                          : "eax", "cc", "st(1)");
     SinCosRestoreControlWord(saved);
     return (double)result;
-#endif
 }
+
+#else
+
+/* NOT_FROM_ORIGINAL_SOURCE: native arithmetic adapter for this CRT boundary. */
+double CoduoLibm_Sin(double value)
+{
+    return (double)coduomp_math_sinl((long double)value);
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: native arithmetic adapter for this CRT boundary. */
+double CoduoLibm_Cos(double value)
+{
+    return (double)coduomp_math_cosl((long double)value);
+}
+
+#endif

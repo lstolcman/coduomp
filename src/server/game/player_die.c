@@ -14,7 +14,6 @@
 #include "g_syscalls.h"
 #include "game_functions.h"
 #include "scr_vm.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #define PLAYER_DIE_STUCK_CONTENTS 0x04000000u
 #define PLAYER_DIE_TURRET_PS_FLAGS 0x00006000u

@@ -7,11 +7,7 @@
 #include "level_locals.h"
 
 /* Original module identity follows the selected platform behavior. */
-#if defined(WINDOWS_BEHAVIOR)
 #define GAME_STOCK_BUILD_DATE "Dec 21 2004"
-#else
-#define GAME_STOCK_BUILD_DATE "Feb 10 2005"
-#endif
 
 /*
  * Global variable declarations.

@@ -1,15 +1,10 @@
 #ifndef SHARED_ANIMATION_XANIM_H
 #define SHARED_ANIMATION_XANIM_H
-
-#include "compat/coduo_fp_platform.h"
 #include "qcommon/q_shared_types.h"
 #include "math/q_matrix_types.h"
 #include "qcommon/script_types.h"
 #include "qcommon/xanim_types.h"
 
-#if defined(LINUX_BEHAVIOR) && EMULATE_X87
-#include "compat/coduo_x87emu.h"
-#endif
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -34,17 +29,10 @@ qboolean XAnimNotetrackExists(XAnim *tree, int32_t animIndex,
                               uint16_t notetrack);
 /*
  * XAnimGetLength returns its unspilled x87 quotient.  Windows computes under
- * PC=53, which a binary64 carrier represents exactly.  Linux computes under
- * PC=64 and callers can consume the value before any narrowing store, so its
- * native and software-x87 carriers must retain the full result.
+ * PC=53; a binary64 carrier retains the precision required by this Windows
+ * return contract on every supported host.
  */
-#if defined(WINDOWS_BEHAVIOR)
 typedef double xanim_length_t;
-#elif EMULATE_X87
-typedef x87f xanim_length_t;
-#else
-typedef long double xanim_length_t;
-#endif
 xanim_length_t XAnimGetLength(XAnim *tree, int32_t animIndex);
 uint16_t XAnimGetNextNotifyTime(XAnimEntry *entry, XAnimInfo *node,
                                 float time);
@@ -54,11 +42,7 @@ uint16_t XAnimGetNextNotifyTime(XAnimEntry *entry, XAnimInfo *node,
  * callee.  This source-level carrier preserves the observable distinction on
  * non-x87 targets while retaining the original numeric return on native x87.
  */
-#if defined(WINDOWS_BEHAVIOR)
 typedef double xanim_notify_fraction_t;
-#else
-typedef float xanim_notify_fraction_t;
-#endif
 xanim_notify_fraction_t XAnimGetNotifyFracLeaf(float notifyTime);
 xanim_notify_fraction_t XAnimGetNotifyFracServer(XAnimInfo *node,
                                                   XAnimEntry *entry);
@@ -126,11 +110,7 @@ void XAnimDisplay(XAnimTree *tree, uint32_t animIndex, int32_t depth);
 /* The Windows average-rate quotient remains live at PC=53 through recursive
  * blends and synchronized time updates.  Linux stores it to binary32 before
  * returning.  Preserve each result across the host's floating return ABI. */
-#if defined(WINDOWS_BEHAVIOR)
 typedef double xanim_rate_frequency_t;
-#else
-typedef float xanim_rate_frequency_t;
-#endif
 xanim_rate_frequency_t XAnimGetAverageRateFrequency(uint32_t nodeIndex);
 qboolean XAnimUpdateInfoNoWeightClient(uint32_t nodeIndex);
 void XAnimAddClientNotify(XAnimInfo *node, XAnimEntry *entry,

@@ -1,6 +1,5 @@
 #include "server_snapshot_send.h"
 
-#include "compat/coduo_x87emu.h"
 #include "qcommon/huffman.h"
 #include "qcommon/msg_delta.h"
 #include "qcommon/net_text.h"
@@ -469,11 +468,7 @@ void SV_SendClientMessages(void)
         return;
     }
 
-#if EMULATE_X87
-    x87f compressedBytes = x87f_load_f32(0.0f);
-#else
     long double compressedBytes = 0.0L;
-#endif
     float uncompressedBytes = 0.0f;
     for (int32_t sampleIndex = 0;
         sampleIndex <
@@ -481,51 +476,27 @@ void SV_SendClientMessages(void)
          ++sampleIndex) {
         sv_compressedBpsWindow[sampleIndex] =
             sv_compressedBpsWindow[sampleIndex + 1];
-#if EMULATE_X87
-        compressedBytes = x87f_add(
-            compressedBytes,
-            x87f_load_i32(sv_compressedBpsWindow[sampleIndex]));
-#else
         compressedBytes +=
             (long double)sv_compressedBpsWindow[sampleIndex];
-#endif
 
         sv_uncompressedBpsWindow[sampleIndex] =
             sv_uncompressedBpsWindow[sampleIndex + 1];
-#if EMULATE_X87
-        uncompressedBytes = x87f_store_f32(x87f_add(
-            x87f_load_f32(uncompressedBytes),
-            x87f_load_i32(sv_uncompressedBpsWindow[sampleIndex])));
-#else
         uncompressedBytes = (float)(
             (long double)uncompressedBytes +
             (long double)sv_uncompressedBpsWindow[sampleIndex]);
-#endif
     }
 
     sv_compressedBpsWindow[
         SERVER_AVERAGE_BPS_WINDOW_COUNT - 1] =
         sv_totalBytesSentThisFrame;
-#if EMULATE_X87
-    compressedBytes = x87f_add(
-        compressedBytes,
-        x87f_load_i32(sv_totalBytesSentThisFrame));
-#else
     compressedBytes += (long double)sv_totalBytesSentThisFrame;
-#endif
 
     sv_uncompressedBpsWindow[
         SERVER_AVERAGE_BPS_WINDOW_COUNT - 1] =
         sv_totalUncompressedBytesThisFrame;
-#if EMULATE_X87
-    uncompressedBytes = x87f_store_f32(x87f_add(
-        x87f_load_f32(uncompressedBytes),
-        x87f_load_i32(sv_totalUncompressedBytesThisFrame)));
-#else
     uncompressedBytes = (float)(
         (long double)uncompressedBytes +
         (long double)sv_totalUncompressedBytesThisFrame);
-#endif
 
     if (sv_totalBytesSentThisFrame >=
         sv_compressedBpsMax) {
@@ -549,22 +520,6 @@ void SV_SendClientMessages(void)
     /* 0x00466eaf..0x00466f27 keeps both scaled byte totals and the current
      * compression ratio on the x87 stack through all seven variadic
      * arguments. Only the running ratio sum is rounded to float. */
-#if EMULATE_X87
-    const x87f averageScale =
-        x87f_load_f32(0.05000000074505806f);
-    const x87f uncompressedBytesRaw = x87f_mul(
-        x87f_load_f32(uncompressedBytes), averageScale);
-    const x87f compressedBytesRaw = x87f_mul(
-        compressedBytes, averageScale);
-    const x87f compressionRatioRaw = x87f_mul(
-        x87f_sub(x87f_load_f32(1.0f),
-                 x87f_div(compressedBytesRaw,
-                          uncompressedBytesRaw)),
-        x87f_load_f32(100.0f));
-    sv_averageCompressionRatioSum = x87f_store_f32(x87f_add(
-        x87f_load_f32(sv_averageCompressionRatioSum),
-        compressionRatioRaw));
-#else
     const long double uncompressedBytesRaw =
         (long double)uncompressedBytes *
         (long double)0.05000000074505806f;
@@ -577,38 +532,19 @@ void SV_SendClientMessages(void)
     sv_averageCompressionRatioSum = (float)(
         (long double)sv_averageCompressionRatioSum +
         compressionRatioRaw);
-#endif
     ++sv_averageCompressionRatioCount;
 
     Com_DPrintf(
         "bpspc(%2.0f) bps(%2.0f) pk(%i) "
         "ubps(%2.0f) upk(%i) cr(%2.2f) "
         "acr(%2.2f)\n",
-#if EMULATE_X87
-        x87f_store_f64(x87f_div(
-            compressedBytesRaw,
-            x87f_load_i32(sentClientCount))),
-        x87f_store_f64(compressedBytesRaw),
-#else
         (double)(compressedBytesRaw /
                  (long double)sentClientCount),
         (double)compressedBytesRaw,
-#endif
         sv_compressedBpsMax,
-#if EMULATE_X87
-        x87f_store_f64(uncompressedBytesRaw),
-#else
         (double)uncompressedBytesRaw,
-#endif
         sv_uncompressedBpsMax,
-#if EMULATE_X87
-        x87f_store_f64(compressionRatioRaw),
-        x87f_store_f64(x87f_div(
-            x87f_load_f32(sv_averageCompressionRatioSum),
-            x87f_load_i32(sv_averageCompressionRatioCount))));
-#else
         (double)compressionRatioRaw,
         (double)((long double)sv_averageCompressionRatioSum /
                  (long double)sv_averageCompressionRatioCount));
-#endif
 }

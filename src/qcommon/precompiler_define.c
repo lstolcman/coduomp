@@ -9,17 +9,9 @@
 #include <string.h>
 #include <time.h>
 
-#if defined(WINDOWS_BEHAVIOR)
 void *GetClearedMemory(size_t size);
 void FreeMemory(void *memory);
 void Log_Write(const char *format, ...);
-#elif defined(LINUX_BEHAVIOR)
-void *Com_ZoneDebugAlloc(size_t size);
-void Com_DebugFree(void *pointer);
-void Com_LogPrintf(const char *format, ...);
-#else
-#error "precompiler_define.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 enum {
     PC_DEFINE_HASH_INDEX_BIAS = 119,
@@ -221,24 +213,12 @@ qboolean PC_MergeTokens(token_t *token,
 void PC_PrintDefineHashTable(define_t **defineHash)
 {
     for (int32_t bucket = 0; bucket < PC_DEFINE_HASH_BUCKET_COUNT; ++bucket) {
-#if defined(WINDOWS_BEHAVIOR)
         Log_Write("%4d:", bucket);
-#else
-        Com_LogPrintf("%4d:", bucket);
-#endif
         for (define_t *define = defineHash[bucket]; define != NULL;
              define = define->hashNext) {
-#if defined(WINDOWS_BEHAVIOR)
             Log_Write(" %s", define->name);
-#else
-            Com_LogPrintf(" %s", define->name);
-#endif
         }
-#if defined(WINDOWS_BEHAVIOR)
         Log_Write("\n");
-#else
-        Com_LogPrintf("\n");
-#endif
     }
 }
 
@@ -330,11 +310,7 @@ void PC_FreeDefine(define_t *define)
         PC_FreeToken(token);
         token = next;
     }
-#if defined(WINDOWS_BEHAVIOR)
     FreeMemory(define);
-#else
-    Com_DebugFree(define);
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x00443400..0x00443545.
@@ -358,12 +334,7 @@ void PC_AddBuiltinDefines(source_t *source)
     for (int32_t index = 0; builtins[index].defineName != NULL; ++index) {
         const size_t nameLength = strlen(builtins[index].defineName);
         define_t *define;
-#if defined(WINDOWS_BEHAVIOR)
         define = GetClearedMemory(sizeof(*define) + nameLength + 1);
-#else
-        define = Com_ZoneDebugAlloc(sizeof(*define) + nameLength + 1);
-        memset(define, 0, sizeof(*define));
-#endif
 
         define->name = define->nameStorage;
         strcpy(define->name, builtins[index].defineName);
@@ -386,25 +357,10 @@ qboolean PC_ExpandBuiltinDefine(source_t *source,
 
     switch (define->builtin) {
     case PC_BUILTIN_LINE:
-#if defined(WINDOWS_BEHAVIOR)
         coduo_crt_snprintf(expanded->string, sizeof(expanded->string),
                              "%d", token->line);
-#else
-        sprintf(expanded->string, "%d", token->line);
-#endif
         expanded->intValue = token->line;
-#if defined(WINDOWS_BEHAVIOR)
         expanded->floatValue = (double)token->line;
-#elif EMULATE_X87
-        coduo_pc_store_token_float80(
-            expanded->floatValue, x87f_load_i32(token->line));
-#else
-        {
-            const long double lineValue = (long double)token->line;
-            memcpy(expanded->floatValue, &lineValue,
-                   PC_X87_EXTENDED_TBYTE_SIZE);
-        }
-#endif
         expanded->type = PC_TOKEN_TYPE_NUMBER;
         expanded->subtype = PC_TOKEN_SUBTYPE_DECIMAL_INTEGER;
         *firstToken = expanded;

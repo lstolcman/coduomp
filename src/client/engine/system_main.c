@@ -121,6 +121,7 @@ int WINAPI WinMain(HINSTANCE applicationInstance,
 
 #include "platform/crt_boundary.h"
 #include "platform/sdl_platform.h"
+#include "platform/floating_point_boundary.h"
 #include "q_shared.h"
 #include "system_info.h"
 #include "system_input.h"
@@ -183,6 +184,8 @@ int main(int argc, char **argv)
 {
     char commandLine[SYS_NATIVE_COMMAND_LINE_CAPACITY];
     char workingDirectory[MAX_OSPATH];
+
+    coduomp_restore_retail_x87_precision();
 
 #if defined(__APPLE__)
     if (coduomp_macos_prepare_launch(argc, argv) == 0)

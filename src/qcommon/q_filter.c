@@ -8,11 +8,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "q_filter.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 enum {
     COM_FILTER_CHUNK_SIZE = 1024
@@ -26,11 +21,9 @@ static int coduo_filter_toupper(int value)
 {
     const int signedValue = (int)(int8_t)(uint8_t)value;
 
-#if defined(WINDOWS_BEHAVIOR)
     if (signedValue < EOF) {
         return signedValue;
     }
-#endif
     return toupper(coduo_ctype_signed_byte_arg(signedValue));
 }
 

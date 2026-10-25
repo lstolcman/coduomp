@@ -5,7 +5,6 @@
 #include <string.h>
 #include <strings.h>
 
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #include "../core_math/core_math_private.h"
 #include "../core_memory/core_memory_private.h"

@@ -1,12 +1,6 @@
 #include "q_math.h"
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 /*
  * All six authoritative LerpAngle bodies retain the same working binary32
@@ -23,32 +17,13 @@
  * addresses.  The Linux bodies use FUCOMPP instead of the Windows FCOMP/status
  * tests and run under PC=64 rather than PC=53, but preserve the arithmetic,
  * branch results, and store order.  The comparison opcode is a lowering
- * detail; EMULATE_X87 independently selects the required arithmetic precision.
+ * detail; the maintained Windows graph uses native wide intermediates.
  * The result is explicitly narrowed to binary32 before return in every body.
  */
 float LerpAngle(float from, float to, float fraction)
 {
     float target = to;
 
-#if EMULATE_X87
-    x87f difference =
-        x87f_sub(x87f_load_f32(to), x87f_load_f32(from));
-    if (x87f_lt(x87f_load_f32(180.0f), difference)) {
-        target = x87f_store_f32(
-            x87f_sub(x87f_load_f32(to), x87f_load_f32(360.0f)));
-    }
-
-    difference = x87f_sub(x87f_load_f32(target), x87f_load_f32(from));
-    if (x87f_lt(difference, x87f_load_f32(-180.0f))) {
-        target = x87f_store_f32(
-            x87f_add(x87f_load_f32(target), x87f_load_f32(360.0f)));
-    }
-
-    difference = x87f_sub(x87f_load_f32(target), x87f_load_f32(from));
-    return x87f_store_f32(x87f_add(
-        x87f_mul(difference, x87f_load_f32(fraction)),
-        x87f_load_f32(from)));
-#else
     long double difference = (long double)to - (long double)from;
 
     if (difference > 180.0L) {
@@ -66,7 +41,6 @@ float LerpAngle(float from, float to, float fraction)
      * control word; it does not impose a platform-specific C type. */
     volatile long double product = difference * (long double)fraction;
     return (float)(product + (long double)from);
-#endif
 }
 
 /*

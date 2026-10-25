@@ -3,11 +3,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Shared server qsort requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 enum {
     CODUO_QSORT_CUTOFF = 8,
@@ -206,12 +201,5 @@ void coduo_crt_qsort(void *base, size_t count, size_t width,
 void coduo_qsort(void *base, size_t count, size_t width,
                  int (*compare)(const void *, const void *))
 {
-#if defined(WINDOWS_BEHAVIOR)
     coduo_crt_qsort(base, count, width, compare);
-#else
-    /* The original Linux engine and game module import qsort@GLIBC_2.0. The
-     * symbol version proves the ABI floor, not one historical glibc sorting
-     * algorithm or a stable order for comparator-equal records. */
-    qsort(base, count, width, compare);
-#endif
 }

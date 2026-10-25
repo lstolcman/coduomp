@@ -2,7 +2,6 @@
 
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "q_cvar.h"
 #include "q_string.h"
 
@@ -22,8 +21,8 @@ extern cvar_t *cl_shownet;
  *
  * The only result-affecting platform split is the established x87 conversion
  * width: Windows consumes the low dword of `_ftol2`'s signed-qword result,
- * while Linux uses a direct signed-dword FISTP.  EMULATE_X87 remains an
- * independent arithmetic implementation for either behavior selection.
+ * while Linux used a direct signed-dword FISTP. The maintained body always
+ * follows the Windows conversion contract.
  */
 
 enum {
@@ -723,36 +722,13 @@ void MSG_SetDefaultUserCmd(const playerState_t *playerState,
     command->weapon = (uint8_t)playerState->currentWeapon;
 
     for (int32_t axis = 0; axis < 2; ++axis) {
-#if defined(WINDOWS_BEHAVIOR)
-#if EMULATE_X87
-        const x87f scaledAngle = x87f_mul(
-            x87f_load_f32(playerState->viewAngles[axis]),
-            x87f_load_f32(MSG_ANGLE_TO_SHORT_NEGATIVE_SCALE));
-        const int64_t convertedAngle = x87f_store_i64_trunc(scaledAngle);
-        const int32_t negativeEncodedAngle = coduo_int32_from_bits(
-            (uint32_t)(uint64_t)convertedAngle);
-#else
         const int32_t negativeEncodedAngle =
             coduo_fp_to_i32_extended(
                 (long double)playerState->viewAngles[axis] *
                 (long double)MSG_ANGLE_TO_SHORT_NEGATIVE_SCALE);
-#endif
         command->angles[axis] =
             (-playerState->deltaAngles[axis] - negativeEncodedAngle) &
             UINT16_MAX;
-#else
-#if EMULATE_X87
-        const int32_t encodedAngle = x87f_store_i32_trunc(x87f_mul(
-            x87f_load_f32(playerState->viewAngles[axis]),
-            x87f_load_f32(MSG_ANGLE_TO_SHORT_SCALE)));
-#else
-        const int32_t encodedAngle = coduo_fp_to_i32_extended(
-            (long double)playerState->viewAngles[axis] *
-            (long double)MSG_ANGLE_TO_SHORT_SCALE);
-#endif
-        command->angles[axis] =
-            (encodedAngle - playerState->deltaAngles[axis]) & UINT16_MAX;
-#endif
     }
 
     if ((playerState->playerStateFlags & PSF_ACTIVE_PLAYER) == 0)
@@ -1041,19 +1017,7 @@ void MSG_WriteDeltaField(msg_t *message, const void *from, const void *to,
         int32_t biased;
 
         memcpy(&newFloat, &newValue, sizeof(newFloat));
-#if EMULATE_X87
-        const x87f convertedFloat = x87f_load_f32(newFloat);
-#if defined(WINDOWS_BEHAVIOR)
-        const int64_t convertedInteger =
-            x87f_store_i64_trunc(convertedFloat);
-        rounded = coduo_int32_from_bits(
-            (uint32_t)(uint64_t)convertedInteger);
-#else
-        rounded = x87f_store_i32_trunc(convertedFloat);
-#endif
-#else
         rounded = coduo_fp_to_i32_extended((long double)newFloat);
-#endif
 
         if (newFloat == 0.0f) {
             MSG_WriteBit0(message);
@@ -1609,19 +1573,7 @@ static void coduomp_msg_write_delta_playerstate_field(
         int32_t rounded;
 
         memcpy(&newFloat, &newValue, sizeof(newFloat));
-#if EMULATE_X87
-        const x87f convertedFloat = x87f_load_f32(newFloat);
-#if defined(WINDOWS_BEHAVIOR)
-        const int64_t convertedInteger =
-            x87f_store_i64_trunc(convertedFloat);
-        rounded = coduo_int32_from_bits(
-            (uint32_t)(uint64_t)convertedInteger);
-#else
-        rounded = x87f_store_i32_trunc(convertedFloat);
-#endif
-#else
         rounded = coduo_fp_to_i32_extended((long double)newFloat);
-#endif
 
         const int32_t biased =
             (int32_t)((uint32_t)rounded + MSG_DELTA_SMALL_INT_BIAS);

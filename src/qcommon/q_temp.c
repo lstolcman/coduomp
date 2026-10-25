@@ -7,11 +7,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 enum {
     Q_VA_LAST_INDEX = MAX_VA_STRING - 1,
@@ -58,7 +53,7 @@ char *va(const char *format, ...)
     char *result;
 
     va_start(arguments, format);
-#if defined(WINDOWS_BEHAVIOR) && defined(_WIN32)
+#if defined(_WIN32)
     length = _vsnprintf(q_vaTempBuffer, sizeof(q_vaTempBuffer),
                         format, arguments);
 #else
@@ -67,7 +62,7 @@ char *va(const char *format, ...)
 #endif
     va_end(arguments);
 
-#if defined(WINDOWS_BEHAVIOR) && !defined(_WIN32)
+#if !defined(_WIN32)
     enum {
         Q_VA_FORMAT_FAILURE = -1
     };

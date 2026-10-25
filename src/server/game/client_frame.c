@@ -15,7 +15,6 @@
 #include "scr_vm.h"
 #include "g_syscalls.h"
 #include "game_functions.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
 #include "compat/libm/coduo_libm.h"
 #include "compat/coduo_int32_bits.h"
@@ -268,21 +267,10 @@ static qboolean game_compat_stuck_capsule_box_overlap(const gentity_t *capsule,
      * instruction-stream parity. */
     /* Stock 0x42863..0x42879: (maxs[0]*-1.0)*normal[k] + delta kept 80-bit, one
      * store -> shim. */
-#if EMULATE_X87
-    adjustedX = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_mul(x87f_load_f32(capsule->maxs[0]), x87f_load_f32(-1.0f)),
-                 x87f_load_f32(normal[0])),
-        x87f_load_f32(deltaX)));
-    adjustedY = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_mul(x87f_load_f32(capsule->maxs[0]), x87f_load_f32(-1.0f)),
-                 x87f_load_f32(normal[1])),
-        x87f_load_f32(deltaY)));
-#else
     adjustedX = (float)(((long double)capsule->maxs[0] * -1.0L) *
                         (long double)normal[0] + (long double)deltaX);
     adjustedY = (float)(((long double)capsule->maxs[0] * -1.0L) *
                         (long double)normal[1] + (long double)deltaY);
-#endif
 
     /* Stock rejects only when both ordered greater-than tests succeed. */
     return !(game_compat_abs_float(adjustedX) > box->maxs[0]) ||
@@ -308,12 +296,6 @@ static qboolean game_compat_stuck_shapes_overlap(const gentity_t *ent, const gen
         float radius = ent->maxs[0] + other->maxs[0];
 
         /* dx*dx+dy*dy vs radius*radius kept 80-bit, full-width compare -> shim */
-#if EMULATE_X87
-        return x87f_le(
-            x87f_add(x87f_mul(x87f_load_f32(dx), x87f_load_f32(dx)),
-                     x87f_mul(x87f_load_f32(dy), x87f_load_f32(dy))),
-            x87f_mul(x87f_load_f32(radius), x87f_load_f32(radius)));
-#else
         long double distanceSquared =
             (long double)dx * (long double)dx +
             (long double)dy * (long double)dy;
@@ -321,7 +303,6 @@ static qboolean game_compat_stuck_shapes_overlap(const gentity_t *ent, const gen
             (long double)radius * (long double)radius;
 
         return !(distanceSquared > radiusSquared);
-#endif
     }
 
     if (entCapsule) {
@@ -337,20 +318,12 @@ static float game_compat_stuck_client_move_speed(gclient_t *client)
     /* The binary tests (float)CoduoLibm_Sqrt((double)(vx*vx + vy*vy)) > 0.0f
      * (0x42a34..0x42a6a): the planar speed rounds to double at the sqrt call
      * boundary and to float at the result store. */
-#if EMULATE_X87
-    float speed2D = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
-        x87f_mul(x87f_load_f32(client->ps.velocity[0]),
-                 x87f_load_f32(client->ps.velocity[0])),
-        x87f_mul(x87f_load_f32(client->ps.velocity[1]),
-                 x87f_load_f32(client->ps.velocity[1])))));
-#else
     long double speedSquared =
         (long double)client->ps.velocity[0] *
             (long double)client->ps.velocity[0] +
         (long double)client->ps.velocity[1] *
             (long double)client->ps.velocity[1];
     float speed2D = (float)CoduoLibm_Sqrt((double)speedSquared);
-#endif
 
     if (speed2D > 0.0f) {
         return client->ps.speed;
@@ -426,18 +399,6 @@ void P_DamageFeedback(gentity_t *ent)
 
         /* Stock 0x3f7f4..0x3f823: the damageFrom.axis dot is a 3-mul/2-add chain
          * kept 80-bit, multiplied by (-)kick, one store -> shim. */
-#if EMULATE_X87
-        client->damageRoll = x87f_store_f32(x87f_mul(
-            x87f_neg(x87f_load_f32(kick)),
-            x87f_add(x87f_add(x87f_mul(x87f_load_f32(damageFrom[0]), x87f_load_f32(axis[1][0])),
-                              x87f_mul(x87f_load_f32(damageFrom[1]), x87f_load_f32(axis[1][1]))),
-                     x87f_mul(x87f_load_f32(damageFrom[2]), x87f_load_f32(axis[1][2])))));
-        client->damagePitch = x87f_store_f32(x87f_mul(
-            x87f_load_f32(kick),
-            x87f_add(x87f_add(x87f_mul(x87f_load_f32(damageFrom[0]), x87f_load_f32(axis[0][0])),
-                              x87f_mul(x87f_load_f32(damageFrom[1]), x87f_load_f32(axis[0][1]))),
-                     x87f_mul(x87f_load_f32(damageFrom[2]), x87f_load_f32(axis[0][2])))));
-#else
         long double rollDot =
             ((long double)damageFrom[0] * (long double)axis[1][0] +
              (long double)damageFrom[1] * (long double)axis[1][1]) +
@@ -449,19 +410,8 @@ void P_DamageFeedback(gentity_t *ent)
 
         client->damageRoll = (float)(-(long double)kick * rollDot);
         client->damagePitch = (float)((long double)kick * pitchDot);
-#endif
         /* Stock 0x3f86b..0x3f884: (angle/circle)*scale kept 80-bit, fistp with
          * RC=truncate DIRECTLY (no float rounding of the scaled angle). */
-#if EMULATE_X87
-        client->ps.damagePitch = x87f_store_i32_trunc(x87f_mul(
-            x87f_div(x87f_load_f32(damageAngles[0]),
-                     x87f_load_f32(DAMAGE_FEEDBACK_DEGREES_PER_CIRCLE)),
-            x87f_load_f32(DAMAGE_FEEDBACK_BYTE_SCALE)));
-        client->ps.damageYaw = x87f_store_i32_trunc(x87f_mul(
-            x87f_div(x87f_load_f32(damageAngles[1]),
-                     x87f_load_f32(DAMAGE_FEEDBACK_DEGREES_PER_CIRCLE)),
-            x87f_load_f32(DAMAGE_FEEDBACK_BYTE_SCALE)));
-#else
         client->ps.damagePitch =
             game_compat_int32_from_long_double_trunc(
                 ((long double)damageAngles[0] /
@@ -472,7 +422,6 @@ void P_DamageFeedback(gentity_t *ent)
                 ((long double)damageAngles[1] /
                  (long double)DAMAGE_FEEDBACK_DEGREES_PER_CIRCLE) *
                 (long double)DAMAGE_FEEDBACK_BYTE_SCALE);
-#endif
     } else {
         client->damageRoll = 0.0f;
         client->damagePitch = -kick;
@@ -487,17 +436,10 @@ void P_DamageFeedback(gentity_t *ent)
         /* The binary truncates (fistp with RC=truncate at 0x3f90c) straight
          * from the x87 register; the fild operands feed the divide with no
          * intermediate float store. */
-#if EMULATE_X87
-        int healthPercent = x87f_store_i32_trunc(x87f_mul(
-            x87f_div(x87f_load_i32(client->ps.stats[STAT_HEALTH]),
-                     x87f_load_i32(client->ps.stats[STAT_MAX_HEALTH])),
-            x87f_load_f32(100.0f)));
-#else
         int healthPercent =
             game_compat_int32_from_long_double_trunc(
                 ((long double)client->ps.stats[STAT_HEALTH] /
                  (long double)client->ps.stats[STAT_MAX_HEALTH]) * 100.0L);
-#endif
 
         if (healthPercent < 0) {
             healthPercent = 0;
@@ -1156,18 +1098,10 @@ qboolean StuckInClient(gentity_t *ent)
         dir[1] = other->currentOrigin[1] - ent->currentOrigin[1];
         /* Stock 0x429ab rounds dir[k] to float before adding a fresh signed
          * random jitter for each component. */
-#if EMULATE_X87
-        for (int k = 0; k < 2; k++) {
-            dir[k] = x87f_store_f32(x87f_add(
-                x87f_load_f32(dir[k]),
-                x87f_load_f64(coduo_server_rand_signed_unit())));
-        }
-#else
         dir[0] = (float)((long double)dir[0] +
                          (long double)coduo_server_rand_signed_unit());
         dir[1] = (float)((long double)dir[1] +
                          (long double)coduo_server_rand_signed_unit());
-#endif
         VectorNormalize2D(dir);
 
         otherSpeed = game_compat_stuck_client_move_speed(otherClient);
@@ -1302,81 +1236,40 @@ int G_GetNonPVSFriendlyInfo(gentity_t *ent, const float *origin, int lastClient)
          * float store) -> shim. */
         float deltaXf = candidate->currentOrigin[0] - origin[0];
         float deltaYf = candidate->currentOrigin[1] - origin[1];
-#if EMULATE_X87
-        int deltaX = x87f_store_i32_trunc(
-            x87f_add(x87f_load_f32(deltaXf), x87f_load_f32(0.5f)));
-        int deltaY = x87f_store_i32_trunc(
-            x87f_add(x87f_load_f32(deltaYf), x87f_load_f32(0.5f)));
-#else
         int deltaX = game_compat_int32_from_long_double_trunc(
             (long double)deltaXf + 0.5L);
         int deltaY = game_compat_int32_from_long_double_trunc(
             (long double)deltaYf + 0.5L);
-#endif
         float scaleX = 1.0f;
         float scaleY = 1.0f;
 
         /* Stock 0x4590c..0x45960: scale = (float)LIMIT / (fild)delta; the divide
          * is kept 80-bit and rounded to float on store -> shim. */
         if (deltaX > CLIENTEND_NONPVS_OFFSET_LIMIT_POS) {
-#if EMULATE_X87
-            scaleX = x87f_store_f32(x87f_div(
-                x87f_load_f32((float)CLIENTEND_NONPVS_OFFSET_LIMIT_POS),
-                x87f_load_i32(deltaX)));
-#else
             scaleX = (float)((long double)CLIENTEND_NONPVS_OFFSET_LIMIT_POS /
                              (long double)deltaX);
-#endif
         } else if (deltaX < CLIENTEND_NONPVS_OFFSET_LIMIT_NEG) {
-#if EMULATE_X87
-            scaleX = x87f_store_f32(x87f_div(
-                x87f_load_f32((float)CLIENTEND_NONPVS_OFFSET_LIMIT_NEG),
-                x87f_load_i32(deltaX)));
-#else
             scaleX = (float)((long double)CLIENTEND_NONPVS_OFFSET_LIMIT_NEG /
                              (long double)deltaX);
-#endif
         }
 
         if (deltaY > CLIENTEND_NONPVS_OFFSET_LIMIT_POS) {
-#if EMULATE_X87
-            scaleY = x87f_store_f32(x87f_div(
-                x87f_load_f32((float)CLIENTEND_NONPVS_OFFSET_LIMIT_POS),
-                x87f_load_i32(deltaY)));
-#else
             scaleY = (float)((long double)CLIENTEND_NONPVS_OFFSET_LIMIT_POS /
                              (long double)deltaY);
-#endif
         } else if (deltaY < CLIENTEND_NONPVS_OFFSET_LIMIT_NEG) {
-#if EMULATE_X87
-            scaleY = x87f_store_f32(x87f_div(
-                x87f_load_f32((float)CLIENTEND_NONPVS_OFFSET_LIMIT_NEG),
-                x87f_load_i32(deltaY)));
-#else
             scaleY = (float)((long double)CLIENTEND_NONPVS_OFFSET_LIMIT_NEG /
                              (long double)deltaY);
-#endif
         }
 
         if (scaleX < 1.0f || scaleY < 1.0f) {
             /* Stock 0x4599d/0x459bd: (fild)delta * scale kept 80-bit, fistp
              * truncate straight from the register (no float store) -> shim. */
             if (scaleX < scaleY) {
-#if EMULATE_X87
-                deltaY = x87f_store_i32_trunc(
-                    x87f_mul(x87f_load_i32(deltaY), x87f_load_f32(scaleX)));
-#else
                 deltaY = game_compat_int32_from_long_double_trunc(
                     (long double)deltaY * (long double)scaleX);
-#endif
             } else if (scaleY < scaleX) {
-#if EMULATE_X87
-                deltaX = x87f_store_i32_trunc(
-                    x87f_mul(x87f_load_i32(deltaX), x87f_load_f32(scaleY)));
-#else
                 deltaX = game_compat_int32_from_long_double_trunc(
                     (long double)deltaX * (long double)scaleY);
-#endif
             }
         }
 
@@ -1385,15 +1278,9 @@ int G_GetNonPVSFriendlyInfo(gentity_t *ent, const float *origin, int lastClient)
 
         /* Stock 0x45a93: (int)(currentAngles[1] * YAW_SCALE) kept 80-bit, fistp
          * truncate straight from the register (no float store) -> shim. */
-#if EMULATE_X87
-        int yawByte = x87f_store_i32_trunc(x87f_mul(
-            x87f_load_f32(candidate->currentAngles[1]),
-            x87f_load_f32(CLIENTEND_NONPVS_YAW_SCALE)));
-#else
         int yawByte = game_compat_int32_from_long_double_trunc(
             (long double)candidate->currentAngles[1] *
             (long double)CLIENTEND_NONPVS_YAW_SCALE);
-#endif
         return (int)(
             (((uint32_t)yawByte & 0xffu)
              << CLIENTEND_NONPVS_YAW_SHIFT) |
@@ -1499,10 +1386,7 @@ void ClientEndFrame(gentity_t *ent)
     }
 
     /* VERIFIED_DECOMPILER(0x42f59, 52f59_ClientEndFrame.c, VERIFY-WAVE2-CLIENT-FRAME-STATE-2026-06-17): DATAFLOW_VERIFIED - gravity cvar assignment uses generated ROUND before speed and damage-alpha stores. */
-#if EMULATE_X87
-    client->ps.gravity =
-        x87f_store_i32_trunc(x87f_load_f32(g_gravity.value));
-#elif defined(__i386__) || defined(__x86_64__)
+#if   defined(__i386__) || defined(__x86_64__)
     client->ps.gravity =
         CODUO_X87_TRUNCATE_I32((long double)g_gravity.value);
 #else
@@ -1512,15 +1396,9 @@ void ClientEndFrame(gentity_t *ent)
     client->ps.speed = client->maxSpeed;
     /* Stock 0x432a8: aimSpreadScale / 255.0 kept 80-bit, rounded to float on
      * store -> shim (divide). */
-#if EMULATE_X87
-    client->damageAlphaFraction = x87f_store_f32(x87f_div(
-        x87f_load_f32(client->ps.aimSpreadScale),
-        x87f_load_f64(CLIENTEND_DAMAGE_ALPHA_SCALE)));
-#else
     client->damageAlphaFraction =
         (float)((long double)client->ps.aimSpreadScale /
                 (long double)CLIENTEND_DAMAGE_ALPHA_SCALE);
-#endif
 
     G_CheckForPreventFriendlyFire(ent);
     G_CheckForCursorHints(ent);

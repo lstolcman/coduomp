@@ -2,13 +2,7 @@
 
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 /*
  * The four authoritative Windows MatrixMultiply bodies are byte-identical:
@@ -63,7 +57,6 @@
 #define MATRIX_HAS_NATIVE_X87 0
 #endif
 
-#if defined(WINDOWS_BEHAVIOR)
 
 void MatrixMultiply(axis_t left, axis_t right, axis_t output)
 {
@@ -190,131 +183,6 @@ void MatrixMultiplyEquals(axis_t left, axis_t right)
     memcpy(&right[1][2], &buffered[1][2], sizeof(right[1][2]));
 }
 
-#else
-
-#if EMULATE_X87
-#define MATRIX_LINUX_DOT(destination, a, b, c, d, e, f)                       \
-    ((destination) = x87f_store_f32(x87f_add(                                \
-         x87f_add(x87f_mul(x87f_load_f32(a), x87f_load_f32(b)),              \
-                  x87f_mul(x87f_load_f32(c), x87f_load_f32(d))),             \
-         x87f_mul(x87f_load_f32(e), x87f_load_f32(f)))))
-#else
-/* Keep the complete dot wide until its destination's binary32 store. */
-#define MATRIX_LINUX_DOT(destination, a, b, c, d, e, f)                       \
-    ((destination) = ((WIDE_FLOAT)(a) * (WIDE_FLOAT)(b) +                    \
-                      (WIDE_FLOAT)(c) * (WIDE_FLOAT)(d)) +                 \
-                     (WIDE_FLOAT)(e) * (WIDE_FLOAT)(f))
-#endif
-
-void MatrixMultiply(axis_t left, axis_t right, axis_t output)
-{
-#if MATRIX_HAS_NATIVE_X87 && !EMULATE_X87
-    float *store = &output[0][0];
-
-    MATRIX_NATIVE_X87_DOT(store, 0, left, 0, right, 0,
-                          left, 4, right, 12, left, 8, right, 24);
-    MATRIX_NATIVE_X87_DOT(store, 4, left, 0, right, 4,
-                          left, 4, right, 16, left, 8, right, 28);
-    MATRIX_NATIVE_X87_DOT(store, 8, left, 0, right, 8,
-                          left, 4, right, 20, left, 8, right, 32);
-
-    MATRIX_NATIVE_X87_DOT(store, 12, left, 12, right, 0,
-                          left, 16, right, 12, left, 20, right, 24);
-    MATRIX_NATIVE_X87_DOT(store, 16, left, 12, right, 4,
-                          left, 16, right, 16, left, 20, right, 28);
-    MATRIX_NATIVE_X87_DOT(store, 20, left, 12, right, 8,
-                          left, 16, right, 20, left, 20, right, 32);
-
-    MATRIX_NATIVE_X87_DOT(store, 24, left, 24, right, 0,
-                          left, 28, right, 12, left, 32, right, 24);
-    MATRIX_NATIVE_X87_DOT(store, 28, left, 24, right, 4,
-                          left, 28, right, 16, left, 32, right, 28);
-    MATRIX_NATIVE_X87_DOT(store, 32, left, 24, right, 8,
-                          left, 28, right, 20, left, 32, right, 32);
-#else
-    MATRIX_LINUX_DOT(output[0][0], left[0][0], right[0][0],
-                     left[0][1], right[1][0], left[0][2], right[2][0]);
-    MATRIX_LINUX_DOT(output[0][1], left[0][0], right[0][1],
-                     left[0][1], right[1][1], left[0][2], right[2][1]);
-    MATRIX_LINUX_DOT(output[0][2], left[0][0], right[0][2],
-                     left[0][1], right[1][2], left[0][2], right[2][2]);
-
-    MATRIX_LINUX_DOT(output[1][0], left[1][0], right[0][0],
-                     left[1][1], right[1][0], left[1][2], right[2][0]);
-    MATRIX_LINUX_DOT(output[1][1], left[1][0], right[0][1],
-                     left[1][1], right[1][1], left[1][2], right[2][1]);
-    MATRIX_LINUX_DOT(output[1][2], left[1][0], right[0][2],
-                     left[1][1], right[1][2], left[1][2], right[2][2]);
-
-    MATRIX_LINUX_DOT(output[2][0], left[2][0], right[0][0],
-                     left[2][1], right[1][0], left[2][2], right[2][0]);
-    MATRIX_LINUX_DOT(output[2][1], left[2][0], right[0][1],
-                     left[2][1], right[1][1], left[2][2], right[2][1]);
-    MATRIX_LINUX_DOT(output[2][2], left[2][0], right[0][2],
-                     left[2][1], right[1][2], left[2][2], right[2][2]);
-#endif
-}
-
-void MatrixMultiplyEquals(axis_t left, axis_t right)
-{
-    vec3_t buffered[2];
-
-#if MATRIX_HAS_NATIVE_X87 && !EMULATE_X87
-    float *store = &buffered[0][0];
-
-    MATRIX_NATIVE_X87_DOT(store, 0, left, 0, right, 0,
-                          left, 4, right, 12, left, 8, right, 24);
-    MATRIX_NATIVE_X87_DOT(store, 4, left, 0, right, 4,
-                          left, 4, right, 16, left, 8, right, 28);
-    MATRIX_NATIVE_X87_DOT(store, 8, left, 0, right, 8,
-                          left, 4, right, 20, left, 8, right, 32);
-
-    MATRIX_NATIVE_X87_DOT(store, 12, left, 12, right, 0,
-                          left, 16, right, 12, left, 20, right, 24);
-    MATRIX_NATIVE_X87_DOT(store, 16, left, 12, right, 4,
-                          left, 16, right, 16, left, 20, right, 28);
-    MATRIX_NATIVE_X87_DOT(store, 20, left, 12, right, 8,
-                          left, 16, right, 20, left, 20, right, 32);
-
-    MATRIX_NATIVE_X87_DOT(right, 24, left, 24, right, 0,
-                          left, 28, right, 12, left, 32, right, 24);
-    MATRIX_NATIVE_X87_DOT(right, 28, left, 24, right, 4,
-                          left, 28, right, 16, left, 32, right, 28);
-    MATRIX_NATIVE_X87_DOT(right, 32, left, 24, right, 8,
-                          left, 28, right, 20, left, 32, right, 32);
-#else
-    MATRIX_LINUX_DOT(buffered[0][0], left[0][0], right[0][0],
-                     left[0][1], right[1][0], left[0][2], right[2][0]);
-    MATRIX_LINUX_DOT(buffered[0][1], left[0][0], right[0][1],
-                     left[0][1], right[1][1], left[0][2], right[2][1]);
-    MATRIX_LINUX_DOT(buffered[0][2], left[0][0], right[0][2],
-                     left[0][1], right[1][2], left[0][2], right[2][2]);
-
-    MATRIX_LINUX_DOT(buffered[1][0], left[1][0], right[0][0],
-                     left[1][1], right[1][0], left[1][2], right[2][0]);
-    MATRIX_LINUX_DOT(buffered[1][1], left[1][0], right[0][1],
-                     left[1][1], right[1][1], left[1][2], right[2][1]);
-    MATRIX_LINUX_DOT(buffered[1][2], left[1][0], right[0][2],
-                     left[1][1], right[1][2], left[1][2], right[2][2]);
-
-    MATRIX_LINUX_DOT(right[2][0], left[2][0], right[0][0],
-                     left[2][1], right[1][0], left[2][2], right[2][0]);
-    MATRIX_LINUX_DOT(right[2][1], left[2][0], right[0][1],
-                     left[2][1], right[1][1], left[2][2], right[2][1]);
-    MATRIX_LINUX_DOT(right[2][2], left[2][0], right[0][2],
-                     left[2][1], right[1][2], left[2][2], right[2][2]);
-#endif
-
-    memcpy(&right[0][0], &buffered[0][0], sizeof(right[0][0]));
-    memcpy(&right[0][1], &buffered[0][1], sizeof(right[0][1]));
-    memcpy(&right[0][2], &buffered[0][2], sizeof(right[0][2]));
-    memcpy(&right[1][0], &buffered[1][0], sizeof(right[1][0]));
-    memcpy(&right[1][1], &buffered[1][1], sizeof(right[1][1]));
-    memcpy(&right[1][2], &buffered[1][2], sizeof(right[1][2]));
-}
-
-#undef MATRIX_LINUX_DOT
-#endif
 
 #if MATRIX_HAS_NATIVE_X87
 #undef MATRIX_NATIVE_X87_DOT

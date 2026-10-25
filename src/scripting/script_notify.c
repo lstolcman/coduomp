@@ -164,12 +164,7 @@ static VariableStackBuffer *coduomp_script_notify_append_args_to_frame(
                      (size_t)newCount * sizeof(frame->entries[0]);
 
     if (MT_Realloc(oldSize, newSize) == qfalse) {
-#if defined(WINDOWS_BEHAVIOR)
         VariableStackBuffer *newFrame = MT_Alloc(newSize);
-#else
-        VariableStackBuffer *newFrame =
-            MT_Alloc(newSize, SCRIPT_NOTIFY_MT_TAG);
-#endif
 
         newFrame->time = frame->time;
         newFrame->pos = frame->pos;
@@ -270,12 +265,7 @@ void VM_ArchiveStack(int32_t valueCount, script_codepos_t codePos,
     size_t frameSize = offsetof(VariableStackBuffer, entries) +
                        (size_t)valueCount *
                            sizeof(VariableStackBufferEntry);
-#if defined(WINDOWS_BEHAVIOR)
     VariableStackBuffer *frame = MT_Alloc(frameSize);
-#else
-    VariableStackBuffer *frame =
-        MT_Alloc(frameSize, SCRIPT_NOTIFY_MT_TAG);
-#endif
 
     AddRefToObject(objectHandle);
     frame->localId = threadHandle;

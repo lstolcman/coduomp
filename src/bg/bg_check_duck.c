@@ -16,7 +16,6 @@
 #include "bg_pmove_services.h"
 #include "bg_weapon.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <stdint.h>
@@ -355,12 +354,7 @@ stance_selected:
 
         raised[0] = ps->psOrigin[0];
         raised[1] = ps->psOrigin[1];
-#if EMULATE_X87
-        raised[2] = x87f_store_f32(x87f_add(
-            x87f_load_f32(ps->psOrigin[2]), x87f_load_f32(10.0f)));
-#else
         raised[2] = (float)((long double)ps->psOrigin[2] + 10.0L);
-#endif
         int32_t traceMask = coduo_int32_from_bits(
             (uint32_t)move->traceMask & ~CONTENTS_BODY);
         int32_t passEntityNum = ps->psClientNum;
@@ -396,13 +390,7 @@ stance_selected:
         playerState_t *loweredYPs = move->ps;
         lowered[1] = loweredYPs->psOrigin[1];
         playerState_t *loweredZPs = move->ps;
-#if EMULATE_X87
-        lowered[2] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(loweredZPs->psOrigin[2]),
-            x87f_load_f32(0.25f)));
-#else
         lowered[2] = (float)((long double)loweredZPs->psOrigin[2] - 0.25L);
-#endif
         traceMask = coduo_int32_from_bits((uint32_t)move->traceMask & ~CONTENTS_BODY);
         ps = move->ps;
         passEntityNum = ps->psClientNum;
@@ -428,33 +416,17 @@ stance_selected:
 
         ps = move->ps;
         float pitchInput;
-#if EMULATE_X87
-        pitchInput = x87f_store_f32(x87f_sub(
-            x87f_load_f32(ps->proneDirectionPitch),
-            x87f_load_f32(ps->viewAngles[0])));
-#else
         pitchInput = (float)((long double)ps->proneDirectionPitch -
                              (long double)ps->viewAngles[0]);
-#endif
         pitchDelta = AngleNormalize180(pitchInput);
         /* 0x3000b8c4/0x3000b8ee: both clamp compares are strict; at exactly
          * +/-45 the targetPitch copy is taken. */
         if (pitchDelta < -45.0f) {
-#if EMULATE_X87
-            ps->proneTorsoPitch = x87f_store_f32(x87f_sub(
-                x87f_load_f32(ps->viewAngles[0]), x87f_load_f32(45.0f)));
-#else
             ps->proneTorsoPitch =
                 (float)((long double)ps->viewAngles[0] - 45.0L);
-#endif
         } else if (pitchDelta > 45.0f) {
-#if EMULATE_X87
-            ps->proneTorsoPitch = x87f_store_f32(x87f_add(
-                x87f_load_f32(ps->viewAngles[0]), x87f_load_f32(45.0f)));
-#else
             ps->proneTorsoPitch =
                 (float)((long double)ps->viewAngles[0] + 45.0L);
-#endif
         } else {
             ps->proneTorsoPitch = ps->proneDirectionPitch;
         }

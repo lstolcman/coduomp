@@ -89,7 +89,6 @@ function(coduomp_apply_common target)
             "$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.>")
         target_include_directories(${target} BEFORE PRIVATE "${CMAKE_SOURCE_DIR}/src/compat/clangcl")
     endif()
-    target_link_libraries(${target} PRIVATE coduomp_softfloat)
 endfunction()
 
 # coduomp_absolute_sources(<out-var> <source>...)

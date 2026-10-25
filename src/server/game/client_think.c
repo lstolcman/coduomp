@@ -14,7 +14,6 @@
 #include "game_globals.h"
 #include "g_syscalls.h"
 #include "game_functions.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/libm/coduo_libm.h"
 
 /* Values observed in the original ClientThink_real instruction stream. */
@@ -343,22 +342,10 @@ void ClientThink_real(gentity_t *ent, usercmd_t *command)
                      * is the zeroed products) straight from the x87 register
                      * against 0.8f (0x41723..0x41753); a float local would add
                      * a rounding it does not perform. */
-#if EMULATE_X87
-                    if (playerSpeed < 1.0f ||
-                        x87f_lt(x87f_load_f32(0.8f),
-                                x87f_add(
-                                    x87f_add(x87f_mul(x87f_load_f32(away[0]),
-                                                      x87f_load_f32(velocityDir[0])),
-                                             x87f_mul(x87f_load_f32(away[1]),
-                                                      x87f_load_f32(velocityDir[1]))),
-                                    x87f_mul(x87f_load_f32(away[2]),
-                                             x87f_load_f32(velocityDir[2]))))) {
-#else
                     if (playerSpeed < 1.0f ||
                         away[0] * velocityDir[0] + away[1] * velocityDir[1] +
                                 away[2] * velocityDir[2] >
                             0.8f) {
-#endif
                         vehicleUnlinkedForPmove = hitEnt;
                         trap_UnlinkEntity(hitEnt);
 
@@ -366,15 +353,6 @@ void ClientThink_real(gentity_t *ent, usercmd_t *command)
                             playerSpeed < 1.0f) {
                             vehicle_state_t *vehicleState =
                                 (vehicle_state_t *)hitEnt->vehicle;
-#if EMULATE_X87
-                            float vehicleSpeed = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
-                                x87f_add(x87f_mul(x87f_load_f32(vehicleState->velocity[0]),
-                                                  x87f_load_f32(vehicleState->velocity[0])),
-                                         x87f_mul(x87f_load_f32(vehicleState->velocity[1]),
-                                                  x87f_load_f32(vehicleState->velocity[1]))),
-                                x87f_mul(x87f_load_f32(vehicleState->velocity[2]),
-                                         x87f_load_f32(vehicleState->velocity[2])))));
-#else
                             float vehicleSpeed =
                                 (float)CoduoLibm_Sqrt((double)(vehicleState->velocity[0] *
                                                      vehicleState->velocity[0] +
@@ -382,21 +360,11 @@ void ClientThink_real(gentity_t *ent, usercmd_t *command)
                                                      vehicleState->velocity[1] +
                                                      vehicleState->velocity[2] *
                                                      vehicleState->velocity[2]));
-#endif
 
                             if (vehicleSpeed > 1.0f) {
                                 float knockbackSpeed;
 
                                 VEH_PlayerCollision(hitEnt, ent);
-#if EMULATE_X87
-                                knockbackSpeed = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
-                                    x87f_add(x87f_mul(x87f_load_f32(client->ps.velocity[0]),
-                                                      x87f_load_f32(client->ps.velocity[0])),
-                                             x87f_mul(x87f_load_f32(client->ps.velocity[1]),
-                                                      x87f_load_f32(client->ps.velocity[1]))),
-                                    x87f_mul(x87f_load_f32(client->ps.velocity[2]),
-                                             x87f_load_f32(client->ps.velocity[2])))));
-#else
                                 knockbackSpeed =
                                     (float)CoduoLibm_Sqrt((double)(client->ps.velocity[0] *
                                                          client->ps.velocity[0] +
@@ -404,7 +372,6 @@ void ClientThink_real(gentity_t *ent, usercmd_t *command)
                                                          client->ps.velocity[1] +
                                                          client->ps.velocity[2] *
                                                          client->ps.velocity[2]));
-#endif
                                 if (knockbackSpeed <
                                     CLIENT_THINK_VEHICLE_KNOCKBACK_SPEED) {
                                     VectorNormalize(client->ps.velocity);

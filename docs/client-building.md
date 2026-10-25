@@ -131,7 +131,7 @@ cmake --build --preset clang-cl-x64 --parallel 2
 The selected toolset must actually resolve to Clang 22 or newer; CMake checks
 the compiler version. This profile uses `/fp:strict`, `-mlong-double-80`,
 `-ffp-eval-method=source`, and `-ffp-contract=off`. Existing `WIDE_FLOAT`,
-`long double`, and native x87 helpers use hardware x87 (`EMULATE_X87=0`).
+`long double`, and native x87 helpers use hardware x87.
 Ordinary `float`/`double` expressions still use SSE, so this does not turn the
 whole program into an x87 build. Assignment to `WIDE_FLOAT` alone does not
 widen an expression computed entirely from narrower operands; existing casts
@@ -179,11 +179,12 @@ executable and modules from the same build and architecture together.
 
 Architecture selection and source-path fidelity are separate. MSVC x86 can
 retain extended intermediates in x87 registers even though its C `long double`
-has the same storage format as `double`. The current MSVC build still selects
-existing SoftFloat-backed source paths on both architectures, with documented
-host-math fallbacks for some transcendental functions. Selecting x86 therefore
-does not yet mean that all software emulation has been removed or that the
-whole program matches retail arithmetic.
+has the same storage format as `double`. All builds use native arithmetic;
+software x87 is unsupported. The original Windows client and server binaries
+are the behavioral authority on every host. `WIDE_FLOAT` and explicit stores
+preserve the intended precision and rounding boundaries within each platform's
+native types. Selecting x86 alone does not establish whole-program arithmetic
+parity.
 
 The default `CODUO_FP_FAITHFUL=auto` permits all three presets and reports
 these limits; `relaxed` remains accepted for existing build commands. `strict`

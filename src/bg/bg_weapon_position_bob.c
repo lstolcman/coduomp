@@ -30,7 +30,6 @@
 #include "bg_weapon.h"
 #include "compat/coduo_int32_bits.h"
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <math.h>
@@ -45,7 +44,6 @@ enum { BG_SWAY_MAX_BOB_AMP = 10 };
 void BG_CalculateWeaponPosition_BobOffset(pm_weapon_angle_state_t *state,
                                           vec3_t angles)
 {
-#if defined(WINDOWS_BEHAVIOR)
     /* 0x300152f3: EDX = state->ps. */
     playerState_t *ps = state->ps;
 
@@ -165,55 +163,4 @@ void BG_CalculateWeaponPosition_BobOffset(pm_weapon_angle_state_t *state,
     angles[0] += pitch;
     angles[1] += yaw;
     angles[2] += roll;
-#else
-    playerState_t *ps = state->ps;
-    const weaponInfo_t *weapon = BG_GetInfoForWeapon(ps->currentWeapon);
-    float phase = BG_GetBobCycle(ps);
-    float speed = state->speed * 0.16f;
-    float pitch;
-    float yaw;
-    float roll;
-
-    /* Linux loads these source constants as binary64 values before storing
-     * the resulting phase to binary32. */
-#if EMULATE_X87
-    phase = x87f_store_f32(x87f_add(
-        x87f_add(x87f_load_f32(phase),
-                 x87f_load_f64(0.7853981633974483)),
-        x87f_load_f64(6.283185307179586)));
-#else
-    phase = (float)((WIDE_FLOAT)phase +
-                    0.7853981633974483 +
-                    6.283185307179586);
-#endif
-
-    pitch = -BG_GetVerticalBobFactor(ps, phase, speed,
-                                     (float)BG_SWAY_MAX_BOB_AMP);
-    yaw = -BG_GetHorizontalBobFactor(ps, phase, speed,
-                                    (float)BG_SWAY_MAX_BOB_AMP);
-    /* The sign test consumes the live return before the selected roll stores.
-     * The binary64 phase offset retains the source's binary32 0.15 factor. */
-    if (BG_GetHorizontalBobFactor(
-            ps, (WIDE_FLOAT)phase - 0.4712389167638204,
-            speed * 1.5f, (float)BG_SWAY_MAX_BOB_AMP) < 0.0f) {
-        roll = BG_GetHorizontalBobFactor(
-            ps, (WIDE_FLOAT)phase - 0.4712389167638204,
-            speed * 1.5f, (float)BG_SWAY_MAX_BOB_AMP);
-    } else {
-        roll = 0.0f;
-    }
-
-    if (ps->adsFraction != 0.0f) {
-        const float adsScale =
-            1.0f - ((WIDE_FLOAT)1.0f - weapon->adsBobFactor) * ps->adsFraction;
-
-        pitch *= adsScale;
-        yaw *= adsScale;
-        roll *= adsScale;
-    }
-
-    angles[0] += pitch;
-    angles[1] += yaw;
-    angles[2] += roll;
-#endif
 }

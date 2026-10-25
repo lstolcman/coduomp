@@ -18,7 +18,6 @@
 #include "compat/coduo_native_x87.h"
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_x87_eval.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #define MAX_BULLET_RECURSION 13
 #define WEAPON_PROJECTILE_SPREAD_DISTANCE 16.0f
@@ -53,29 +52,11 @@ static void game_compat_fire_weapon_vector_subtract(const float *a, const float 
 static void game_compat_fire_weapon_vector_ma(const float *start, float scale, const float *dir,
                                 float *out)
 {
-#if EMULATE_X87
-    for (int i = 0; i < 3; i++) {
-        out[i] = x87f_store_f32(x87f_add(
-            x87f_load_f32(start[i]),
-            x87f_mul(x87f_load_f32(dir[i]), x87f_load_f32(scale))));
-    }
-#else
     out[0] = start[0] + dir[0] * scale;
     out[1] = start[1] + dir[1] * scale;
     out[2] = start[2] + dir[2] * scale;
-#endif
 }
 
-#if EMULATE_X87
-/* NOT_FROM_ORIGINAL_SOURCE: local vector helper factored from recovered fire-weapon bodies. */
-static float game_compat_fire_weapon_dot_product(const float *a, const float *b)
-{
-    return x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(a[0]), x87f_load_f32(b[0])),
-                 x87f_mul(x87f_load_f32(a[1]), x87f_load_f32(b[1]))),
-        x87f_mul(x87f_load_f32(a[2]), x87f_load_f32(b[2]))));
-}
-#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: local predicate factored from recovered tracer checks. */
 static qboolean game_compat_fire_weapon_is_tracer_ammo_type(int ammoType)
@@ -113,53 +94,26 @@ static void game_compat_fire_weapon_spread_direction(const weapon_muzzle_t *muzz
                                        float *dir)
 {
     float x, y, radius;
-#if EMULATE_X87
-    /* spread*PI/180 is wide until the double tan argument; the tangent then
-     * rounds to float before the radius scale. */
-    double radians = x87f_store_f64(x87f_div(
-        x87f_mul(x87f_load_f32(spread), x87f_load_f64(WEAPON_SPREAD_PI)),
-        x87f_load_f64(WEAPON_SPREAD_DEGREES)));
-    float tangent = (float)tan(radians);
-    radius = tangent * WEAPON_PROJECTILE_SPREAD_DISTANCE;
-#elif defined(WINDOWS_BEHAVIOR)
     WIDE_FLOAT radians = (WIDE_FLOAT)spread * WEAPON_SPREAD_WINDOWS_PI;
     radians *= WEAPON_SPREAD_WINDOWS_INV_DEGREES;
     /* Windows keeps the tangent live until the scaled radius store. */
     radius = coduo_round_f32(coduo_x87_tanl(radians) * WEAPON_PROJECTILE_SPREAD_DISTANCE);
-#else
-    double radians = (double)(((WIDE_FLOAT)spread * WEAPON_SPREAD_PI) / WEAPON_SPREAD_DEGREES);
-    float tangent = coduo_round_f32(tan(radians));
-    radius = tangent * WEAPON_PROJECTILE_SPREAD_DISTANCE;
-#endif
     gunrandom(&x, &y);
 
     WIDE_FLOAT lateralRight = (WIDE_FLOAT)x * radius;
     WIDE_FLOAT lateralUp = (WIDE_FLOAT)y * radius;
-#if defined(LINUX_BEHAVIOR) || EMULATE_X87
-    lateralRight = coduo_round_f32(lateralRight);
-    lateralUp = coduo_round_f32(lateralUp);
-#endif
     /* 0x7b446/0x7b46f/0x7b4a2 (and the artillery copy): Linux stores the
      * forward, right and up stages separately. Multiplication by 16 is exact
      * for the bounded direction components. Windows retains the middle lane
      * through both additions; X and Z keep the intermediate float store. */
     for (int i = 0; i < 3; i++) {
         float forward = muzzle->forward[i] * WEAPON_PROJECTILE_SPREAD_DISTANCE;
-#if EMULATE_X87
-        float right = x87f_store_f32(x87f_add(x87f_load_f32(forward),
-            x87f_mul(x87f_load_f32(muzzle->right[i]), x87f_load_f32(lateralRight))));
-        dir[i] = x87f_store_f32(x87f_add(x87f_load_f32(right),
-            x87f_mul(x87f_load_f32(muzzle->up[i]), x87f_load_f32(lateralUp))));
-#else
         WIDE_FLOAT right = lateralRight * muzzle->right[i] + forward;
-#if defined(WINDOWS_BEHAVIOR)
         if (i != 1)
-#endif
         {
             right = coduo_round_f32(right);
         }
         dir[i] = lateralUp * muzzle->up[i] + right;
-#endif
     }
     VectorNormalize(dir);
 }
@@ -171,32 +125,13 @@ static void game_compat_fire_weapon_add_projectile_inherited_velocity(gentity_t 
 {
     /* Windows accumulates Z/Y/X and retains the dot product. Linux sums
      * X/Y/Z and stores it as float before the three velocity updates. */
-#if EMULATE_X87
-    float push = game_compat_fire_weapon_dot_product(shooter->client->ps.velocity, dir);
-#else
-#if defined(WINDOWS_BEHAVIOR)
     const int first = 2, last = 0;
-#else
-    const int first = 0, last = 2;
-#endif
     WIDE_FLOAT push = ((WIDE_FLOAT)dir[first] * shooter->client->ps.velocity[first]
                      + (WIDE_FLOAT)dir[1] * shooter->client->ps.velocity[1])
                      + (WIDE_FLOAT)dir[last] * shooter->client->ps.velocity[last];
-#if defined(LINUX_BEHAVIOR)
-    push = coduo_round_f32(push);
-#endif
-#endif
-#if EMULATE_X87
-    for (int i = 0; i < 3; i++) {
-        projectile->s.pos.trDelta[i] = x87f_store_f32(x87f_add(
-            x87f_load_f32(projectile->s.pos.trDelta[i]),
-            x87f_mul(x87f_load_f32(dir[i]), x87f_load_f32(push))));
-    }
-#else
     projectile->s.pos.trDelta[0] = (WIDE_FLOAT)dir[0] * push + projectile->s.pos.trDelta[0];
     projectile->s.pos.trDelta[1] = (WIDE_FLOAT)dir[1] * push + projectile->s.pos.trDelta[1];
     projectile->s.pos.trDelta[2] = (WIDE_FLOAT)dir[2] * push + projectile->s.pos.trDelta[2];
-#endif
 }
 
 /* ------------------------------------------------------------------ */
@@ -215,17 +150,9 @@ qboolean infront(gentity_t *self, gentity_t *other)
 
     /* Keep the dot products and sum wide, then round once before the test.
      * Windows accumulates Z/Y/X; Linux accumulates X/Y/Z. */
-#if EMULATE_X87
-    float dot = game_compat_fire_weapon_dot_product(dir, forward);
-#else
-#if defined(WINDOWS_BEHAVIOR)
     const int first = 2, last = 0;
-#else
-    const int first = 0, last = 2;
-#endif
     volatile float dot = ((WIDE_FLOAT)dir[first] * forward[first] + (WIDE_FLOAT)dir[1] * forward[1])
                          + (WIDE_FLOAT)dir[last] * forward[last];
-#endif
     return dot > 0.0f;
 }
 
@@ -300,48 +227,18 @@ WIDE_FLOAT Damage_Falloff(float distance, float maxDamage, float minDamagePercen
      * multiplies percent by 0.01 before maxDamage (0x7a877..0x7a882). */
     WIDE_FLOAT minimum = minRange;
     WIDE_FLOAT damage = maxDamage;
-#if defined(WINDOWS_BEHAVIOR)
     minimum = coduo_round_f32(minimum);
-#endif
     if (minimum < distance) {
         if ((WIDE_FLOAT)maxRange < distance) {
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-            damage = x87f_store_f32(x87f_mul(
-                x87f_mul(x87f_load_f32(minDamagePercent), x87f_load_f32(0.01f)),
-                x87f_load_f32(maxDamage)));
-#else
             damage = (WIDE_FLOAT)minDamagePercent * 0.01f * maxDamage;
-#endif
         } else {
             int32_t rangeSpan = coduo_int32_from_bits((uint32_t)maxRange - (uint32_t)minRange);
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-            /* Bare integer loads, then the fraction's binary32 store. */
-            float fraction = x87f_store_f32(x87f_sub(x87f_load_f32(1.0f),
-                x87f_div(x87f_sub(x87f_load_f32(distance), x87f_load_i32(minRange)),
-                         x87f_load_i32(rangeSpan))));
-            damage = x87f_store_f32(x87f_mul(
-                x87f_mul(x87f_add(x87f_mul(x87f_sub(x87f_load_f32(100.0f),
-                    x87f_load_f32(minDamagePercent)), x87f_load_f32(fraction)),
-                    x87f_load_f32(minDamagePercent)), x87f_load_f32(0.01f)),
-                x87f_load_f32(maxDamage)));
-#else
             WIDE_FLOAT fraction = 1.0f - ((WIDE_FLOAT)distance - minimum) / rangeSpan;
-#if defined(LINUX_BEHAVIOR)
-            fraction = coduo_round_f32(fraction);
-#endif
             /* Keep multiply and add separate on hosts with fused operations. */
             volatile WIDE_FLOAT scaledDamage = (100.0f - (WIDE_FLOAT)minDamagePercent) * fraction;
-#if defined(WINDOWS_BEHAVIOR)
             damage = (scaledDamage + minDamagePercent) * maxDamage * 0.01f;
-#else
-            damage = (scaledDamage + minDamagePercent) * 0.01f * maxDamage;
-#endif
-#endif
         }
     }
-#if defined(LINUX_BEHAVIOR)
-    damage = coduo_round_f32(damage);
-#endif
 
     if (damage < 0.0f) {
         damage = 0.0f;
@@ -380,11 +277,7 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
     vec3_t dir;
     vec3_t reflected;
     WIDE_FLOAT reflectionScale;
-#if defined(WINDOWS_BEHAVIOR)
     enum { first = 2, last = 0 };
-#else
-    enum { first = 0, last = 2 };
-#endif
     int meansOfDeath;
     int damageFlags = 0;
     qboolean hit = qfalse;
@@ -436,33 +329,13 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
 
         game_compat_fire_weapon_vector_subtract(end, start, dir);
         VectorNormalize(dir);
-#if EMULATE_X87
-        reflectionScale = x87f_store_f32(x87f_mul(
-            x87f_add(x87f_add(x87f_mul(x87f_load_f32(dir[0]),
-                                       x87f_load_f32(trace.normal[0])),
-                              x87f_mul(x87f_load_f32(dir[1]),
-                                       x87f_load_f32(trace.normal[1]))),
-                     x87f_mul(x87f_load_f32(dir[2]),
-                              x87f_load_f32(trace.normal[2]))),
-            x87f_load_f32(-2.0f)));
-        for (int i = 0; i < 3; i++) {
-            reflected[i] = x87f_store_f32(x87f_add(
-                x87f_load_f32(dir[i]),
-                x87f_mul(x87f_load_f32(trace.normal[i]),
-                         x87f_load_f32(reflectionScale))));
-        }
-#else
         /* Windows retains the Z/Y/X dot product and reflection scale. Linux
          * accumulates X/Y/Z and rounds the scaled result before reflection. */
         reflectionScale = (((WIDE_FLOAT)dir[first] * trace.normal[first] + (WIDE_FLOAT)dir[1] * trace.normal[1])
                            + (WIDE_FLOAT)dir[last] * trace.normal[last]) * -2.0f;
-#if defined(LINUX_BEHAVIOR)
-        reflectionScale = coduo_round_f32(reflectionScale);
-#endif
         reflected[0] = (WIDE_FLOAT)trace.normal[0] * reflectionScale + dir[0];
         reflected[1] = (WIDE_FLOAT)trace.normal[1] * reflectionScale + dir[1];
         reflected[2] = (WIDE_FLOAT)trace.normal[2] * reflectionScale + dir[2];
-#endif
 
         if ((trace.surfaceFlags & SURF_SKY) == 0 &&
             traceEnt->client == NULL) {
@@ -508,34 +381,15 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
 
         game_compat_fire_weapon_vector_subtract(end, start, penetrationDir);
         VectorNormalize(penetrationDir);
-#if EMULATE_X87
-        normalDot = -game_compat_fire_weapon_dot_product(penetrationDir, trace.normal);
-        step = normalDot >= 0.125f
-                   ? x87f_store_f32(x87f_div(x87f_load_f32(0.25f),
-                                             x87f_load_f32(normalDot)))
-                   : 0.0f;
-        for (int i = 0; i < 3; i++) {
-            start[i] = x87f_store_f32(x87f_add(
-                x87f_load_f32(trace.endpos[i]),
-                x87f_mul(x87f_load_f32(penetrationDir[i]), x87f_load_f32(step))));
-        }
-#else
         /* The Windows projection and quotient stay live. Linux stores the
          * dot product before negation and stores the quotient before use. */
         normalDot = ((WIDE_FLOAT)penetrationDir[first] * trace.normal[first] + (WIDE_FLOAT)penetrationDir[1] * trace.normal[1])
                     + (WIDE_FLOAT)penetrationDir[last] * trace.normal[last];
-#if defined(LINUX_BEHAVIOR)
-        normalDot = coduo_round_f32(normalDot);
-#endif
         normalDot = -normalDot;
         step = normalDot >= 0.125f ? 0.25f / normalDot : 0.0f;
-#if defined(LINUX_BEHAVIOR)
-        step = coduo_round_f32(step);
-#endif
         start[0] = (WIDE_FLOAT)penetrationDir[0] * step + trace.endpos[0];
         start[1] = (WIDE_FLOAT)penetrationDir[1] * step + trace.endpos[1];
         start[2] = (WIDE_FLOAT)penetrationDir[2] * step + trace.endpos[2];
-#endif
 
         hit = (qboolean)(hit | Bullet_Fire_Extended(hitEnt, attacker, start, end,
                                                     damage,
@@ -558,9 +412,7 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
                        weaponInfo->damageFalloffMaxRange));
     /* 0x7b125: bare fild of damage, no float32 rounding of the int. */
     WIDE_FLOAT penetrationDamage = damage;
-#if defined(WINDOWS_BEHAVIOR)
     penetrationDamage = coduo_round_f32(penetrationDamage);
-#endif
     if (damage <= 0.0f) {
         return hit;
     }
@@ -612,9 +464,6 @@ gentity_t *weapon_grenadelauncher_fire(gentity_t *ent, int weapon,
     dir[0] = (WIDE_FLOAT)muzzle->forward[0] * weaponInfo->missileSpeed;
     dir[1] = (WIDE_FLOAT)muzzle->forward[1] * weaponInfo->missileSpeed;
     WIDE_FLOAT verticalProduct = (WIDE_FLOAT)muzzle->forward[2] * weaponInfo->missileSpeed;
-#if defined(LINUX_BEHAVIOR)
-    verticalProduct = coduo_round_f32(verticalProduct);
-#endif
     dir[2] = verticalProduct + weaponInfo->missileVerticalSpeed;
 
     grenade = fire_grenade(ent, muzzle->origin, dir, weapon);
@@ -759,13 +608,9 @@ void CalcMuzzlePoint(gentity_t *ent, float *muzzlePoint)
 
             AngleVectors(angles, forward, NULL, NULL);
             /* Keep the forward offset wide until each endpoint store. */
-#if EMULATE_X87
-            game_compat_fire_weapon_vector_ma(muzzlePoint, MUZZLE_ADS_FORWARD_DISTANCE, forward, end);
-#else
             for (int i = 0; i < 3; i++) {
                 end[i] = (float)((long double)forward[i] * MUZZLE_ADS_FORWARD_DISTANCE + muzzlePoint[i]);
             }
-#endif
             trap_Trace(&trace, muzzlePoint, traceMins, traceMaxs, end, ent->s.number,
                        MASK_GRENADE_TRACE);
             /* A trace that exits solid still supplies a usable endpoint. */
@@ -774,13 +619,9 @@ void CalcMuzzlePoint(gentity_t *ent, float *muzzlePoint)
             }
         }
 
-#if defined(WINDOWS_BEHAVIOR)
         /* This caller inlines division by 255 before scaling the phase;
          * the out-of-line BG_GetBobCycle uses a rounded reciprocal instead. */
         bobCycle = (float)(((long double)(uint8_t)client->ps.bobCycle / MUZZLE_BOB_CYCLE_DIVISOR) * MUZZLE_BOB_PHASE_TWO_PI + MUZZLE_BOB_PHASE_TWO_PI);
-#else
-        bobCycle = BG_GetBobCycle(&client->ps);
-#endif
         speed = BG_GetSpeed(&client->ps, level.time);
 
         /* Both original callers store the vertical bob as binary32 before
@@ -789,7 +630,6 @@ void CalcMuzzlePoint(gentity_t *ent, float *muzzlePoint)
         muzzlePoint[2] += verticalBob;
         {
             vec3_t right;
-#if defined(WINDOWS_BEHAVIOR)
             /* The inlined Windows path rounds both the scaled amplitude and
              * sine before multiplying them, unlike the out-of-line helper. */
             float stanceScale;
@@ -806,23 +646,11 @@ void CalcMuzzlePoint(gentity_t *ent, float *muzzlePoint)
             }
             float sine = (float)coduo_x87_sinl((long double)bobCycle);
             float bob = sine * amplitude;
-#else
-            float bob = BG_GetHorizontalBobFactor(&client->ps, bobCycle, speed,
-                                                  bg_bobMax.value);
-#endif
 
             AngleVectors(client->ps.viewAngles, NULL, right, NULL);
-#if EMULATE_X87
-            for (int i = 0; i < 3; i++) {
-                muzzlePoint[i] = x87f_store_f32(x87f_add(
-                    x87f_load_f32(muzzlePoint[i]),
-                    x87f_mul(x87f_load_f32(right[i]), x87f_load_f32(bob))));
-            }
-#else
             muzzlePoint[0] = (float)((long double)right[0] * bob + muzzlePoint[0]);
             muzzlePoint[1] = (float)((long double)right[1] * bob + muzzlePoint[1]);
             muzzlePoint[2] = (float)((long double)right[2] * bob + muzzlePoint[2]);
-#endif
         }
 
         G_AddLean(ent, muzzlePoint);
@@ -830,22 +658,10 @@ void CalcMuzzlePoint(gentity_t *ent, float *muzzlePoint)
         /* Windows stores origin.z + 8 as binary32 before comparing it.
          * Linux keeps the sum wide through the comparison and only narrows
          * the replacement height. */
-#if defined(WINDOWS_BEHAVIOR)
         float minimumViewZ = client->ps.psOrigin[2] + MUZZLE_MIN_VIEW_HEIGHT;
         if (muzzlePoint[2] < minimumViewZ) {
             muzzlePoint[2] = minimumViewZ;
         }
-#else
-#if EMULATE_X87
-        if (x87f_lt(x87f_load_f32(muzzlePoint[2]),
-                    x87f_add(x87f_load_f32(client->ps.psOrigin[2]),
-                             x87f_load_f32(MUZZLE_MIN_VIEW_HEIGHT)))) {
-#else
-        if ((long double)muzzlePoint[2] < (long double)client->ps.psOrigin[2] + MUZZLE_MIN_VIEW_HEIGHT) {
-#endif
-            muzzlePoint[2] = client->ps.psOrigin[2] + MUZZLE_MIN_VIEW_HEIGHT;
-        }
-#endif
     }
 }
 
@@ -887,11 +703,7 @@ void CalcMuzzlePoints(gentity_t *ent, weapon_muzzle_t *muzzle)
 void FireWeapon(gentity_t *ent)
 {
     weapon_muzzle_t muzzlePoints;
-#if defined(WINDOWS_BEHAVIOR)
     long double minSpread;
-#else
-    float minSpread;
-#endif
     float maxSpread;
     float spread;
     float spreadFraction;
@@ -925,22 +737,7 @@ void FireWeapon(gentity_t *ent)
         /* Interpolate from the stance minimum using the spread accumulator.
          * Windows retains the minimum's live return through this expression;
          * Linux first stores the minimum as binary32. */
-#if defined(WINDOWS_BEHAVIOR) && EMULATE_X87
-        const x87f minimum = x87f_load_f64((double)minSpread);
-        spread = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_sub(x87f_load_f32(maxSpread), minimum), x87f_load_f32(spreadFraction)),
-            minimum));
-#elif defined(WINDOWS_BEHAVIOR)
         spread = (float)(((long double)maxSpread - minSpread) * spreadFraction + minSpread);
-#elif EMULATE_X87
-        spread = x87f_store_f32(x87f_add(
-            x87f_load_f32(minSpread),
-            x87f_mul(x87f_sub(x87f_load_f32(maxSpread), x87f_load_f32(minSpread)),
-                     x87f_load_f32(spreadFraction))));
-#else
-        /* Keep the subtraction, product and sum wide until the spread store. */
-        spread = (float)((WIDE_FLOAT)minSpread + ((WIDE_FLOAT)maxSpread - minSpread) * spreadFraction);
-#endif
 
         /* Get weapon type */
         weaponType = wInfo->weaponType;

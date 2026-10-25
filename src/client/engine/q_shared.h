@@ -1,9 +1,6 @@
 #ifndef CODUOMP_Q_SHARED_H
 #define CODUOMP_Q_SHARED_H
 
-#ifndef EMULATE_X87
-#define EMULATE_X87 0
-#endif
 
 #include "compat/coduo_compiler.h"
 #include "compat/coduo_layout.h"

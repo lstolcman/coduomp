@@ -3,15 +3,9 @@
 #include "bg_pmove.h"
 #include "compat/coduo_int32_bits.h"
 #include "compat/coduo_x87_eval.h"
-#include "compat/coduo_x87emu.h"
 
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 enum {
     BG_VIEWHEIGHT_LERP_LONG_MSEC = 400,
@@ -35,7 +29,6 @@ enum {
  * public body consequently retains the original float return boundary.
  */
 
-#if defined(WINDOWS_BEHAVIOR)
 long double BG_GetMinSpreadForWeapon(const playerState_t *ps, int32_t weapon,
                                      int32_t time, int32_t isAds)
 {
@@ -77,25 +70,6 @@ long double BG_GetMinSpreadForWeapon(const playerState_t *ps, int32_t weapon,
     elapsed = coduo_int32_from_bits(
         (uint32_t)time - (uint32_t)lerpStartTime);
 
-#if EMULATE_X87
-    x87f fraction = x87f_div(x87f_load_i32(elapsed),
-                              x87f_load_i32(duration));
-    const x87f zero = x87f_load_f32(0.0f);
-    const x87f one = x87f_load_f32(1.0f);
-
-    if (x87f_lt(fraction, zero)) {
-        fraction = zero;
-    } else if (x87f_lt(one, fraction)) {
-        fraction = one;
-    }
-
-#define BG_WINDOWS_SPREAD_LERP(from, to)                                  \
-    ((long double)x87f_store_f64(                                         \
-        x87f_add(x87f_load_f32(from),                                     \
-                 x87f_mul(fraction,                                       \
-                          x87f_sub(x87f_load_f32(to),                     \
-                                   x87f_load_f32(from))))))
-#else
     long double fraction =
         (long double)elapsed / (long double)duration;
 
@@ -108,7 +82,6 @@ long double BG_GetMinSpreadForWeapon(const playerState_t *ps, int32_t weapon,
 #define BG_WINDOWS_SPREAD_LERP(from, to)                                  \
     ((long double)(from) + fraction *                                    \
         ((long double)(to) - (long double)(from)))
-#endif
 
     if (fromViewHeight == ps->proneViewHeight) {
         return BG_WINDOWS_SPREAD_LERP(crouched, prone);
@@ -123,99 +96,3 @@ long double BG_GetMinSpreadForWeapon(const playerState_t *ps, int32_t weapon,
 
 #undef BG_WINDOWS_SPREAD_LERP
 }
-#else
-float BG_GetMinSpreadForWeapon(const playerState_t *ps, int32_t weapon,
-                               int32_t time, int32_t isAds)
-{
-    const weaponInfo_t *weaponInfo = BG_GetInfoForWeapon(weapon);
-    float fraction;
-    int32_t elapsed;
-
-    if ((long double)ps->viewHeightLerpTarget == ps->viewHeightCurrent ||
-        ps->viewHeightLerpTime == 0) {
-        if (isAds == 0) {
-            if ((ps->playerStateFlags & PMF_PRONE) != 0) {
-                return weaponInfo->hipSpreadProne;
-            }
-            if ((ps->playerStateFlags & PMF_DUCKED) != 0) {
-                return weaponInfo->hipSpreadDucked;
-            }
-            return weaponInfo->hipSpreadStandMin;
-        }
-
-        if ((ps->playerStateFlags & PMF_PRONE) != 0) {
-            return weaponInfo->adsSpreadProne;
-        }
-        if ((ps->playerStateFlags & PMF_DUCKED) != 0) {
-            return weaponInfo->adsSpreadDucked;
-        }
-        return weaponInfo->adsSpread;
-    }
-
-    elapsed = coduo_int32_from_bits(
-        (uint32_t)time - (uint32_t)ps->viewHeightLerpTime);
-#if EMULATE_X87
-    fraction = x87f_store_f32(x87f_div(
-        x87f_load_i32(elapsed),
-        x87f_load_i32(PM_GetViewHeightLerpTime(
-            ps, ps->viewHeightLerpTarget,
-            ps->viewHeightLerpDown))));
-#else
-    fraction = (float)(
-        (long double)elapsed /
-        (long double)PM_GetViewHeightLerpTime(
-            ps, ps->viewHeightLerpTarget,
-            ps->viewHeightLerpDown));
-#endif
-    if (fraction < 0.0f) {
-        fraction = 0.0f;
-    } else if (fraction > 1.0f) {
-        fraction = 1.0f;
-    }
-
-#if EMULATE_X87
-#define BG_LINUX_SPREAD_LERP(from, to)                                    \
-    x87f_store_f32(x87f_add(                                             \
-        x87f_mul(x87f_sub(x87f_load_f32(to), x87f_load_f32(from)),       \
-                 x87f_load_f32(fraction)),                               \
-        x87f_load_f32(from)))
-#else
-#define BG_LINUX_SPREAD_LERP(from, to)                                    \
-    ((float)(((to) - (from)) * fraction + (from)))
-#endif
-
-    if (isAds == 0) {
-        if (ps->viewHeightLerpTarget == ps->proneViewHeight) {
-            return BG_LINUX_SPREAD_LERP(weaponInfo->hipSpreadDucked,
-                                        weaponInfo->hipSpreadProne);
-        }
-        if (ps->viewHeightLerpTarget == ps->standViewHeight) {
-            return BG_LINUX_SPREAD_LERP(weaponInfo->hipSpreadDucked,
-                                        weaponInfo->hipSpreadStandMin);
-        }
-        if (ps->viewHeightLerpDown == 0) {
-            return BG_LINUX_SPREAD_LERP(weaponInfo->hipSpreadProne,
-                                        weaponInfo->hipSpreadDucked);
-        }
-        return BG_LINUX_SPREAD_LERP(weaponInfo->hipSpreadStandMin,
-                                    weaponInfo->hipSpreadDucked);
-    }
-
-    if (ps->viewHeightLerpTarget == ps->proneViewHeight) {
-        return BG_LINUX_SPREAD_LERP(weaponInfo->adsSpreadDucked,
-                                    weaponInfo->adsSpreadProne);
-    }
-    if (ps->viewHeightLerpTarget == ps->standViewHeight) {
-        return BG_LINUX_SPREAD_LERP(weaponInfo->adsSpreadDucked,
-                                    weaponInfo->adsSpread);
-    }
-    if (ps->viewHeightLerpDown == 0) {
-        return BG_LINUX_SPREAD_LERP(weaponInfo->adsSpreadProne,
-                                    weaponInfo->adsSpreadDucked);
-    }
-    return BG_LINUX_SPREAD_LERP(weaponInfo->adsSpread,
-                                weaponInfo->adsSpreadDucked);
-
-#undef BG_LINUX_SPREAD_LERP
-}
-#endif

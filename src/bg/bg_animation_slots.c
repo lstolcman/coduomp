@@ -2,7 +2,6 @@
 #include "bg_animation_services.h"
 
 #include "compat/coduo_fp_conversion.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <math.h>
@@ -131,43 +130,11 @@ static float bg_compat_initial_loop_time(const clientInfo_t *ci, int duration)
     /* 0x1d15e..0x1d17a: one 80-bit x87 chain with a single float rounding at
      * the phase store; separate framePhase/cyclePhase temporaries would round
      * three times. All operands feed the chain via fild (int->80, exact). */
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-    const x87f phase = x87f_add(
-        x87f_div(x87f_load_i32(bg_compat_animation_time() % duration),
-                 x87f_load_i32(duration)),
-        x87f_mul(x87f_load_i32(ci->clientNum), x87f_load_f32(0.36f)));
-    const int32_t phaseInteger = (int32_t)(uint32_t)
-        x87f_store_i64_trunc(phase);
-    return x87f_store_f32(x87f_sub(phase, x87f_load_i32(phaseInteger)));
-#else
-    const float phase = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_i32(ci->clientNum), x87f_load_f32(0.36f)),
-        x87f_div(x87f_load_i32(bg_compat_animation_time() % duration),
-                 x87f_load_i32(duration))));
-    /* 0x1d19c..0x1d1a8: phase - (float)(int)phase kept 80-bit (fistp-trunc,
-     * fild back, subtract), one store. */
-    return x87f_store_f32(
-        x87f_sub(x87f_load_f32(phase),
-                 x87f_load_i32(x87f_store_i32_trunc(
-                     x87f_load_f32(phase)))));
-#endif
-#elif defined(WINDOWS_BEHAVIOR)
     const double phase =
         (double)(bg_compat_animation_time() % duration) / duration +
         (double)ci->clientNum * 0.36f;
     const int32_t phaseInteger = coduo_fp_to_i32_extended((long double)phase);
     return (float)(phase - phaseInteger);
-#else
-    const float phase = (float)(
-        (long double)ci->clientNum * (long double)0.36f +
-        (long double)(bg_compat_animation_time() % duration) /
-            (long double)duration);
-    const int32_t phaseInteger =
-        coduo_fp_to_i32_extended((long double)phase);
-
-    return (float)((long double)phase - (long double)phaseInteger);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: preserve each compiler's proved order for the
@@ -178,23 +145,13 @@ static qboolean bg_compat_animation_stance_changed(
     qboolean oldValue;
     qboolean newValue;
 
-#if defined(WINDOWS_BEHAVIOR)
     oldValue = BG_IsCrouchingAnim(ci, oldAnimation);
     newValue = BG_IsCrouchingAnim(ci, newAnimation);
-#else
-    newValue = BG_IsCrouchingAnim(ci, newAnimation);
-    oldValue = BG_IsCrouchingAnim(ci, oldAnimation);
-#endif
     if (oldValue != newValue) {
         return qtrue;
     }
-#if defined(WINDOWS_BEHAVIOR)
     oldValue = BG_IsProneAnim(ci, oldAnimation);
     newValue = BG_IsProneAnim(ci, newAnimation);
-#else
-    newValue = BG_IsProneAnim(ci, newAnimation);
-    oldValue = BG_IsProneAnim(ci, oldAnimation);
-#endif
     return oldValue != newValue;
 }
 
@@ -451,16 +408,6 @@ void BG_RunLerpFrameRate(clientInfo_t *ci, bg_anim_slot_t *slot,
 
         /* 0x1d6c7..0x1d6db: the elapsed-seconds product (fild delta * SECONDS)
          * stays in the 80-bit chain; only the quotient is rounded to float. */
-#if EMULATE_X87
-        const float moveSpeed = x87f_store_f32(x87f_div(
-            x87f_load_f32(moveDistance),
-            x87f_mul(x87f_load_i32(bg_compat_animation_sample_time() -
-                                       slot->lastUpdateTime),
-                     x87f_load_f32(BG_ANIM_MILLISECONDS_TO_SECONDS))));
-        /* 0x1d6e4..0x1d6ec: moveSpeed / (fild)animation->moveSpeed. */
-        slot->animRate = x87f_store_f32(x87f_div(
-            x87f_load_f32(moveSpeed), x87f_load_i32(animation->moveSpeed)));
-#elif defined(WINDOWS_BEHAVIOR)
         const float moveSpeed = (float)(
             (double)moveDistance /
             ((double)(bg_compat_animation_sample_time() -
@@ -469,16 +416,6 @@ void BG_RunLerpFrameRate(clientInfo_t *ci, bg_anim_slot_t *slot,
 
         slot->animRate =
             (float)((double)moveSpeed / (double)animation->moveSpeed);
-#else
-        const float moveSpeed = (float)(
-            (long double)moveDistance /
-            ((long double)(bg_compat_animation_sample_time() -
-                           slot->lastUpdateTime) *
-             (long double)BG_ANIM_MILLISECONDS_TO_SECONDS));
-
-        slot->animRate = (float)(
-            (long double)moveSpeed / (long double)animation->moveSpeed);
-#endif
         slot->lastUpdateTime = bg_compat_animation_sample_time();
         bg_compat_copy_anim_slot_origin(slot, entity);
 

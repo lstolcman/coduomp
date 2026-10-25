@@ -21,7 +21,6 @@ qboolean FS_Initialized(void)
  * Name and search-path policy: exact same-module Mac symbol FS_UseSearchPath.
  * Linux accepts every localized search path unless all localized assets are
  * disabled; Windows additionally requires the active client language. */
-#if defined(WINDOWS_BEHAVIOR)
 qboolean FS_UseSearchPath(const searchpath_t *searchpath)
 {
     if (filesystem_compat_server_scope_allows_searchpath(searchpath) ==
@@ -34,20 +33,6 @@ qboolean FS_UseSearchPath(const searchpath_t *searchpath)
         return qfalse;
     return searchpath->language == cl_language->integer ? qtrue : qfalse;
 }
-#else
-qboolean FS_UseSearchPath(const searchpath_t *searchpath)
-{
-    if (filesystem_compat_server_scope_allows_searchpath(searchpath) ==
-        qfalse) {
-        return qfalse;
-    }
-    if (searchpath->localized == qfalse ||
-        fs_ignoreLocalized->integer == 0) {
-        return qtrue;
-    }
-    return qfalse;
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x0042c960..0x0042c98a.
  * Name and signature: exact same-module Mac symbol FS_LanguageHasAssets. */

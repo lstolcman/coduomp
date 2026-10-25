@@ -1,6 +1,6 @@
 # MSVC x86 supports x87 arithmetic through /arch:IA32; MSVC x64 does not.
-# The existing source paths still use software x87 at selected sites on both
-# targets, so neither configuration establishes whole-program retail parity.
+# All targets use native arithmetic. Explicit wide carriers and rounding
+# boundaries preserve the source contract within the compiler's native types.
 set(CODUO_FP_FAITHFUL auto CACHE STRING "Floating-point policy: auto, strict, or relaxed")
 set_property(CACHE CODUO_FP_FAITHFUL PROPERTY STRINGS auto strict relaxed)
 if(NOT CODUO_FP_FAITHFUL MATCHES "^(auto|strict|relaxed)$")
@@ -9,8 +9,8 @@ endif()
 if(CODUO_FP_FAITHFUL STREQUAL "strict")
     message(FATAL_ERROR
         "The current Windows CMake source paths have not established whole-program "
-        "floating-point parity. MSVC x86 supports x87 arithmetic, but selected "
-        "sites still use software x87 and host transcendental fallbacks. "
+        "floating-point parity. MSVC x86 supports x87 arithmetic, but its "
+        "long double storage is binary64 and some operations use host math. "
         "Clang-cl uses x87 only for explicit extended expressions. "
         "Use the default auto policy or relaxed to build with these limits.")
 endif()
@@ -24,7 +24,6 @@ elseif(_msvc_arch STREQUAL "X64")
 else()
     message(FATAL_ERROR "This Windows CMake build supports only x86 and x64.")
 endif()
-set(CODUOMP_EMULATE_X87 1)
 if(CODUOMP_CLANG_CL)
     if(CODUOMP_32BIT_X86)
         message(FATAL_ERROR "Use MSVC for x86; the clang-cl profile supports only x64.")
@@ -45,18 +44,17 @@ int main(void) { typedef char carrier[(sizeof(long double) == 16) ? 1 : -1]; ret
     if(NOT CODUOMP_C_EXTENDED_ABI OR NOT CODUOMP_CXX_EXTENDED_ABI)
         message(FATAL_ERROR "clang-cl requires x64, 80-bit long double, and source-type evaluation in C and C++.")
     endif()
-    set(CODUOMP_EMULATE_X87 0)
     set(CODUOMP_FLOAT_MODEL "native x87 for explicit WIDE_FLOAT/long double; SSE for ordinary float/double")
     message(STATUS "clang-cl x64 preserves the Windows calling ABI and uses the existing explicit x87 source paths.")
 elseif(CODUOMP_32BIT_X86)
-    set(CODUOMP_FLOAT_MODEL "x87 compiler arithmetic (/arch:IA32); software x87 at selected source sites")
+    set(CODUOMP_FLOAT_MODEL "native x87 compiler arithmetic (/arch:IA32); binary64 long double storage")
     message(STATUS "MSVC x86 is the default preset because it supports native x87 arithmetic.")
 else()
-    set(CODUOMP_FLOAT_MODEL "SSE2 compiler arithmetic; software x87 at selected source sites")
+    set(CODUOMP_FLOAT_MODEL "native SSE2 arithmetic; binary64 long double")
     message(WARNING
         "MSVC x64 cannot generate x87 arithmetic from C/C++. Native floating-point "
         "expressions use SSE2 or newer instructions and may differ from the original "
-        "game's x87 results. Software x87 covers only selected source sites. "
+        "game's x87 results. Its widest standard type is binary64. "
         "Use the msvc preset (Win32) for x87 compiler arithmetic. "
         "See docs/client-building.md for the architecture and fidelity limits.")
 endif()

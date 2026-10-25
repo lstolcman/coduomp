@@ -11,11 +11,6 @@ enum {
     PC_EVAL_MAX_OPERATORS = 64
 };
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "precompiler_evaluate.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: release copied expression-token lists through one
  * ownership path on every parser result. */
@@ -28,24 +23,15 @@ static void coduo_pc_free_evaluation_tokens(token_t **tokens)
     }
 }
 
-#if defined(WINDOWS_BEHAVIOR) && defined(__cplusplus)
+#if defined(__cplusplus)
 #define PC_EVAL_ALIGNAS_EIGHT alignas(8)
-#elif defined(WINDOWS_BEHAVIOR)
-#define PC_EVAL_ALIGNAS_EIGHT _Alignas(8)
 #else
-#define PC_EVAL_ALIGNAS_EIGHT
+#define PC_EVAL_ALIGNAS_EIGHT _Alignas(8)
 #endif
 
 typedef struct value_s value_t;
 typedef struct operator_s operator_t;
 
-#if defined(LINUX_BEHAVIOR) && UINTPTR_MAX == UINT32_MAX
-/* NOT_FROM_ORIGINAL_SOURCE: MinGW naturally aligns binary64 fields to eight
- * bytes on i386, unlike the original Linux ABI.  Constrain this internal row
- * to the machine-code-proven four-byte alignment in every Linux-behavior
- * i386 build; native Linux already has the same layout. */
-#pragma pack(push, 4)
-#endif
 
 struct value_s {
     int32_t intValue;
@@ -58,9 +44,6 @@ struct value_s {
     value_t *next;
 };
 
-#if defined(LINUX_BEHAVIOR) && UINTPTR_MAX == UINT32_MAX
-#pragma pack(pop)
-#endif
 
 struct operator_s {
     int32_t operator;
@@ -79,7 +62,6 @@ struct operator_s {
     _Static_assert(sizeof(((type *)0)->member) == (extent),                   \
                    "i386 evaluator field " #type "." #member                \
                    " extent changed")
-#if defined(WINDOWS_BEHAVIOR)
 _Static_assert(_Alignof(value_t) == 0x08,
                "original Windows evaluator-value alignment changed");
 PC_ASSERT_I386_EVAL_FIELD(value_t, intValue, 0x00, 0x04);
@@ -89,17 +71,6 @@ PC_ASSERT_I386_EVAL_FIELD(value_t, prev, 0x14, 0x04);
 PC_ASSERT_I386_EVAL_FIELD(value_t, next, 0x18, 0x04);
 _Static_assert(sizeof(value_t) == 0x20,
                "original Windows evaluator value stride is 0x20");
-#else
-_Static_assert(_Alignof(value_t) == 0x04,
-               "original Linux evaluator-value alignment changed");
-PC_ASSERT_I386_EVAL_FIELD(value_t, intValue, 0x00, 0x04);
-PC_ASSERT_I386_EVAL_FIELD(value_t, floatValue, 0x04, 0x08);
-PC_ASSERT_I386_EVAL_FIELD(value_t, parentheses, 0x0c, 0x04);
-PC_ASSERT_I386_EVAL_FIELD(value_t, prev, 0x10, 0x04);
-PC_ASSERT_I386_EVAL_FIELD(value_t, next, 0x14, 0x04);
-_Static_assert(sizeof(value_t) == 0x18,
-               "original Linux evaluator value stride is 0x18");
-#endif
 _Static_assert(_Alignof(operator_t) == 0x04,
                "original evaluator-operator alignment changed");
 PC_ASSERT_I386_EVAL_FIELD(operator_t, operator, 0x00, 0x04);
@@ -276,22 +247,7 @@ qboolean PC_EvaluateTokens(source_t *source,
             value_t *value = &values[valueCount++];
             memset(value, 0, sizeof(*value));
             value->intValue = token->intValue;
-#if defined(WINDOWS_BEHAVIOR)
             value->floatValue = token->floatValue;
-#elif EMULATE_X87
-            value->floatValue = x87f_store_f64(
-                coduo_pc_load_token_float80(token->floatValue));
-#else
-            {
-                long double extendedValue = 0.0L;
-                const size_t copySize =
-                    sizeof(extendedValue) < PC_X87_EXTENDED_TBYTE_SIZE
-                        ? sizeof(extendedValue)
-                        : PC_X87_EXTENDED_TBYTE_SIZE;
-                memcpy(&extendedValue, token->floatValue, copySize);
-                value->floatValue = (double)extendedValue;
-            }
-#endif
             if (negative != qfalse) {
                 value->intValue = -value->intValue;
                 value->floatValue = -value->floatValue;

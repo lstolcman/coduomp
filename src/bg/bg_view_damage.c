@@ -45,51 +45,14 @@
 #include "bg_vehicle.h"
 #include "bg_weapon.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <math.h>
 
-#if defined(LINUX_BEHAVIOR)
-#define VIEWKICK_ADS_SCALE 0.5f
-#define VIEWKICK_FADE_IN_MS 100.0f
-#define VIEWKICK_FADE_OUT_MS 400.0f
-
-#if EMULATE_X87
-/* NOT_FROM_ORIGINAL_SOURCE: extended carrier for the inlined lean expression. */
-static x87f bg_compat_view_lean_fraction_x87(float fraction)
-{
-    return x87f_mul(
-        x87f_sub(x87f_load_f32(2.0f),
-                 x87f_abs(x87f_load_f32(fraction))),
-        x87f_load_f32(fraction));
-}
-#endif
-
-/* NOT_FROM_ORIGINAL_SOURCE: local factoring of the two original stores. */
-static void bg_compat_add_view_kick_pitch_roll(
-    bg_view_angle_state_t *state, vec3_t angles, float fraction)
-{
-#if EMULATE_X87
-    angles[0] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(fraction),
-                 x87f_load_f32(state->viewKickPitch)),
-        x87f_load_f32(angles[0])));
-    angles[2] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(fraction),
-                 x87f_load_f32(state->viewKickRoll)),
-        x87f_load_f32(angles[2])));
-#else
-    angles[0] += (WIDE_FLOAT)fraction * state->viewKickPitch;
-    angles[2] += (WIDE_FLOAT)fraction * state->viewKickRoll;
-#endif
-}
-#endif
 
 void BG_CalculateView_DamageKick(bg_view_angle_state_t *state,
                                  vec3_t angles)
 {
-#if defined(WINDOWS_BEHAVIOR)
     /* 0x30015a12..0x30015a17: gate on viewKickStartTime (+0x04). */
     int32_t startDelta = state->viewKickStartTime;
     if (startDelta == 0) {
@@ -176,109 +139,4 @@ void BG_CalculateView_DamageKick(bg_view_angle_state_t *state,
      *   angles[2] += curve * state->viewKickRoll   // FADD [ESI+8] */
     angles[0] += curve * state->viewKickPitch;      /* +0x0c */
     angles[2] += curve * state->viewKickRoll;      /* +0x10 */
-#else
-    playerState_t *ps;
-    const weaponInfo_t *weapon;
-    float adsFraction;
-    float scale;
-    float elapsed;
-
-    if (state->viewKickStartTime == 0) {
-        return;
-    }
-
-    ps = state->ps;
-    if ((ps->entityStateFlags & EF_RESTRICTED_MASK) != 0 &&
-        BG_AllowPlayerWeaponAtVehiclePos(
-            ps->vehicleType, ps->vehiclePosition) == 0) {
-        return;
-    }
-
-    weapon = BG_GetInfoForWeapon(ps->currentWeapon);
-    adsFraction = ps->adsFraction;
-#if EMULATE_X87
-    scale = x87f_store_f32(x87f_sub(
-        x87f_load_f32(1.0f),
-        x87f_mul(x87f_load_f32(adsFraction),
-                 x87f_load_f32(VIEWKICK_ADS_SCALE))));
-#else
-    scale = 1.0f - adsFraction * VIEWKICK_ADS_SCALE;
-#endif
-
-    if (adsFraction != 0.0f && weapon->adsOverlayReticle != 0) {
-#if EMULATE_X87
-        scale = x87f_store_f32(x87f_mul(
-            x87f_load_f32(scale),
-            x87f_add(
-                x87f_mul(x87f_load_f32(adsFraction),
-                         x87f_load_f32(VIEWKICK_ADS_SCALE)),
-                x87f_load_f32(1.0f))));
-#else
-        scale *= (WIDE_FLOAT)adsFraction * VIEWKICK_ADS_SCALE + 1.0f;
-#endif
-    }
-
-    elapsed = (float)coduo_int32_from_bits(
-        (uint32_t)state->time - (uint32_t)state->viewKickStartTime);
-    if (elapsed < VIEWKICK_FADE_IN_MS) {
-#if EMULATE_X87
-        const float leanArg = x87f_store_f32(x87f_div(
-            x87f_load_f32(elapsed),
-            x87f_load_f32(VIEWKICK_FADE_IN_MS)));
-#else
-        const float leanArg = elapsed / VIEWKICK_FADE_IN_MS;
-#endif
-        /* The fade-in curve is stored before the separate scale multiply. */
-        const float leanPhase = GetLeanFraction(leanArg);
-#if EMULATE_X87
-        bg_compat_add_view_kick_pitch_roll(
-            state, angles,
-            x87f_store_f32(x87f_mul(
-                x87f_load_f32(leanPhase),
-                x87f_load_f32(scale))));
-#else
-        bg_compat_add_view_kick_pitch_roll(
-            state, angles, leanPhase * scale);
-#endif
-    } else {
-        float fadeOutFraction;
-
-#if EMULATE_X87
-        fadeOutFraction = x87f_store_f32(x87f_sub(
-            x87f_load_f32(1.0f),
-            x87f_div(
-                x87f_sub(x87f_load_f32(elapsed),
-                         x87f_load_f32(VIEWKICK_FADE_IN_MS)),
-                x87f_load_f32(VIEWKICK_FADE_OUT_MS))));
-#else
-        fadeOutFraction =
-            1.0f - ((WIDE_FLOAT)elapsed - VIEWKICK_FADE_IN_MS) /
-                       VIEWKICK_FADE_OUT_MS;
-#endif
-        if (fadeOutFraction > 0.0f) {
-            float fadeOutLean;
-
-#if EMULATE_X87
-            const float leanArg = x87f_store_f32(x87f_sub(
-                x87f_load_f32(1.0f),
-                x87f_load_f32(fadeOutFraction)));
-            fadeOutLean = x87f_store_f32(x87f_sub(
-                x87f_load_f32(1.0f),
-                bg_compat_view_lean_fraction_x87(leanArg)));
-#else
-            /* Keep the live curve through subtraction on float-return ABIs. */
-            const float leanArg = 1.0f - fadeOutFraction;
-            fadeOutLean = (float)(1.0L - (2.0L - (long double)fabsf(leanArg)) * (long double)leanArg);
-#endif
-            bg_compat_add_view_kick_pitch_roll(
-                state, angles, fadeOutLean * scale);
-        }
-    }
-#endif
 }
-
-#if defined(LINUX_BEHAVIOR)
-#undef VIEWKICK_ADS_SCALE
-#undef VIEWKICK_FADE_IN_MS
-#undef VIEWKICK_FADE_OUT_MS
-#endif

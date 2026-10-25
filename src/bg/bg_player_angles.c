@@ -3,17 +3,11 @@
 #include "bg_vehicle.h"
 
 #include "compat/coduo_fp_conversion.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <math.h>
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 enum {
     BG_SWING_ANGLE_MASK = 65535
@@ -33,7 +27,6 @@ enum {
  * conversion. BG_SwingAngles therefore has whole-function platform bodies.
  */
 
-#if defined(WINDOWS_BEHAVIOR)
 /* NOT_FROM_ORIGINAL_SOURCE: source-level expression of the repeated inline
  * Windows ANGLE2SHORT/SHORT2ANGLE instruction sequence. */
 static float bg_compat_quantize_angle_add(float left, float right)
@@ -42,18 +35,9 @@ static float bg_compat_quantize_angle_add(float left, float right)
     const float shortToAngle = 0.0054931640625f;
     int32_t packed;
 
-#if EMULATE_X87
-    packed = (int32_t)(uint32_t)x87f_store_i64_trunc(x87f_mul(
-        x87f_add(x87f_load_f32(left), x87f_load_f32(right)),
-        x87f_load_f32(angleToShort)));
-    return x87f_store_f32(x87f_mul(
-        x87f_load_i32(packed & BG_SWING_ANGLE_MASK),
-        x87f_load_f32(shortToAngle)));
-#else
     packed = coduo_fp_to_i32_extended(
         ((long double)left + (long double)right) * angleToShort);
     return (float)((double)(packed & BG_SWING_ANGLE_MASK) * shortToAngle);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: subtraction companion for the two clamp sites. */
@@ -63,18 +47,9 @@ static float bg_compat_quantize_angle_subtract(float left, float right)
     const float shortToAngle = 0.0054931640625f;
     int32_t packed;
 
-#if EMULATE_X87
-    packed = (int32_t)(uint32_t)x87f_store_i64_trunc(x87f_mul(
-        x87f_sub(x87f_load_f32(left), x87f_load_f32(right)),
-        x87f_load_f32(angleToShort)));
-    return x87f_store_f32(x87f_mul(
-        x87f_load_i32(packed & BG_SWING_ANGLE_MASK),
-        x87f_load_f32(shortToAngle)));
-#else
     packed = coduo_fp_to_i32_extended(
         ((long double)left - (long double)right) * angleToShort);
     return (float)((double)(packed & BG_SWING_ANGLE_MASK) * shortToAngle);
-#endif
 }
 
 void BG_SwingAngles(float target, float deadband, float maxDeviation,
@@ -126,74 +101,13 @@ void BG_SwingAngles(float target, float deadband, float maxDeviation,
         *angle = bg_compat_quantize_angle_add(target, maxDeviation);
     }
 }
-#else
-void BG_SwingAngles(float target, float deadband, float maxDeviation,
-                    float stepScale, float *angle, qboolean *active)
-{
-    if (*active == qfalse) {
-        const float delta = AngleSubtract(*angle, target);
-
-        if (delta > deadband || delta < -deadband) {
-            *active = qtrue;
-        }
-    }
-
-    if (*active != qfalse) {
-        float delta = AngleSubtract(target, *angle);
-        float step = fabsf(delta) * 0.05f;
-
-        if (step < 0.5f) {
-            step = 0.5f;
-        }
-
-        if (delta >= 0.0f) {
-            const float maximumStep =
-                (float)bg_compat_animation_frame_time() * step * stepScale;
-
-            if (delta <= maximumStep) {
-                *active = qfalse;
-            } else {
-                *active = qtrue;
-                delta = maximumStep;
-            }
-            *angle = AngleMod(*angle + delta);
-        } else if (delta < 0.0f) {
-            const float minimumStep =
-                -((float)bg_compat_animation_frame_time() * step * stepScale);
-
-            if (minimumStep <= delta) {
-                *active = qfalse;
-            } else {
-                *active = qtrue;
-                delta = minimumStep;
-            }
-            *angle = AngleMod(*angle + delta);
-        }
-
-        delta = AngleSubtract(target, *angle);
-        if (delta > maxDeviation) {
-            *angle = AngleMod(target - maxDeviation);
-        } else if (delta < -maxDeviation) {
-            *angle = AngleMod(target + maxDeviation);
-        }
-    }
-}
-#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: preserve an unspilled x87 multiply/add chain in
  * the shared source on both original precision-control modes. */
 static float bg_compat_player_angle_multiply_add(float left, float scale,
                                                   float addend)
 {
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(left), x87f_load_f32(scale)),
-        x87f_load_f32(addend)));
-#elif defined(WINDOWS_BEHAVIOR)
     return (float)((double)left * scale + addend);
-#else
-    return (float)((long double)left * scale + addend);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: preserve the corresponding subtract/multiply
@@ -202,15 +116,7 @@ static float bg_compat_player_angle_subtract_multiply(float left,
                                                        float subtract,
                                                        float scale)
 {
-#if EMULATE_X87
-    return x87f_store_f32(x87f_mul(
-        x87f_sub(x87f_load_f32(left), x87f_load_f32(subtract)),
-        x87f_load_f32(scale)));
-#elif defined(WINDOWS_BEHAVIOR)
     return (float)(((double)left - subtract) * scale);
-#else
-    return (float)(((long double)left - subtract) * scale);
-#endif
 }
 
 void BG_PlayerAngles(const entityState_t *entity, clientInfo_t *clientInfo)
@@ -234,13 +140,6 @@ void BG_PlayerAngles(const entityState_t *entity, clientInfo_t *clientInfo)
     float torsoMaximum;
     uint32_t moveType;
 
-#if defined(LINUX_BEHAVIOR)
-    /* NOT_FROM_ORIGINAL_SOURCE: preserve the unoptimized Linux source edge
-     * whose result is stored but never subsequently consumed. */
-    volatile float evaluatedLean =
-        (float)GetLeanFraction(clientInfo->leanFraction);
-    (void)evaluatedLean;
-#endif
     leanAmount = clientInfo->leanAmount;
     viewPitch = clientInfo->viewPitch;
     viewYaw = AngleMod(clientInfo->viewYaw);

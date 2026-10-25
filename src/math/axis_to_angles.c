@@ -1,7 +1,6 @@
 #include "q_math.h"
 
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 
 /*
  * Complete axis-to-Euler conversion bank.  The three Windows instruction
@@ -29,45 +28,10 @@
  * separate function bodies.
  */
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#if defined(WINDOWS_BEHAVIOR)
 #define Q_AXIS_ANGLE_PI 3.1415927410125732f
 #define Q_AXIS_ANGLE_HALF_CIRCLE 180.0f
-#else
-#define Q_AXIS_ANGLE_PI 3.141592653589793
-#define Q_AXIS_ANGLE_HALF_CIRCLE 180.0
-#endif
 
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-#define Q_AXIS_ANGLE_RADIANS(value)                                         \
-    x87f_store_f32(x87f_div(                                               \
-        x87f_mul(x87f_neg(x87f_load_f32(value)),                           \
-                 x87f_load_f32(Q_AXIS_ANGLE_PI)),                          \
-        x87f_load_f32(Q_AXIS_ANGLE_HALF_CIRCLE)))
-#else
-#define Q_AXIS_ANGLE_RADIANS(value)                                         \
-    x87f_store_f32(x87f_div(                                               \
-        x87f_mul(x87f_neg(x87f_load_f32(value)),                           \
-                 x87f_load_f64(Q_AXIS_ANGLE_PI)),                          \
-        x87f_load_f64(Q_AXIS_ANGLE_HALF_CIRCLE)))
-#endif
-#define Q_AXIS_ANGLE_ADD_PRODUCTS(a, b, c, d)                              \
-    x87f_store_f32(x87f_add(                                               \
-        x87f_mul(x87f_load_f32(a), x87f_load_f32(b)),                     \
-        x87f_mul(x87f_load_f32(c), x87f_load_f32(d))))
-#define Q_AXIS_ANGLE_SUB_PRODUCTS(a, b, c, d)                              \
-    x87f_store_f32(x87f_sub(                                               \
-        x87f_mul(x87f_load_f32(a), x87f_load_f32(b)),                     \
-        x87f_mul(x87f_load_f32(c), x87f_load_f32(d))))
-#define Q_AXIS_ANGLE_ADD(a, b)                                             \
-    x87f_store_f32(x87f_add(x87f_load_f32(a), x87f_load_f32(b)))
-#else
 #define Q_AXIS_ANGLE_RADIANS(value)                                        \
     ((float)((-(long double)(value) *                                     \
               (long double)Q_AXIS_ANGLE_PI) /                             \
@@ -80,7 +44,6 @@
              (long double)(c) * (long double)(d)))
 #define Q_AXIS_ANGLE_ADD(a, b)                                             \
     ((float)((long double)(a) + (long double)(b)))
-#endif
 
 void AxisToAngles(const axis_t axis, vec3_t angles)
 {

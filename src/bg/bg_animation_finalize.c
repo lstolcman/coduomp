@@ -52,12 +52,8 @@
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_int32_bits.h"
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 #include "qcommon/q_string.h"
 
-#if defined(LINUX_BEHAVIOR)
-#include "compat/libm/coduo_libm.h"
-#endif
 
 #include <math.h>
 #include <stdint.h>
@@ -88,47 +84,11 @@ enum {
  */
 static int32_t bg_compat_anim_displacement_i32(const vec3_t moveDelta)
 {
-#if defined(WINDOWS_BEHAVIOR)
-#if EMULATE_X87
-    return x87f_store_i32_trunc(x87f_sqrt(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(moveDelta[2]),
-                          x87f_load_f32(moveDelta[2])),
-                 x87f_mul(x87f_load_f32(moveDelta[1]),
-                          x87f_load_f32(moveDelta[1]))),
-        x87f_mul(x87f_load_f32(moveDelta[0]),
-                 x87f_load_f32(moveDelta[0])))));
-#else
     const long double squared =
         ((long double)moveDelta[2] * (long double)moveDelta[2] +
          (long double)moveDelta[1] * (long double)moveDelta[1]) +
         (long double)moveDelta[0] * (long double)moveDelta[0];
     return coduo_fp_to_i32_extended(sqrtl(squared));
-#endif
-#else
-#if EMULATE_X87
-    const x87f squared = x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(moveDelta[0]),
-                          x87f_load_f32(moveDelta[0])),
-                 x87f_mul(x87f_load_f32(moveDelta[1]),
-                          x87f_load_f32(moveDelta[1]))),
-        x87f_mul(x87f_load_f32(moveDelta[2]),
-                 x87f_load_f32(moveDelta[2])));
-    const float distance =
-        (float)CoduoLibm_SqrtGlibc(x87f_store_f64(squared));
-    return x87f_store_i32_trunc(x87f_load_f32(distance));
-#else
-    const long double squared =
-        ((long double)moveDelta[0] * (long double)moveDelta[0] +
-         (long double)moveDelta[1] * (long double)moveDelta[1]) +
-        (long double)moveDelta[2] * (long double)moveDelta[2];
-    const float distance = (float)CoduoLibm_SqrtGlibc((double)squared);
-#if CODUO_ARCH_HAS_X87 && (defined(__GNUC__) || defined(__clang__))
-    return CODUO_X87_TRUNCATE_I32((long double)distance);
-#else
-    return coduo_fp_to_i32_extended((long double)distance);
-#endif
-#endif
-#endif
 }
 
 void BG_FinalizePlayerAnims(void)

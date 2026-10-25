@@ -289,7 +289,6 @@ void EmitThreadInternal(scr_ast_node_t *node, uint32_t sourcePos)
     EmitFormalParameterListRef(node->payload.functionDefinition.parameters,
                                sourcePos);
     EmitStatementList(node->payload.functionDefinition.body);
-#if defined(WINDOWS_BEHAVIOR)
     /* Windows flushes a pending deferred developer check before END
      * (CoDUOMP.exe 0x0047f482..0x0047f498). Linux coduo_lnxded
      * 0x080a163e..0x080a16f2 proceeds directly from the statement-list call to
@@ -299,7 +298,6 @@ void EmitThreadInternal(scr_ast_node_t *node, uint32_t sourcePos)
         script_codeNeedsDeferredCheck = qfalse;
         Scr_TransferStatementListToDeveloperBuffer();
     }
-#endif
     EmitOpcode(SCRIPT_OPCODE_END, 0, 0);
 
     if (SCRIPT_FUNCTION_OPERAND_STACK_LIMIT <

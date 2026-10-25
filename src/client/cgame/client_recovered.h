@@ -1,9 +1,6 @@
 #ifndef CLIENT_RECOVERED_H
 #define CLIENT_RECOVERED_H
 
-#ifndef EMULATE_X87
-#define EMULATE_X87 0
-#endif
 
 #include "compat/coduo_layout.h"
 #include "compat/coduo_int32_bits.h"

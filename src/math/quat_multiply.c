@@ -1,12 +1,6 @@
 #include "q_math.h"
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 /*
  * QuatMultiply uses the original CoD convention: product = second * first,
@@ -33,7 +27,6 @@
  * either input remains observable. The supporting PowerPC executable, cgame,
  * and game bodies are instruction-identical and also compute second * first.
  */
-#if defined(WINDOWS_BEHAVIOR)
 void QuatMultiply(const vec4_t first, const vec4_t second, vec4_t product)
 {
 #if (defined(__i386__) || defined(__x86_64__)) && \
@@ -127,100 +120,3 @@ void QuatMultiply(const vec4_t first, const vec4_t second, vec4_t product)
     product[3] = (float)(accumulator - term);
 #endif
 }
-#else
-void QuatMultiply(const vec4_t first, const vec4_t second, vec4_t product)
-{
-#if EMULATE_X87
-#define QUAT_PRODUCT(a, b) \
-    x87f_mul(x87f_load_f32(a), x87f_load_f32(b))
-    product[0] = x87f_store_f32(x87f_sub(
-        x87f_add(x87f_add(QUAT_PRODUCT(first[0], second[3]),
-                          QUAT_PRODUCT(first[3], second[0])),
-                 QUAT_PRODUCT(first[2], second[1])),
-        QUAT_PRODUCT(first[1], second[2])));
-    product[1] = x87f_store_f32(x87f_add(
-        x87f_add(x87f_sub(QUAT_PRODUCT(first[1], second[3]),
-                          QUAT_PRODUCT(first[2], second[0])),
-                 QUAT_PRODUCT(first[3], second[1])),
-        QUAT_PRODUCT(first[0], second[2])));
-    product[2] = x87f_store_f32(x87f_add(
-        x87f_sub(x87f_add(QUAT_PRODUCT(first[2], second[3]),
-                          QUAT_PRODUCT(first[1], second[0])),
-                 QUAT_PRODUCT(first[0], second[1])),
-        QUAT_PRODUCT(first[3], second[2])));
-    product[3] = x87f_store_f32(x87f_sub(
-        x87f_sub(x87f_sub(QUAT_PRODUCT(first[3], second[3]),
-                          QUAT_PRODUCT(first[0], second[0])),
-                 QUAT_PRODUCT(first[1], second[1])),
-        QUAT_PRODUCT(first[2], second[2])));
-#undef QUAT_PRODUCT
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
-    /* GAS's AT&T `fsubrp` spelling encodes the original DE E9 FSUBP. */
-    __asm__ __volatile__("flds 0(%0)\n\t"
-                         "fmuls 12(%1)\n\t"
-                         "flds 12(%0)\n\t"
-                         "fmuls 0(%1)\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "flds 8(%0)\n\t"
-                         "fmuls 4(%1)\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "flds 4(%0)\n\t"
-                         "fmuls 8(%1)\n\t"
-                         "fsubrp %%st, %%st(1)\n\t"
-                         "fstps 0(%2)\n\t"
-                         "flds 4(%0)\n\t"
-                         "fmuls 12(%1)\n\t"
-                         "flds 8(%0)\n\t"
-                         "fmuls 0(%1)\n\t"
-                         "fsubrp %%st, %%st(1)\n\t"
-                         "flds 12(%0)\n\t"
-                         "fmuls 4(%1)\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "flds 0(%0)\n\t"
-                         "fmuls 8(%1)\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fstps 4(%2)\n\t"
-                         "flds 8(%0)\n\t"
-                         "fmuls 12(%1)\n\t"
-                         "flds 4(%0)\n\t"
-                         "fmuls 0(%1)\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "flds 0(%0)\n\t"
-                         "fmuls 4(%1)\n\t"
-                         "fsubrp %%st, %%st(1)\n\t"
-                         "flds 12(%0)\n\t"
-                         "fmuls 8(%1)\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fstps 8(%2)\n\t"
-                         "flds 12(%0)\n\t"
-                         "fmuls 12(%1)\n\t"
-                         "flds 0(%0)\n\t"
-                         "fmuls 0(%1)\n\t"
-                         "fsubrp %%st, %%st(1)\n\t"
-                         "flds 4(%0)\n\t"
-                         "fmuls 4(%1)\n\t"
-                         "fsubrp %%st, %%st(1)\n\t"
-                         "flds 8(%0)\n\t"
-                         "fmuls 8(%1)\n\t"
-                         "fsubrp %%st, %%st(1)\n\t"
-                         "fstps 12(%2)"
-                         :
-                         : "r"(first), "r"(second), "r"(product)
-                         : "st", "st(1)", "memory");
-#else
-    product[0] = ((first[0] * second[3] + first[3] * second[0]) +
-                  first[2] * second[1]) -
-                 first[1] * second[2];
-    product[1] = ((first[1] * second[3] - first[2] * second[0]) +
-                  first[3] * second[1]) +
-                 first[0] * second[2];
-    product[2] = ((first[2] * second[3] + first[1] * second[0]) -
-                  first[0] * second[1]) +
-                 first[3] * second[2];
-    product[3] = ((first[3] * second[3] - first[0] * second[0]) -
-                  first[1] * second[1]) -
-                 first[2] * second[2];
-#endif
-}
-#endif

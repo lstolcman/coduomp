@@ -1,9 +1,6 @@
 #ifndef CODUO_UI_FUNCTIONS_H
 #define CODUO_UI_FUNCTIONS_H
 
-#ifndef EMULATE_X87
-#define EMULATE_X87 0
-#endif
 
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_int32_bits.h"

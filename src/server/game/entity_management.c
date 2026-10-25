@@ -16,7 +16,6 @@
 #include "game_functions.h"
 #include "level_locals.h"
 #include "scr_vm.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
 
 /* ------------------------------------------------------------------ */
@@ -379,27 +378,16 @@ void G_SetSoundBlendAndPitch(gentity_t *ent, int soundAlias0,
      * bits); floor()+sign-flip and the final (float) cast are native.  The two
      * (encodedPitch - x) subtracts stay 80-bit and round to double -> shim.
      * PITCH_MAX loads as 0.99f-widened-to-double (0x3FEFAE1480000000), which
-     * (long double)0.99f / x87f_load_f32(0.99f) reproduce exactly. */
+     * (long double)0.99f reproduces exactly. */
     pitchProduct = (double)((long double)pitch *
                             (long double)SOUND_BLEND_PITCH_SCALE);
     encodedPitch = -floor(pitchProduct);
     if (volume < SOUND_BLEND_PITCH_MAX) {
-#if EMULATE_X87
-        encodedPitch = x87f_store_f64(x87f_sub(
-            x87f_load_f64(encodedPitch), x87f_load_f32(volume)));
-#else
         encodedPitch = (double)((long double)encodedPitch -
                                 (long double)volume);
-#endif
     } else {
-#if EMULATE_X87
-        encodedPitch = x87f_store_f64(x87f_sub(
-            x87f_load_f64(encodedPitch),
-            x87f_load_f32(SOUND_BLEND_PITCH_MAX)));
-#else
         encodedPitch = (double)((long double)encodedPitch -
                                 (long double)SOUND_BLEND_PITCH_MAX);
-#endif
     }
     game_compat_g_set_sound_blend_pitch_payload(ent, (float)encodedPitch);
 
@@ -727,38 +715,14 @@ static float game_compat_g_turret_xanim_goal_time_for_weight(XAnimTree *animTree
      * floats. Windows retains both until the final float goal-time store.
      * The target expression can carry more precision than its float syscall
      * argument when it subtracts a child weight from one. */
-#if EMULATE_X87
-    float weight = trap_XAnimGetWeight(animTree, anim);
-    float weightDelta = x87f_store_f32(x87f_abs(x87f_sub(
-        x87f_load_f32(weight), x87f_load_f64((double)targetWeight))));
-    float blendFrames = x87f_store_f32(x87f_mul(
-        x87f_div(x87f_load_f32(TURRET_POSITION_BLEND_MSEC),
-                 x87f_load_i32(level.frameTime)),
-        x87f_load_f32(weightDelta)));
-
-    if (blendFrames > 0.0f) {
-        return x87f_store_f32(
-            x87f_div(x87f_load_f32(1.0f), x87f_load_f32(blendFrames)));
-    }
-    return 0.0f;
-#else
-#if defined(WINDOWS_BEHAVIOR)
     targetWeight = coduo_round_f32(targetWeight);
-#endif
     WIDE_FLOAT weightDelta = fabsl((WIDE_FLOAT)trap_XAnimGetWeight(animTree, anim) - targetWeight);
-#if defined(LINUX_BEHAVIOR)
-    weightDelta = coduo_round_f32(weightDelta);
-#endif
     WIDE_FLOAT blendFrames = ((WIDE_FLOAT)TURRET_POSITION_BLEND_MSEC / level.frameTime) * weightDelta;
-#if defined(LINUX_BEHAVIOR)
-    blendFrames = coduo_round_f32(blendFrames);
-#endif
 
     if (blendFrames > 0.0f) {
         return (float)((WIDE_FLOAT)1.0f / blendFrames);
     }
     return 0.0f;
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: goal-weight wrapper; extracted during reconstruction of 0x5ac06. */
@@ -819,9 +783,7 @@ static float game_compat_g_turret_prime_child_pair(XAnimTree *animTree, uint32_t
                                     uint32_t *firstChildAnim,
                                     uint32_t *secondChildAnim)
 {
-#if EMULATE_X87
-    int childIndex = x87f_store_i32_trunc(x87f_load_f32(childPosition));
-#elif defined(__i386__) || defined(__x86_64__)
+#if   defined(__i386__) || defined(__x86_64__)
     int childIndex =
         CODUO_X87_TRUNCATE_I32((long double)childPosition);
 #else
@@ -899,10 +861,6 @@ static int game_compat_g_turret_select_aiming_anim(XAnimTree *animTree, uint32_t
         }
 
         childPosition = (WIDE_FLOAT)childCount * 0.5f - (WIDE_FLOAT)turretYaw / horizontalRotateIncrement;
-#if !defined(WINDOWS_BEHAVIOR)
-        /* Linux rounds the child position before clamping and truncation. */
-        childPosition = coduo_round_f32(childPosition);
-#endif
         childPosition = game_compat_g_turret_clamp_child_position(childPosition, childCount);
         secondWeight = game_compat_g_turret_prime_child_pair(animTree, topAnim,
                                               childPosition, &childIndex,
@@ -996,15 +954,8 @@ void G_PlayerTurretPositionAndBlend(gentity_t *player, gentity_t *turret)
      * the differences first; both store the completed tag offset as float. */
     for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
         viewDelta[axisIndex] = (WIDE_FLOAT)player->currentOrigin[axisIndex] - turretAxis.origin[axisIndex];
-#if defined(LINUX_BEHAVIOR)
-        viewDelta[axisIndex] = coduo_round_f32(viewDelta[axisIndex]);
-#endif
     }
-#if defined(WINDOWS_BEHAVIOR)
     const int firstProjection = 2, lastProjection = 0;
-#else
-    const int firstProjection = 0, lastProjection = 2;
-#endif
     tagForwardOffset = (viewDelta[firstProjection] * turretAxis.axis[2][firstProjection] +
                         viewDelta[1] * turretAxis.axis[2][1]) +
                        viewDelta[lastProjection] * turretAxis.axis[2][lastProjection];
@@ -1369,10 +1320,6 @@ qboolean G_TurretAimAtAngles(gentity_t *turret, const float *targetAngles,
     /* Windows uses the retained sum for the carry, before the pitch's float store rounds it. */
     WIDE_FLOAT finalPitch = (WIDE_FLOAT)previousPitch + delta;
     turret->s.turret.pitch = (float)finalPitch;
-#if defined(LINUX_BEHAVIOR)
-    /* The Linux carry uses the pitch after its float store. */
-    finalPitch = coduo_round_f32(finalPitch);
-#endif
     *game_compat_g_turret_pitch_carry(turret) =
         (WIDE_FLOAT)*game_compat_g_turret_pitch_carry(turret) - finalPitch;
 
@@ -1508,11 +1455,7 @@ void turret_think_init(gentity_t *turret)
         /* This inlined transform sums Z, Y, X, then translation; each trace
          * endpoint lane rounds only after the complete sum. Linux sums X/Y/Z.
          * Select the association here: cancellation can change the endpoint. */
-#if defined(WINDOWS_BEHAVIOR)
         const int first = 2, last = 0;
-#else
-        const int first = 0, last = 2;
-#endif
         for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
             traceEnd[axisIndex] = (float)(
                 (((WIDE_FLOAT)localEnd[first] * entityAxis.axis[first][axisIndex] +
@@ -1577,15 +1520,8 @@ static qboolean G_TurretPlayerFacingUseArc(gentity_t *turret,
     yawBase = turret->currentAngles[1] + turretState->rightArc;
     /* Stock 0x5c6e2: (|rightArc|+|leftArc|)*0.5 kept 80-bit, one store -> shim;
      * yawBase and yawBase+halfUseArc are single adds (native). */
-#if EMULATE_X87
-    halfUseArc = x87f_store_f32(x87f_mul(
-        x87f_add(x87f_load_f32(fabsf(turretState->rightArc)),
-                 x87f_load_f32(fabsf(turretState->leftArc))),
-        x87f_load_f32(0.5f)));
-#else
     halfUseArc = 0.5f *
                  (fabsf(turretState->rightArc) + fabsf(turretState->leftArc));
-#endif
     yawCenter = AngleNormalize180(yawBase + halfUseArc);
     YawVectors(yawCenter, forward, NULL);
     VectorNormalize(forward);
@@ -1605,23 +1541,9 @@ static qboolean G_TurretPlayerFacingUseArc(gentity_t *turret,
      * is zero, so both accumulation orders have the same finite result. The degree conversion uses
      * float pi on Windows and double pi on Linux, then rounds to float before
      * comparing with the stored half-arc. */
-#if EMULATE_X87
-    float facingDot = x87f_store_f32(x87f_add(x87f_add(
-        x87f_mul(x87f_load_f32(forward[0]), x87f_load_f32(delta[0])),
-        x87f_mul(x87f_load_f32(forward[1]), x87f_load_f32(delta[1]))),
-        x87f_mul(x87f_load_f32(forward[2]), x87f_load_f32(delta[2]))));
-    angleToPlayer = x87f_store_f32(x87f_div(
-        x87f_mul(x87f_load_f32(Q_acos(facingDot)), x87f_load_f32(180.0f)),
-        x87f_load_f64(M_PI)));
-#else
     const volatile float facingDot = ((WIDE_FLOAT)forward[0] * delta[0] + (WIDE_FLOAT)forward[1] * delta[1]) + (WIDE_FLOAT)forward[2] * delta[2];
-#if defined(WINDOWS_BEHAVIOR)
     const WIDE_FLOAT radiansPerHalfTurn = (float)M_PI;
-#else
-    const WIDE_FLOAT radiansPerHalfTurn = M_PI;
-#endif
     angleToPlayer = ((WIDE_FLOAT)Q_acos(facingDot) * 180.0f) / radiansPerHalfTurn;
-#endif
 
     /* Stock branches to false only for an ordered angle greater than the
      * half-arc; an unordered Q_acos result follows the true path. */

@@ -1,7 +1,6 @@
 #include "bg_pmove.h"
 
 #include "bg_weapon.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <math.h>
@@ -62,66 +61,31 @@ void PM_UpdateLean(playerState_t *ps, const usercmd_t *command,
 
     /* The movement frame supplies a bounded integer millisecond count.
      * Windows multiplies by a stored reciprocal; Linux retains the divide. */
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-    const x87f leanStep = x87f_mul(
-        x87f_mul(x87f_load_i32(pml.msec),
-                 x87f_load_f32(leanInput == 0 ? PM_LEAN_RETURN_RATE : PM_LEAN_ENTER_RATE)),
-        x87f_load_f32(maxLean));
-#else
-    const x87f leanStep = x87f_mul(
-        x87f_div(x87f_load_i32(pml.msec),
-                 x87f_load_f32(leanInput == 0 ? PM_LEAN_RETURN_MSEC : PM_LEAN_ENTER_MSEC)),
-        x87f_load_f32(maxLean));
-#endif
-#else
-#if defined(WINDOWS_BEHAVIOR)
     const long double leanStep = (long double)pml.msec *
         (long double)(leanInput == 0 ? PM_LEAN_RETURN_RATE : PM_LEAN_ENTER_RATE) * (long double)maxLean;
-#else
-    const long double leanStep = (long double)pml.msec /
-        (long double)(leanInput == 0 ? PM_LEAN_RETURN_MSEC : PM_LEAN_ENTER_MSEC) * (long double)maxLean;
-#endif
-#endif
 
     if (leanInput == 0) {
         if (leanFraction > 0.0f) {
-#if EMULATE_X87
-            leanFraction = x87f_store_f32(x87f_sub(x87f_load_f32(leanFraction), leanStep));
-#else
             leanFraction = (float)((long double)leanFraction - leanStep);
-#endif
             if (leanFraction < 0.0f) {
                 leanFraction = 0.0f;
             }
         } else if (leanFraction < 0.0f) {
-#if EMULATE_X87
-            leanFraction = x87f_store_f32(x87f_add(x87f_load_f32(leanFraction), leanStep));
-#else
             leanFraction = (float)((long double)leanFraction + leanStep);
-#endif
             if (leanFraction > 0.0f) {
                 leanFraction = 0.0f;
             }
         }
     } else if (leanInput < 0) {
         if (leanFraction > -maxLean) {
-#if EMULATE_X87
-            leanFraction = x87f_store_f32(x87f_sub(x87f_load_f32(leanFraction), leanStep));
-#else
             leanFraction = (float)((long double)leanFraction - leanStep);
-#endif
         }
         if (leanFraction < -maxLean) {
             leanFraction = -maxLean;
         }
     } else {
         if (leanFraction < maxLean) {
-#if EMULATE_X87
-            leanFraction = x87f_store_f32(x87f_add(x87f_load_f32(leanFraction), leanStep));
-#else
             leanFraction = (float)((long double)leanFraction + leanStep);
-#endif
         }
         if (leanFraction > maxLean) {
             leanFraction = maxLean;
@@ -139,13 +103,7 @@ void PM_UpdateLean(playerState_t *ps, const usercmd_t *command,
 
         end[0] = ps->psOrigin[0];
         end[1] = ps->psOrigin[1];
-#if EMULATE_X87
-        end[2] = x87f_store_f32(x87f_add(
-            x87f_load_f32(ps->psOrigin[2]),
-            x87f_load_f32(ps->viewHeightCurrent)));
-#else
         end[2] = ps->psOrigin[2] + ps->viewHeightCurrent;
-#endif
         start[0] = end[0];
         start[1] = end[1];
         start[2] = end[2];
@@ -157,15 +115,9 @@ void PM_UpdateLean(playerState_t *ps, const usercmd_t *command,
                   ps->psClientNum, MASK_PLAYERSOLID);
         blockedFraction = UnGetLeanFraction(leanTrace.fraction);
         if (blockedFraction < PM_FloatAbs(ps->leanFraction)) {
-#if EMULATE_X87
-            ps->leanFraction = x87f_store_f32(x87f_mul(
-                x87f_load_i32(PM_FloatSign(ps->leanFraction)),
-                x87f_load_f32(blockedFraction)));
-#else
             ps->leanFraction = (float)(
                 (long double)PM_FloatSign(ps->leanFraction) *
                 (long double)blockedFraction);
-#endif
         }
     }
 }

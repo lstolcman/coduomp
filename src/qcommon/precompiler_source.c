@@ -5,17 +5,9 @@
 
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR)
 void *GetMemory(size_t size);
 void *GetClearedMemory(size_t size);
 void FreeMemory(void *memory);
-#elif defined(LINUX_BEHAVIOR)
-void *Com_ZoneDebugAlloc(size_t size);
-void *Com_ZoneDebugAllocClear(size_t size);
-void Com_DebugFree(void *pointer);
-#else
-#error "precompiler_source.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 char pc_baseFolder[MAX_QPATH];
 
@@ -41,23 +33,14 @@ source_t *LoadSourceFile(const char *filename)
      * 0x65c-byte allocation for the 0x658-byte payload.  Linux allocates its
      * ABI-specific 0x4c8-byte payload directly. */
     source_t *source;
-#if defined(WINDOWS_BEHAVIOR)
     source = GetMemory(sizeof(*source));
-#else
-    source = Com_ZoneDebugAlloc(sizeof(*source));
-#endif
     memset(source, 0, sizeof(*source));
     /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
     strncpy(source->filename, filename, sizeof(source->filename) - 1u);
     source->filename[sizeof(source->filename) - 1u] = '\0';
     source->scriptStack = script;
-#if defined(WINDOWS_BEHAVIOR)
     source->defineHash = GetClearedMemory(
         PC_DEFINE_HASH_BUCKET_COUNT * sizeof(*source->defineHash));
-#else
-    source->defineHash = Com_ZoneDebugAllocClear(
-        PC_DEFINE_HASH_BUCKET_COUNT * sizeof(*source->defineHash));
-#endif
     PC_AddGlobalDefinesToSource(source);
     return source;
 }
@@ -80,23 +63,14 @@ source_t *LoadSourceMemory(const char *buffer, size_t length,
     /* The file and memory loaders use the same platform-sized source
      * allocation described above. */
     source_t *source;
-#if defined(WINDOWS_BEHAVIOR)
     source = GetMemory(sizeof(*source));
-#else
-    source = Com_ZoneDebugAlloc(sizeof(*source));
-#endif
     memset(source, 0, sizeof(*source));
     /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
     strncpy(source->filename, name, sizeof(source->filename) - 1u);
     source->filename[sizeof(source->filename) - 1u] = '\0';
     source->scriptStack = script;
-#if defined(WINDOWS_BEHAVIOR)
     source->defineHash = GetClearedMemory(
         PC_DEFINE_HASH_BUCKET_COUNT * sizeof(*source->defineHash));
-#else
-    source->defineHash = Com_ZoneDebugAllocClear(
-        PC_DEFINE_HASH_BUCKET_COUNT * sizeof(*source->defineHash));
-#endif
     PC_AddGlobalDefinesToSource(source);
     return source;
 }
@@ -130,25 +104,13 @@ void FreeSource(source_t *source)
     while (source->indentStack != NULL) {
         indent_t *indent = source->indentStack;
         source->indentStack = indent->next;
-#if defined(WINDOWS_BEHAVIOR)
         FreeMemory(indent);
-#else
-        Com_DebugFree(indent);
-#endif
     }
 
     if (source->defineHash != NULL) {
-#if defined(WINDOWS_BEHAVIOR)
         FreeMemory(source->defineHash);
-#else
-        Com_DebugFree(source->defineHash);
-#endif
     }
-#if defined(WINDOWS_BEHAVIOR)
     FreeMemory(source);
-#else
-    Com_DebugFree(source);
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x00446ed0..0x00446f50.
@@ -215,22 +177,8 @@ qboolean PC_ReadTokenHandle(int32_t handle, pc_token_t *token)
     token->type = readToken.type;
     token->subtype = readToken.subtype;
     token->intValue = readToken.intValue;
-#if defined(WINDOWS_BEHAVIOR)
     /* CoDUOMP.exe 0x00447026..0x0044702e: FLD QWORD, FSTP DWORD. */
     token->floatValue = (float)readToken.floatValue;
-#elif EMULATE_X87
-    /* coduo_lnxded loads the token's TBYTE directly and stores binary32. */
-    token->floatValue = x87f_store_f32(
-        coduo_pc_load_token_float80(readToken.floatValue));
-#else
-    long double floatValue = 0.0L;
-    size_t valueSize = sizeof(floatValue);
-    if (valueSize > PC_TOKEN_FLOAT_VALUE_SIZE) {
-        valueSize = PC_TOKEN_FLOAT_VALUE_SIZE;
-    }
-    memcpy(&floatValue, readToken.floatValue, valueSize);
-    token->floatValue = (float)floatValue;
-#endif
 
     if (token->type == PC_TOKEN_TYPE_STRING)
         StripDoubleQuotes(token->string);

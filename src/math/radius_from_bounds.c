@@ -4,13 +4,7 @@
 
 #include <math.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 /*
  * The four authoritative Windows bodies are instruction-identical apart from
@@ -31,7 +25,6 @@
  * 0x0806a0c3 and game.mp.uo.i386.so RVA 0x0003de80.  They instead sum
  * (x*x + y*y) + z*z under PC=64 before storing binary64 for sqrt(double).
  */
-#if defined(WINDOWS_BEHAVIOR)
 float RadiusFromBounds(const vec3_t mins, const vec3_t maxs)
 {
     vec3_t corner;
@@ -59,35 +52,3 @@ float RadiusFromBounds(const vec3_t mins, const vec3_t maxs)
 
     return (float)sqrt(squared);
 }
-#else
-float RadiusFromBounds(const vec3_t mins, const vec3_t maxs)
-{
-    vec3_t corner;
-
-    for (int32_t axis = 0; axis < 3; ++axis) {
-        const float minMagnitude = fabsf(mins[axis]);
-        const float maxMagnitude = fabsf(maxs[axis]);
-        corner[axis] = minMagnitude > maxMagnitude
-                           ? minMagnitude
-                           : maxMagnitude;
-    }
-
-#if EMULATE_X87
-    x87f squared = x87f_add(
-        x87f_mul(x87f_load_f32(corner[0]), x87f_load_f32(corner[0])),
-        x87f_mul(x87f_load_f32(corner[1]), x87f_load_f32(corner[1])));
-    squared = x87f_add(
-        squared,
-        x87f_mul(x87f_load_f32(corner[2]), x87f_load_f32(corner[2])));
-    return (float)coduomp_math_sqrt(x87f_store_f64(squared));
-#else
-    const long double xy =
-        (long double)corner[0] * (long double)corner[0] +
-        (long double)corner[1] * (long double)corner[1];
-    const long double squared =
-        xy + (long double)corner[2] * (long double)corner[2];
-
-    return (float)coduomp_math_sqrt((double)squared);
-#endif
-}
-#endif

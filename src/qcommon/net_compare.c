@@ -4,11 +4,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 void Com_Printf(const char *format, ...);
 
@@ -35,7 +30,6 @@ int32_t NET_CompareBaseAdrSigned(const netadr_t *left,
         return (int32_t)left->port - (int32_t)right->port;
     }
     if (left->type == NA_IP) {
-#if defined(WINDOWS_BEHAVIOR)
         size_t index;
         for (index = 0; index < sizeof(left->ip); ++index) {
             if (left->ip[index] < right->ip[index]) {
@@ -46,12 +40,8 @@ int32_t NET_CompareBaseAdrSigned(const netadr_t *left,
             }
         }
         return 0;
-#else
-        return memcmp(left->ip, right->ip, sizeof(left->ip));
-#endif
     }
     if (left->type == NA_IPX) {
-#if defined(WINDOWS_BEHAVIOR)
         size_t index;
         for (index = 0; index < sizeof(left->ipx); ++index) {
             if (left->ipx[index] < right->ipx[index]) {
@@ -62,9 +52,6 @@ int32_t NET_CompareBaseAdrSigned(const netadr_t *left,
             }
         }
         return 0;
-#else
-        return memcmp(left->ipx, right->ipx, sizeof(left->ipx));
-#endif
     }
 
     Com_Printf("NET_CompareBaseAdrSigned: bad address type\n");
@@ -89,7 +76,6 @@ int32_t NET_CompareAdrSigned(const netadr_t *left,
         if (left->port != right->port) {
             return (int32_t)left->port - (int32_t)right->port;
         }
-#if defined(WINDOWS_BEHAVIOR)
         size_t index;
         for (index = 0; index < sizeof(left->ip); ++index) {
             if (left->ip[index] < right->ip[index]) {
@@ -100,15 +86,11 @@ int32_t NET_CompareAdrSigned(const netadr_t *left,
             }
         }
         return 0;
-#else
-        return memcmp(left->ip, right->ip, sizeof(left->ip));
-#endif
     }
     if (left->type == NA_IPX) {
         if (left->port != right->port) {
             return (int32_t)left->port - (int32_t)right->port;
         }
-#if defined(WINDOWS_BEHAVIOR)
         size_t index;
         for (index = 0; index < sizeof(left->ipx); ++index) {
             if (left->ipx[index] < right->ipx[index]) {
@@ -119,9 +101,6 @@ int32_t NET_CompareAdrSigned(const netadr_t *left,
             }
         }
         return 0;
-#else
-        return memcmp(left->ipx, right->ipx, sizeof(left->ipx));
-#endif
     }
 
     Com_Printf("NET_CompareAdrSigned: bad address type\n");

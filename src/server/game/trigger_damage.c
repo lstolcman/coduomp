@@ -20,7 +20,6 @@
 #include "compat/crt/atof_compat.h"
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_x87_eval.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #define TRIGGER_HURT_DEFAULT_SOUND "world_hurt_me"
 #define TRIGGER_HURT_LIFE_KEY "life"
@@ -387,23 +386,11 @@ void Activate_trigger_damage(gentity_t *trigger, gentity_t *activator,
                  * dword (0x76dd0..0x76e14). Negating before truncation and
                  * subtracting is equivalent to adding the positive conversion
                  * with the same 32-bit wrapping. */
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-                trigger->nextthink =
-                    coduo_int32_from_bits((uint32_t)level.time +
-                    (uint32_t)x87f_store_i32_trunc(x87f_mul(
-                        x87f_add(
-                            x87f_mul(x87f_load_f64(
-                                         coduo_server_rand_signed_unit()),
-                                     x87f_load_f32(trigger->itemRandom)),
-                            x87f_load_f32(trigger->itemWait)),
-                        x87f_load_f32(TRIGGER_DAMAGE_DURATION_SCALE))));
-#else
                 volatile WIDE_FLOAT randomOffset =
                     (WIDE_FLOAT)coduo_server_rand_signed_unit() * trigger->itemRandom;
                 WIDE_FLOAT waitSeconds = randomOffset + (WIDE_FLOAT)trigger->itemWait;
                 trigger->nextthink = coduo_int32_from_bits((uint32_t)level.time +
                     coduo_fp_to_u32_extended(waitSeconds * TRIGGER_DAMAGE_DURATION_SCALE));
-#endif
             } else {
                 trigger->touch = NULL;
                 trigger->nextthink = coduo_int32_from_bits((uint32_t)level.time + TRIGGER_DAMAGE_FREE_DELAY_MS);
@@ -482,17 +469,12 @@ void SP_trigger_damage(gentity_t *ent)
     teamString = SL_ConvertToString(game_compat_trigger_damage_team_string(ent));
 
     G_SpawnFloat("wait", TRIGGER_DAMAGE_DEFAULT_WAIT, &ent->itemWait);
-#if defined(WINDOWS_BEHAVIOR)
     const char *randomText;
 
     G_SpawnString("random", TRIGGER_DAMAGE_DEFAULT_RANDOM, &randomText);
     random = coduo_compat_atof(randomText);
     ent->itemRandom = (float)random;
     /* The Windows clamp compares the parsed value before float rounding. */
-#else
-    G_SpawnFloat("random", TRIGGER_DAMAGE_DEFAULT_RANDOM, &ent->itemRandom);
-    random = ent->itemRandom;
-#endif
 
     if (ent->itemWait >= 0.0f && ent->itemWait <= random) {
         /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */

@@ -1,6 +1,5 @@
 #include "q_math.h"
 
-#include "compat/coduo_x87emu.h"
 
 #include <stdint.h>
 
@@ -33,46 +32,24 @@ qboolean BoxDistSqrdExceeds(const vec3_t mins, const vec3_t maxs,
     }
 
     for (int32_t component = 0; component < 3; ++component) {
-#if EMULATE_X87
-        const x87f sideProduct = x87f_mul(
-            x87f_load_f32(minDelta[component]),
-            x87f_load_f32(maxDelta[component]));
-        const qboolean sameSide =
-            !x87f_le(sideProduct, x87f_load_f32(0.0f));
-#else
         const long double sideProduct =
             (long double)minDelta[component] *
             (long double)maxDelta[component];
         const qboolean sameSide = !(sideProduct <= 0.0L);
-#endif
 
         if (sameSide != qfalse) {
-#if EMULATE_X87
-            const float minDeltaSquared = x87f_store_f32(x87f_mul(
-                x87f_load_f32(minDelta[component]),
-                x87f_load_f32(minDelta[component])));
-            const float maxDeltaSquared = x87f_store_f32(x87f_mul(
-                x87f_load_f32(maxDelta[component]),
-                x87f_load_f32(maxDelta[component])));
-#else
             const float minDeltaSquared = (float)(
                 (long double)minDelta[component] *
                 (long double)minDelta[component]);
             const float maxDeltaSquared = (float)(
                 (long double)maxDelta[component] *
                 (long double)maxDelta[component]);
-#endif
             const float selected =
                 maxDeltaSquared < minDeltaSquared
                     ? maxDeltaSquared
                     : minDeltaSquared;
-#if EMULATE_X87
-            accumulated = x87f_store_f32(x87f_add(
-                x87f_load_f32(accumulated), x87f_load_f32(selected)));
-#else
             accumulated = (float)((long double)accumulated +
                                   (long double)selected);
-#endif
         }
     }
 

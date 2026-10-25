@@ -46,17 +46,10 @@
 // calling-convention detail, expressed here as normal C calls.
 
 #include "bg_pmove.h"
-
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /* Original exported Linux BG constant at RVA 0x0009b4d0. Both optimized
  * Windows modules materialize the same binary32 value directly at the call. */
@@ -71,7 +64,6 @@ const float pm_flyaccelerate = 8.0f;
  * Exact source usercmd-button-enum names are unresolved; named here by their proven
  * free-fly vertical-move role.
  */
-#if defined(WINDOWS_BEHAVIOR)
 void PM_FlyMove(void)
 {
     /* 0x30008f24: apply friction to the pmove player-state velocity in place. */
@@ -97,21 +89,11 @@ void PM_FlyMove(void)
      * 0x30009018. The z component remains in ST0 through the button-impulse
      * FISUB/FIADD and reaches its sole FSTP at 0x30009024. Carry both live x87
      * values without inventing an earlier memory-format spill. */
-#if EMULATE_X87
-    x87f wishvelX;
-    x87f wishvelZ;
-#else
     long double wishvelX;
     long double wishvelZ;
-#endif
     if (scale == 0.0f) {
-#if EMULATE_X87
-        wishvelX = x87f_load_f32(0.0f);
-        wishvelZ = x87f_load_f32(0.0f);
-#else
         wishvelX = 0.0f;
         wishvelZ = 0.0f;
-#endif
         wishvel[1] = 0.0f;
     } else {
         /* 0x30008f67..0x30008f8b: sign-extend the command movement bytes and convert
@@ -126,22 +108,6 @@ void PM_FlyMove(void)
          *   (pml.forward[i]*fmove + pml.right[i]*smove) * scale
          * with the FLD forward / FMUL fmove computed first, then FLD right / FMUL smove
          * FADDP, then FMUL scale. */
-#if EMULATE_X87
-        wishvelX = x87f_mul(
-            x87f_add(
-                x87f_mul(x87f_load_f32(fmove),
-                         x87f_load_f32(pml.forward[0])),
-                x87f_mul(x87f_load_f32(smove),
-                         x87f_load_f32(pml.right[0]))),
-            x87f_load_f32(scale));
-        wishvel[1] = x87f_store_f32(x87f_mul(
-            x87f_add(
-                x87f_mul(x87f_load_f32(fmove),
-                         x87f_load_f32(pml.forward[1])),
-                x87f_mul(x87f_load_f32(smove),
-                         x87f_load_f32(pml.right[1]))),
-            x87f_load_f32(scale)));
-#else
         wishvelX =
             ((long double)pml.forward[0] * (long double)fmove +
              (long double)pml.right[0] * (long double)smove) *
@@ -150,29 +116,16 @@ void PM_FlyMove(void)
             ((long double)pml.forward[1] * (long double)fmove +
              (long double)pml.right[1] * (long double)smove) *
             (long double)scale);
-#endif
 
         /* 0x30008fbf..0x30008fe5: z picks up the basis-rotated term AND the up-move byte,
          * both scaled: (pml.forward[2]*fmove + pml.right[2]*smove)*scale + upmove*scale
          * (the machine code multiplies the rotated term by scale, then adds
          * upmove*scale via FILD/FMUL/FADDP). */
-#if EMULATE_X87
-        wishvelZ = x87f_add(
-            x87f_mul(
-                x87f_add(
-                    x87f_mul(x87f_load_f32(fmove),
-                             x87f_load_f32(pml.forward[2])),
-                    x87f_mul(x87f_load_f32(smove),
-                             x87f_load_f32(pml.right[2]))),
-                x87f_load_f32(scale)),
-            x87f_mul(x87f_load_i32(umove), x87f_load_f32(scale)));
-#else
         wishvelZ =
             ((long double)pml.forward[2] * (long double)fmove +
              (long double)pml.right[2] * (long double)smove) *
                 (long double)scale +
             (long double)umove * (long double)scale;
-#endif
     }
 
     /* 0x30008fe7..0x3000900e: free-fly vertical button impulses. Gated on the
@@ -186,21 +139,10 @@ void PM_FlyMove(void)
     if (ps->speed != 0) {
         int32_t downImpulse = (move->command.wbuttons & PM_WBUTTON_LEAN_RIGHT) << 4;
         int32_t upImpulse   = (move->command.wbuttons & PM_WBUTTON_LEAN_LEFT) << 4;
-#if EMULATE_X87
-        wishvelZ = x87f_add(
-            x87f_sub(wishvelZ, x87f_load_i32(downImpulse)),
-            x87f_load_i32(upImpulse));
-#else
         wishvelZ = wishvelZ - downImpulse + upImpulse;
-#endif
     }
-#if EMULATE_X87
-    wishvel[0] = x87f_store_f32(wishvelX); /* 0x30009018 FSTP [ESP+0x10] */
-    wishvel[2] = x87f_store_f32(wishvelZ); /* 0x30009024 FSTP [ESP+0x18] */
-#else
     wishvel[0] = (float)wishvelX;   /* 0x30009018 FSTP [ESP+0x10] */
     wishvel[2] = (float)wishvelZ;   /* 0x30009024 FSTP [ESP+0x18] */
-#endif
 
     /* 0x30009012..0x30009028: wishdir = wishvel; wishspeed = |wishdir| (3-D). The
      * machine code lays wishvel into a stack vec3 (FXCH reorders the x87 x/z pair so
@@ -220,84 +162,3 @@ void PM_FlyMove(void)
     /* 0x30009042..0x30009044: slide/step the pmove origin with NO gravity (arg = 0). */
     PM_StepSlideMove(0);
 }
-#else
-/* Linux game RVA 0x00024838..0x000249cb. Unlike the two Windows modules,
- * Linux stores every rotated lane as binary32, stores the up-move addition,
- * and separately stores both vertical button adjustments. Its multiply graph
- * also applies scale before each signed command component. */
-void PM_FlyMove(void)
-{
-    pmove_t *move;
-    vec3_t wishvel;
-    vec3_t wishdir;
-    float wishSpeed;
-    float scale;
-
-    PM_Friction();
-    move = pm;
-    scale = PM_CmdScale(&move->command);
-
-    if (scale == 0.0f) {
-        wishvel[0] = 0.0f;
-        wishvel[1] = 0.0f;
-        wishvel[2] = 0.0f;
-    } else {
-        const int32_t forwardMove = move->command.forwardmove;
-        const int32_t rightMove = move->command.rightmove;
-
-        for (int32_t lane = 0; lane < 3; ++lane) {
-#if EMULATE_X87
-            wishvel[lane] = x87f_store_f32(x87f_add(
-                x87f_mul(
-                    x87f_mul(x87f_load_f32(scale),
-                             x87f_load_f32(pml.forward[lane])),
-                    x87f_load_i32(forwardMove)),
-                x87f_mul(
-                    x87f_mul(x87f_load_f32(scale),
-                             x87f_load_f32(pml.right[lane])),
-                    x87f_load_i32(rightMove))));
-#else
-            wishvel[lane] = (float)(
-                ((long double)scale * (long double)pml.forward[lane]) *
-                    (long double)forwardMove +
-                ((long double)scale * (long double)pml.right[lane]) *
-                    (long double)rightMove);
-#endif
-        }
-
-#if EMULATE_X87
-        wishvel[2] = x87f_store_f32(x87f_add(
-            x87f_load_f32(wishvel[2]),
-            x87f_mul(x87f_load_i32(move->command.upmove),
-                     x87f_load_f32(scale))));
-#else
-        wishvel[2] = (float)(
-            (long double)wishvel[2] +
-            (long double)move->command.upmove * (long double)scale);
-#endif
-    }
-
-    if (move->ps->speed != 0) {
-        const int32_t downImpulse =
-            (move->command.wbuttons & PM_WBUTTON_LEAN_RIGHT) << 4;
-        const int32_t upImpulse =
-            (move->command.wbuttons & PM_WBUTTON_LEAN_LEFT) << 4;
-#if EMULATE_X87
-        wishvel[2] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(wishvel[2]), x87f_load_i32(downImpulse)));
-        wishvel[2] = x87f_store_f32(x87f_add(
-            x87f_load_f32(wishvel[2]), x87f_load_i32(upImpulse)));
-#else
-        wishvel[2] = (float)((long double)wishvel[2] - downImpulse);
-        wishvel[2] = (float)((long double)wishvel[2] + upImpulse);
-#endif
-    }
-
-    wishdir[0] = wishvel[0];
-    wishdir[1] = wishvel[1];
-    wishdir[2] = wishvel[2];
-    wishSpeed = (float)VectorNormalize(wishdir);
-    PM_Accelerate(wishdir, wishSpeed, pm_flyaccelerate);
-    PM_StepSlideMove(0);
-}
-#endif

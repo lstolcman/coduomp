@@ -2,13 +2,7 @@
 
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 /*
  * The retained original bodies all test normal[0..2] in ascending order, set
@@ -31,12 +25,7 @@ void SetPlaneSignbits(cplane_t *plane)
     uint8_t signbits = 0;
 
     for (int32_t axis = 0; axis < 3; ++axis) {
-#if EMULATE_X87
-        if (x87f_lt(x87f_load_f32(plane->normal[axis]),
-                    x87f_load_f32(0.0f))) {
-#else
         if (plane->normal[axis] < 0.0f) {
-#endif
             signbits |= (uint8_t)(UINT8_C(1) << axis);
         }
     }

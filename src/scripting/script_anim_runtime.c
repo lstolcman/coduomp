@@ -756,7 +756,6 @@ void Scr_LoadAnimTreeAtIndex(int32_t treeIndex,
  * source ABI returns the one-pointer script_anim_tree_ref_t aggregate through
  * a hidden destination pointer. Keep the complete ABI-specific functions
  * separate; the lookup and returned pointer value remain identical. */
-#if defined(WINDOWS_BEHAVIOR)
 XAnim *CODUO_SCRIPT_CDECL Scr_FindAnimTree(const char *filename)
 {
     uint16_t filenameHandle = Scr_CreateCanonicalFilename(filename);
@@ -777,29 +776,6 @@ XAnim *CODUO_SCRIPT_CDECL Scr_FindAnimTree(const char *filename)
 
     return (XAnim *)GetVariableValueAddress(rootChild)->payload;
 }
-#else
-script_anim_tree_ref_t CODUO_SCRIPT_CDECL
-Scr_FindAnimTree(const char *filename)
-{
-    script_anim_tree_ref_t result = {NULL};
-    uint16_t filenameHandle = Scr_CreateCanonicalFilename(filename);
-    uint16_t treeSlot = FindVariable(
-        script_animTreeRoot, filenameHandle);
-    SL_RemoveRefToString(filenameHandle);
-
-    if (treeSlot != 0) {
-        uint16_t tree = FindObject(treeSlot);
-        uint16_t rootChild = FindVariable(
-            tree, SCRIPT_ANIM_TREE_FIRST_CHILD_NODE_INDEX);
-        if (rootChild != 0) {
-            result.tree =
-                (XAnim *)GetVariableValueAddress(rootChild)->payload;
-        }
-    }
-
-    return result;
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00479a30..0x00479ab6.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00479a30_00479ab7.mcode. */

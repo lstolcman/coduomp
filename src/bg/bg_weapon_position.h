@@ -81,13 +81,8 @@ void BG_CalculateView_Velocity(bg_view_angle_state_t *state,
 void BG_CalculateViewAngles(bg_view_angle_state_t *state,
                             vec3_t viewAngles);
 
-#if defined(WINDOWS_BEHAVIOR)
 long double BG_SmoothWeaponSwayValue(float target, float current, float rate,
                                      int32_t msec);
-#else
-float BG_SmoothWeaponSwayValue(float target, float current, float rate,
-                               int32_t msec);
-#endif
 void BG_CalculateWeaponPosition_Sway(const playerState_t *ps,
                                      vec3_t previousViewAngles,
                                      vec3_t swayOffsets,

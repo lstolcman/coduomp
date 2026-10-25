@@ -22,7 +22,6 @@
 #include "compat/crt/qsort_compat.h"
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_x87_eval.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
 
 #define DROPPED_WEAPON_SLOT_COUNT 32
@@ -302,16 +301,9 @@ static char game_compat_registered_items_config_char(int value)
 static float game_compat_item_random_settled_height(void)
 {
     /* Stock 0x566a8: fild rand /DENOM * 0.5f + 0.5f, one float store. */
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f64(coduo_server_rand_unit()),
-                 x87f_load_f32(ITEM_BOUNCE_SETTLE_RANDOM_Z)),
-        x87f_load_f32(ITEM_BOUNCE_SETTLE_MIN_Z)));
-#else
     return (float)((long double)coduo_server_rand_unit() *
                        (long double)ITEM_BOUNCE_SETTLE_RANDOM_Z +
                    (long double)ITEM_BOUNCE_SETTLE_MIN_Z);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: names the Linux gentity +0x17e item auto-touch
@@ -699,18 +691,7 @@ gentity_t *Drop_Item(gentity_t *ent, gitem_t *item, float angleOffset,
         velocity[2] *= DROPPED_ITEM_THROW_SPEED;
         /* Retain the random product and both additions until the float store.
          * Windows adds velocity before THROW_UP; Linux adds it afterward. */
-#if EMULATE_X87
-        velocity[2] = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(
-                              x87f_load_f64(coduo_server_rand_signed_unit()),
-                              x87f_load_f32(DROPPED_ITEM_THROW_UP_RANDOM)),
-                     x87f_load_f32(DROPPED_ITEM_THROW_UP)),
-            x87f_load_f32(velocity[2])));
-#elif defined(WINDOWS_BEHAVIOR)
         velocity[2] = ((WIDE_FLOAT)coduo_server_rand_signed_unit() * DROPPED_ITEM_THROW_UP_RANDOM + velocity[2]) + DROPPED_ITEM_THROW_UP;
-#else
-        velocity[2] = ((WIDE_FLOAT)coduo_server_rand_signed_unit() * DROPPED_ITEM_THROW_UP_RANDOM + DROPPED_ITEM_THROW_UP) + velocity[2];
-#endif
     } else {
         velocity[0] = 0.0f;
         velocity[1] = 0.0f;
@@ -721,14 +702,7 @@ gentity_t *Drop_Item(gentity_t *ent, gitem_t *item, float angleOffset,
     origin[1] = ent->currentOrigin[1];
     /* Keep the bounds difference and half-height wide until adding the origin
      * and storing the completed coordinate as float. */
-#if EMULATE_X87
-    origin[2] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_sub(x87f_load_f32(ent->maxs[2]), x87f_load_f32(ent->mins[2])),
-                 x87f_load_f32(0.5f)),
-        x87f_load_f32(ent->currentOrigin[2])));
-#else
     origin[2] = ((WIDE_FLOAT)ent->maxs[2] - ent->mins[2]) * 0.5f + ent->currentOrigin[2];
-#endif
 
     return LaunchItem(item, origin, velocity, ent->s.number);
 }
@@ -739,19 +713,6 @@ static void game_compat_drop_weapon_default_ammo(int clipIndex, int *ammoCount, 
     int clipSize = BG_GetAmmoClipSize(clipIndex);
     /* Stock (v+1.0)*0.5 rounded once to float; (clipSize-1) fild'd raw *
      * ammoScale; ammoCount fild'd raw * (v*0.5+0.25) -> shim chains. */
-#if EMULATE_X87
-    float ammoScale = x87f_store_f32(x87f_mul(
-        x87f_add(x87f_load_f64(coduo_server_rand_unit()), x87f_load_f32(1.0f)),
-        x87f_load_f32(0.5f)));
-
-    *ammoCount = Game_RoundAmmoCount(x87f_store_f32(x87f_mul(
-                     x87f_load_i32(clipSize - 1), x87f_load_f32(ammoScale)))) +
-                 1;
-    *clipCount = Game_RoundAmmoCount(x87f_store_f32(x87f_mul(
-        x87f_load_i32(*ammoCount),
-        x87f_add(x87f_mul(x87f_load_f64(coduo_server_rand_unit()), x87f_load_f32(0.5f)),
-                 x87f_load_f32(0.25f)))));
-#else
     float ammoScale =
         (float)(((long double)coduo_server_rand_unit() + 1.0L) * 0.5L);
 
@@ -762,7 +723,6 @@ static void game_compat_drop_weapon_default_ammo(int clipIndex, int *ammoCount, 
     *clipCount = Game_RoundAmmoCount(
         (float)((long double)*ammoCount *
                 ((long double)coduo_server_rand_unit() * 0.5L + 0.25L)));
-#endif
     *ammoCount -= *clipCount;
 }
 
@@ -842,9 +802,7 @@ static void game_compat_drop_weapon_place_at_tag(gentity_t *source, gentity_t *d
          * share one boundary; only Y needs a profile-specific boundary. */
         for (int axis = 0; axis < 3; axis++) {
             WIDE_FLOAT half = ((WIDE_FLOAT)source->mins[axis] + source->maxs[axis]) * 0.5f;
-#if defined(WINDOWS_BEHAVIOR)
             if (axis != 1)
-#endif
             {
                 half = coduo_round_f32(half);
             }
@@ -878,21 +836,9 @@ static void game_compat_drop_weapon_place_at_tag(gentity_t *source, gentity_t *d
     G_SetAngle(dropped, source->currentAngles);
 
     /* Round all three random products to float before publishing the trajectory. */
-#if EMULATE_X87
-    angularVelocity[0] = x87f_store_f32(x87f_mul(
-        x87f_load_f64(coduo_server_rand_signed_unit()),
-        x87f_load_f32(DROPPED_WEAPON_TAG_YAW_RANDOM)));
-    angularVelocity[1] = x87f_store_f32(x87f_mul(
-        x87f_load_f64(coduo_server_rand_signed_unit()),
-        x87f_load_f32(DROPPED_WEAPON_TAG_PITCH_RANDOM)));
-    angularVelocity[2] = x87f_store_f32(x87f_mul(
-        x87f_load_f64(coduo_server_rand_signed_unit()),
-        x87f_load_f32(DROPPED_WEAPON_TAG_ROLL_RANDOM)));
-#else
     angularVelocity[0] = (WIDE_FLOAT)coduo_server_rand_signed_unit() * DROPPED_WEAPON_TAG_YAW_RANDOM;
     angularVelocity[1] = (WIDE_FLOAT)coduo_server_rand_signed_unit() * DROPPED_WEAPON_TAG_PITCH_RANDOM;
     angularVelocity[2] = (WIDE_FLOAT)coduo_server_rand_signed_unit() * DROPPED_WEAPON_TAG_ROLL_RANDOM;
-#endif
     dropped->s.apos.trType = TR_LINEAR;
     dropped->s.apos.trTime = level.time;
     dropped->s.apos.trDelta[0] = angularVelocity[0];
@@ -973,7 +919,6 @@ static int game_compat_pickup_weapon_random_count(int weapon)
     if (maxAmmo == 0 && minAmmo == 0) {
         int clipIndex = BG_ClipForWeapon(weapon);
         int clipSize = BG_GetAmmoClipSize(clipIndex);
-#if defined(WINDOWS_BEHAVIOR)
         /* NOT_FROM_ORIGINAL_SOURCE: express the Windows count calculation with
          * its float rounding point and current-rounding-mode integer conversion. */
         static const float randomScale = 0x1p-15f;
@@ -982,41 +927,10 @@ static int game_compat_pickup_weapon_random_count(int weapon)
         static const double roundingBias = 0x1p-30;
         int32_t randomValue = coduo_crt_rand();
         int32_t clipMultiplier = clipSize - 1;
-#if EMULATE_X87
-        x87f scaled = x87f_mul(x87f_load_i32(randomValue), x87f_load_f32(randomScale));
-        scaled = x87f_add(scaled, x87f_load_f32(randomOffset));
-        scaled = x87f_mul(scaled, x87f_load_i32(clipMultiplier));
-        scaled = x87f_mul(scaled, x87f_load_f32(countScale));
-        float storedCount = x87f_store_f32(scaled);
-        return x87f_store_i32(x87f_add(x87f_load_f32(storedCount), x87f_load_f64(roundingBias))) + 1;
-#else
         float storedCount = (float)(((long double)randomValue * randomScale + randomOffset) * clipMultiplier * countScale);
 
         /* The 15-bit random factor keeps the rounded count within int32_t for either long ABI. */
         return (int32_t)lrintl((long double)storedCount + roundingBias) + 1;
-#endif
-#else
-        /* Original i386 Pickup_Weapon 0x53991..0x539de keeps rand()/2^31 in
-         * x87, rounds (v + 1.0) * 0.5 once to float, and multiplies the raw
-         * integer clipSize-1 in 80-bit; same shape as game_compat_drop_weapon_default_ammo. */
-#if EMULATE_X87
-        float ammoScale = x87f_store_f32(x87f_mul(
-            x87f_add(x87f_load_f64(coduo_server_rand_unit()), x87f_load_f32(1.0f)),
-            x87f_load_f32(0.5f)));
-
-        return Game_RoundAmmoCount(x87f_store_f32(x87f_mul(
-                   x87f_load_i32(clipSize - 1), x87f_load_f32(ammoScale)))) +
-               1;
-#else
-        float ammoScale =
-            (float)(((long double)coduo_server_rand_unit() + 1.0L) * 0.5L);
-
-        return Game_RoundAmmoCount(
-                   (float)((long double)(clipSize - 1) *
-                           (long double)ammoScale)) +
-               1;
-#endif
-#endif
     }
 
     if (maxAmmo < 0) {
@@ -1403,19 +1317,9 @@ void G_BounceItem(gentity_t *ent, trace_t *trace)
     /* Windows rounds elapsed milliseconds to float before multiplying and
      * consumes the low dword of a qword conversion. Linux retains the integer
      * load through multiplication and truncates directly to a dword. */
-#if EMULATE_X87
-    int bounceTime =
-        x87f_store_i32_trunc(x87f_mul(
-            x87f_load_i32(level.time - level.previousTime),
-            x87f_load_f32(trace->fraction))) +
-        level.previousTime;
-#else
     WIDE_FLOAT elapsed = level.time - level.previousTime;
-#if defined(WINDOWS_BEHAVIOR)
     elapsed = coduo_round_f32(elapsed);
-#endif
     int bounceTime = coduo_fp_to_i32_extended(elapsed * trace->fraction) + level.previousTime;
-#endif
     vec3_t velocity;
     volatile float dot;
     float *delta = ent->s.pos.trDelta;
@@ -1426,23 +1330,7 @@ void G_BounceItem(gentity_t *ent, trace_t *trace)
      * Linux X/Y/Z. Windows also rounds the reflection scale to float; Linux
      * keeps that multiplication live through the reflected component. Each
      * component rounds before its separate bounce-factor multiplication. */
-#if EMULATE_X87
-    dot = x87f_store_f32(x87f_add(x87f_add(
-        x87f_mul(x87f_load_f32(velocity[0]), x87f_load_f32(trace->normal[0])),
-        x87f_mul(x87f_load_f32(velocity[1]), x87f_load_f32(trace->normal[1]))),
-        x87f_mul(x87f_load_f32(velocity[2]), x87f_load_f32(trace->normal[2]))));
-    for (int k = 0; k < 3; k++) {
-        delta[k] = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_mul(x87f_load_f32(dot), x87f_load_f32(-2.0f)),
-                     x87f_load_f32(trace->normal[k])),
-            x87f_load_f32(velocity[k])));
-    }
-#else
-#if defined(WINDOWS_BEHAVIOR)
     const int second = 2, last = 1;
-#else
-    const int second = 1, last = 2;
-#endif
     dot = ((WIDE_FLOAT)velocity[0] * trace->normal[0] + (WIDE_FLOAT)velocity[second] * trace->normal[second])
           + (WIDE_FLOAT)velocity[last] * trace->normal[last];
     /* The -2 scale is exact for the bounded, already-float dot. Its Windows
@@ -1451,7 +1339,6 @@ void G_BounceItem(gentity_t *ent, trace_t *trace)
     delta[0] = (WIDE_FLOAT)reflectionScale * trace->normal[0] + velocity[0];
     delta[1] = (WIDE_FLOAT)reflectionScale * trace->normal[1] + velocity[1];
     delta[2] = (WIDE_FLOAT)reflectionScale * trace->normal[2] + velocity[2];
-#endif
     delta[0] *= ent->bounceFactor;
     delta[1] *= ent->bounceFactor;
     delta[2] *= ent->bounceFactor;
@@ -1694,28 +1581,15 @@ int Pickup_Health(gentity_t *itemEnt, gentity_t *player)
     oldHealth = player->health;
     /* Retain the live product until the platform's integer conversion: Windows
      * consumes the low dword of a qword result; Linux converts to a dword. */
-#if EMULATE_X87
-    player->health += x87f_store_i32_trunc(x87f_mul(
-        x87f_mul(x87f_load_i32(amount), x87f_load_i32(maxHealth)),
-        x87f_load_f32(0.01f)));
-#else
     player->health += coduo_fp_to_i32_extended((WIDE_FLOAT)amount * (WIDE_FLOAT)maxHealth * 0.01f);
-#endif
 
     if (healthLimit < player->health) {
         player->health = healthLimit;
     } else {
         /* Multiply by 100 in integer arithmetic before the live division;
-         * preserve the same platform-selected conversion as the health gain. */
-#if EMULATE_X87
-        int currentPercent = x87f_store_i32_trunc(x87f_div(
-            x87f_load_i32(player->health * 100), x87f_load_i32(maxHealth)));
-        int oldPercent = x87f_store_i32_trunc(x87f_div(
-            x87f_load_i32(oldHealth * 100), x87f_load_i32(maxHealth)));
-#else
+         * preserve the same Windows conversion as the health gain. */
         int currentPercent = coduo_fp_to_i32_extended((WIDE_FLOAT)(player->health * 100) / (WIDE_FLOAT)maxHealth);
         int oldPercent = coduo_fp_to_i32_extended((WIDE_FLOAT)(oldHealth * 100) / (WIDE_FLOAT)maxHealth);
-#endif
 
         if (currentPercent < 1) {
             currentPercent = 1;
@@ -1841,27 +1715,15 @@ static void game_compat_touch_item_schedule_respawn(gentity_t *itemEnt, int resp
     }
 
     if (wait != 0.0f) {
-#if EMULATE_X87
-        respawnSeconds =
-            x87f_store_i32_trunc(x87f_load_f32(wait));
-#else
         /* Windows consumes a signed-qword conversion's low dword; Linux
          * truncates directly to a signed dword. Preserve that distinction
          * for both the wait value and the live random product below. */
         respawnSeconds = coduo_fp_to_i32_extended((WIDE_FLOAT)wait);
-#endif
     }
 
     if (random != 0.0f) {
-#if EMULATE_X87
-        respawnSeconds += x87f_store_i32_trunc(
-            x87f_mul(x87f_load_f64(
-                         coduo_server_rand_signed_unit()),
-                     x87f_load_f32(random)));
-#else
         respawnSeconds += coduo_fp_to_i32_extended(
             (WIDE_FLOAT)coduo_server_rand_signed_unit() * (WIDE_FLOAT)random);
-#endif
         if (respawnSeconds < 1) {
             respawnSeconds = 1;
         }

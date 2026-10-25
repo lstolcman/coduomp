@@ -1,7 +1,6 @@
 #include "q_math.h"
 
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -26,16 +25,6 @@
  * spills it.
  */
 
-#if EMULATE_X87
-/* NOT_FROM_ORIGINAL_SOURCE: native non-x87 representation adapter used only
- * within this shared original-function cluster. */
-static x87f coduo_compat_get_lean_fraction_x87(float fraction)
-{
-    return x87f_mul(
-        x87f_sub(x87f_load_f32(2.0f), x87f_abs(x87f_load_f32(fraction))),
-        x87f_load_f32(fraction));
-}
-#endif
 
 #if defined(__i386__) && defined(__GNUC__) && !defined(__clang__)
 /* Keep the original live ST0 return when the caller has not requested a
@@ -44,9 +33,7 @@ __attribute__((optimize("-fexcess-precision=fast")))
 #endif
 float GetLeanFraction(float fraction)
 {
-#if EMULATE_X87
-    return x87f_store_f32(coduo_compat_get_lean_fraction_x87(fraction));
-#elif defined(__i386__) && (defined(__GNUC__) || defined(__clang__))
+#if   defined(__i386__) && (defined(__GNUC__) || defined(__clang__))
     return (2.0f - fabsf(fraction)) * fraction;
 #else
     return (float)((2.0L - (long double)fabsf(fraction)) * (long double)fraction);
@@ -55,27 +42,7 @@ float GetLeanFraction(float fraction)
 
 float UnGetLeanFraction(float fraction)
 {
-#if defined(LINUX_BEHAVIOR)
-#if EMULATE_X87
-    const double squared = x87f_store_f64(x87f_sub(
-        x87f_load_f32(1.0f), x87f_load_f32(fraction)));
-    const float root = (float)sqrt(squared);
-    return x87f_store_f32(x87f_sub(x87f_load_f32(1.0f), x87f_load_f32(root)));
-#else
-    const double squared = (double)(1.0L - (long double)fraction);
-    const float root = (float)sqrt(squared);
-    return 1.0f - root;
-#endif
-#else
-#if EMULATE_X87
-    return x87f_store_f32(x87f_sub(
-        x87f_load_f32(1.0f),
-        x87f_sqrt(x87f_sub(x87f_load_f32(1.0f),
-                           x87f_load_f32(fraction)))));
-#else
     return (float)(1.0L - coduo_x87_sqrtl(1.0L - (long double)fraction));
-#endif
-#endif
 }
 
 void AddLeanToPosition(vec3_t position, float yaw, float leanFraction,
@@ -89,35 +56,14 @@ void AddLeanToPosition(vec3_t position, float yaw, float leanFraction,
         return;
     }
 
-#if EMULATE_X87
-    lean = x87f_store_f32(
-        coduo_compat_get_lean_fraction_x87(leanFraction));
-    angles[2] = x87f_store_f32(
-        x87f_mul(x87f_load_f32(lean), x87f_load_f32(maxLean)));
-#else
     lean = GetLeanFraction(leanFraction);
     angles[2] = lean * maxLean;
-#endif
     angles[0] = 0.0f;
     angles[1] = yaw;
     AngleVectors(angles, NULL, right, NULL);
 
-#if EMULATE_X87
-    lean = x87f_store_f32(
-        x87f_mul(x87f_load_f32(lean), x87f_load_f32(side)));
-    position[0] = x87f_store_f32(x87f_add(
-        x87f_load_f32(position[0]),
-        x87f_mul(x87f_load_f32(right[0]), x87f_load_f32(lean))));
-    position[1] = x87f_store_f32(x87f_add(
-        x87f_load_f32(position[1]),
-        x87f_mul(x87f_load_f32(right[1]), x87f_load_f32(lean))));
-    position[2] = x87f_store_f32(x87f_add(
-        x87f_load_f32(position[2]),
-        x87f_mul(x87f_load_f32(right[2]), x87f_load_f32(lean))));
-#else
     lean *= side;
     position[0] = (float)((long double)right[0] * (long double)lean + (long double)position[0]);
     position[1] = (float)((long double)right[1] * (long double)lean + (long double)position[1]);
     position[2] = (float)((long double)right[2] * (long double)lean + (long double)position[2]);
-#endif
 }

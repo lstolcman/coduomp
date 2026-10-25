@@ -1,7 +1,6 @@
 #include "bg_pmove.h"
 
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 
 #include <stdint.h>
 
@@ -58,19 +57,10 @@ void PM_UpdateFatigue(void)
         }
 
         ps->lastSprintTime = pm->command.commandTime;
-#if EMULATE_X87
-        ps->fatigueScale = x87f_store_f32(x87f_sub(
-            x87f_load_f32(ps->fatigueScale),
-            x87f_mul(
-                x87f_mul(x87f_load_i32(pml.msec),
-                         x87f_load_f32(0.001f)),
-                x87f_load_f32(pm_sprintFatigue))));
-#else
         ps->fatigueScale = (float)(
             (long double)ps->fatigueScale -
             (long double)pml.msec * (long double)0.001f *
                 (long double)pm_sprintFatigue);
-#endif
 
         if (ps->fatigueScale < 0.5f) {
             PM_AddEvent(EV_FATIGUE_LAST_SOUND);
@@ -91,19 +81,10 @@ void PM_UpdateFatigue(void)
             return;
         }
 
-#if EMULATE_X87
-        ps->fatigueScale = x87f_store_f32(x87f_add(
-            x87f_load_f32(ps->fatigueScale),
-            x87f_mul(
-                x87f_mul(x87f_load_i32(pml.msec),
-                         x87f_load_f32(0.001f)),
-                x87f_load_f32(pm_fatigueRegen))));
-#else
         ps->fatigueScale = (float)(
             (long double)ps->fatigueScale +
             (long double)pml.msec * (long double)0.001f *
                 (long double)pm_fatigueRegen);
-#endif
 
         if (ps->fatigueScale >= 1.0f) {
             ps->fatigueScale = 1.0f;

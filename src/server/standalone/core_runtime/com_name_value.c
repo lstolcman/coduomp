@@ -1,5 +1,4 @@
 #include "core_runtime_private.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -92,28 +91,15 @@ float Com_ParseNameValueFloat(const char *text)
         int32_t digit = *text - COM_NAME_VALUE_DIGIT_ZERO;
         if (divisor != 0) {
             /* value + fild(digit)/fild(divisor), one float store -> shim. */
-#if EMULATE_X87
-            value = x87f_store_f32(x87f_add(
-                x87f_load_f32(value),
-                x87f_div(x87f_load_i32(digit), x87f_load_i32(divisor))));
-#else
             value = (float)((long double)value +
                             ((long double)digit / (long double)divisor));
-#endif
             /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
             divisor *= COM_NAME_VALUE_DECIMAL_BASE;
         } else {
             /* value * 10.0(double) + fild(digit), one float store -> shim. */
-#if EMULATE_X87
-            value = x87f_store_f32(x87f_add(
-                x87f_mul(x87f_load_f32(value),
-                         x87f_load_f64((double)COM_NAME_VALUE_DECIMAL_BASE)),
-                x87f_load_i32(digit)));
-#else
             value = (float)(((long double)value *
                               (double)COM_NAME_VALUE_DECIMAL_BASE) +
                              (long double)digit);
-#endif
         }
 
         ++text;

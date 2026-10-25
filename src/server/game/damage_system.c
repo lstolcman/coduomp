@@ -18,7 +18,6 @@
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_x87_eval.h"
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/libm/coduo_libm.h"
 
 /* ------------------------------------------------------------------ */
@@ -90,11 +89,6 @@ void G_Damage(gentity_t *target, gentity_t *inflictor, gentity_t *attacker,
         
         /* Scale damage based on vehicle type */
         WIDE_FLOAT damageOperand = damage;
-#if defined(LINUX_BEHAVIOR)
-        /* A cast alone can retain excess precision; this is a real binary32
-         * store before the scaling call in the Linux binary. */
-        damageOperand = coduo_round_f32(damageOperand);
-#endif
         WIDE_FLOAT scale = Scr_Vehicle_DamageScale(target, attacker, inflictor, point, mod);
         /* Windows multiplies integer damage directly; Linux first stores it
          * as binary32. Preserve that boundary and each platform's conversion. */
@@ -259,9 +253,6 @@ int G_RadiusDamage(const float *origin, gentity_t *inflictor, gentity_t *attacke
     /* Calculate bounding box (expanded by sqrt(2) for diagonal coverage). */
     /* Windows retains the expansion through all six coordinate stores. */
     WIDE_FLOAT expandRadius = (WIDE_FLOAT)radius * RADIUS_DAMAGE_BOUNDS_EXPANSION;
-#if defined(LINUX_BEHAVIOR)
-    expandRadius = coduo_round_f32(expandRadius);
-#endif
     mins[0] = origin[0] - expandRadius;
     mins[1] = origin[1] - expandRadius;
     mins[2] = origin[2] - expandRadius;
@@ -310,29 +301,6 @@ int G_RadiusDamage(const float *origin, gentity_t *inflictor, gentity_t *attacke
                  * value and recomputes it inside the taken branch, so delta
                  * gets exactly one rounding.  Do not hoist into a float
                  * temporary. */
-#if EMULATE_X87
-                {
-                    x87f loBound = x87f_sub(
-                        x87f_load_f32(ent->absMin[axis]),
-                        x87f_mul(x87f_load_f32(ent->mins[axis]),
-                                 x87f_load_f32(
-                                     RADIUS_DAMAGE_VEHICLE_BOUNDS_SCALE)));
-                    x87f hiBound = x87f_sub(
-                        x87f_load_f32(ent->absMax[axis]),
-                        x87f_mul(x87f_load_f32(ent->maxs[axis]),
-                                 x87f_load_f32(
-                                     RADIUS_DAMAGE_VEHICLE_BOUNDS_SCALE)));
-                    if (x87f_lt(x87f_load_f32(origin[axis]), loBound)) {
-                        delta[axis] = x87f_store_f32(
-                            x87f_sub(loBound, x87f_load_f32(origin[axis])));
-                    } else if (x87f_lt(hiBound, x87f_load_f32(origin[axis]))) {
-                        delta[axis] = x87f_store_f32(
-                            x87f_sub(x87f_load_f32(origin[axis]), hiBound));
-                    } else {
-                        delta[axis] = 0.0f;
-                    }
-                }
-#else
                 WIDE_FLOAT loBound = (WIDE_FLOAT)ent->absMin[axis] - (WIDE_FLOAT)ent->mins[axis] * RADIUS_DAMAGE_VEHICLE_BOUNDS_SCALE;
                 if (origin[axis] < loBound) {
                     delta[axis] = (float)(loBound - (WIDE_FLOAT)origin[axis]);
@@ -344,35 +312,17 @@ int G_RadiusDamage(const float *origin, gentity_t *inflictor, gentity_t *attacke
                         delta[axis] = 0.0f;
                     }
                 }
-#endif
             }
         }
 
-#if defined(WINDOWS_BEHAVIOR)
         const int first = 2, last = 0;
-#else
-        const int first = 0, last = 2;
-#endif
         WIDE_FLOAT distanceForRadiusCheck;
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-        /* The squared sum rounds to double before the library square root. */
-        double distanceSquared = x87f_store_f64(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(delta[0]), x87f_load_f32(delta[0])),
-                     x87f_mul(x87f_load_f32(delta[1]), x87f_load_f32(delta[1]))),
-            x87f_mul(x87f_load_f32(delta[2]), x87f_load_f32(delta[2]))));
-        distanceForRadiusCheck = coduo_round_f32(CoduoLibm_Sqrt(distanceSquared));
-#else
         WIDE_FLOAT distanceSquared = ((WIDE_FLOAT)delta[first] * delta[first] +
                                      (WIDE_FLOAT)delta[1] * delta[1]) +
                                      (WIDE_FLOAT)delta[last] * delta[last];
-#if defined(WINDOWS_BEHAVIOR)
         /* Windows compares the live root, then reloads its float store for
          * falloff. Linux compares the already-rounded library result. */
         distanceForRadiusCheck = coduo_x87_sqrtl(distanceSquared);
-#else
-        distanceForRadiusCheck = coduo_round_f32(CoduoLibm_Sqrt((double)distanceSquared));
-#endif
-#endif
         distance = coduo_round_f32(distanceForRadiusCheck);
 
         /* Skip entities outside radius */
@@ -384,21 +334,9 @@ int G_RadiusDamage(const float *origin, gentity_t *inflictor, gentity_t *attacke
         }
 
         /* Calculate damage with linear falloff */
-#if EMULATE_X87
-        /* minDamage + (1 - distance/radius) * (maxDamage - minDamage), all in
-         * x87 width. */
-        damage = x87f_store_f32(x87f_add(
-            x87f_load_f32(minDamage),
-            x87f_mul(x87f_sub(x87f_load_f32(1.0f),
-                              x87f_div(x87f_load_f32(distance),
-                                       x87f_load_f32(radius))),
-                     x87f_sub(x87f_load_f32(maxDamage),
-                              x87f_load_f32(minDamage)))));
-#else
         damage = (float)((WIDE_FLOAT)minDamage +
                          ((1.0f - (WIDE_FLOAT)distance / (WIDE_FLOAT)radius) *
                           ((WIDE_FLOAT)maxDamage - (WIDE_FLOAT)minDamage)));
-#endif
 
         /* Check line of sight */
         WIDE_FLOAT damageScale = CanDamage(ent, origin);
@@ -412,9 +350,6 @@ int G_RadiusDamage(const float *origin, gentity_t *inflictor, gentity_t *attacke
             /* Linux rounds the Z difference before adding the offset;
              * Windows retains the difference until the final float store. */
             WIDE_FLOAT raisedZ = (WIDE_FLOAT)ent->currentOrigin[2] - origin[2];
-#if defined(LINUX_BEHAVIOR)
-            raisedZ = coduo_round_f32(raisedZ);
-#endif
             dir[2] = raisedZ + RADIUS_DAMAGE_VERTICAL_OFFSET;
             /* Direct line of sight - apply full damage */
             G_Damage(ent, inflictor, attacker, dir, origin,
@@ -449,42 +384,19 @@ int G_RadiusDamage(const float *origin, gentity_t *inflictor, gentity_t *attacke
                  * for both operands. X and Y are stored on both profiles. */
                 WIDE_FLOAT midpointZ = (WIDE_FLOAT)midpoint[2] - origin[2];
                 midpointDir[2] = coduo_round_f32(midpointZ);
-#if defined(LINUX_BEHAVIOR)
-                midpointZ = midpointDir[2];
-#endif
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-                /* 0x51079: X squared, then Y squared, then Z squared. */
-                double midpointDistanceSquared = x87f_store_f64(x87f_add(
-                    x87f_add(x87f_mul(x87f_load_f32(midpointDir[0]), x87f_load_f32(midpointDir[0])),
-                             x87f_mul(x87f_load_f32(midpointDir[1]), x87f_load_f32(midpointDir[1]))),
-                    x87f_mul(x87f_load_f32(midpointDir[2]), x87f_load_f32(midpointDir[2]))));
-                midpointDistance = coduo_round_f32(CoduoLibm_Sqrt(midpointDistanceSquared));
-#else
                 WIDE_FLOAT squares[3] = {
                     (WIDE_FLOAT)midpointDir[0] * midpointDir[0],
                     (WIDE_FLOAT)midpointDir[1] * midpointDir[1],
                     midpointZ * midpointDir[2]
                 };
                 WIDE_FLOAT midpointDistanceSquared = (squares[first] + squares[1]) + squares[last];
-#if defined(WINDOWS_BEHAVIOR)
                 midpointDistance = coduo_x87_sqrtl(midpointDistanceSquared);
-#else
-                midpointDistance = coduo_round_f32(CoduoLibm_Sqrt((double)midpointDistanceSquared));
-#endif
-#endif
 
                 /* Apply 10% damage if the blocked midpoint is within 20% of
                  * radius. Both platforms retain radius*0.2 through the
                  * comparison. Windows also retains the root; Linux rounds
                  * that root to float before comparing. */
-#if EMULATE_X87
-                if (x87f_lt(x87f_load_f32(midpointDistance),
-                            x87f_mul(x87f_load_f32(radius),
-                                     x87f_load_f32(
-                                         RADIUS_DAMAGE_PARTIAL_RADIUS_SCALE)))) {
-#else
                 if (midpointDistance < (WIDE_FLOAT)radius * RADIUS_DAMAGE_PARTIAL_RADIUS_SCALE) {
-#endif
                     /* VERIFIED_DECOMPILER(0x5098b, 6098b_G_RadiusDamage.c, VERIFY-DAMAGE-SYSTEM-PACKET-2026-06-17): DATAFLOW_VERIFIED - partial branch recomputes raised dir. */
                     if (LogAccuracyHit(ent, attacker)) {
                         hitAny = 1;
@@ -494,9 +406,6 @@ int G_RadiusDamage(const float *origin, gentity_t *inflictor, gentity_t *attacke
                     dir[1] = ent->currentOrigin[1] - origin[1];
                     /* Preserve the same platform-specific Z rounding as above. */
                     WIDE_FLOAT raisedZ = (WIDE_FLOAT)ent->currentOrigin[2] - origin[2];
-#if defined(LINUX_BEHAVIOR)
-                    raisedZ = coduo_round_f32(raisedZ);
-#endif
                     dir[2] = raisedZ + RADIUS_DAMAGE_VERTICAL_OFFSET;
                     G_Damage(ent, inflictor, attacker, dir, origin,
                             coduo_fp_to_i32_extended((WIDE_FLOAT)damage * (WIDE_FLOAT)RADIUS_DAMAGE_PARTIAL_DAMAGE_SCALE),
@@ -545,10 +454,6 @@ void G_DamageClient(gentity_t *target, gentity_t *inflictor, gentity_t *attacker
         /* Scale radius damage for vehicle occupants */
         if ((flags & DAMAGE_RADIUS) != 0) {
             WIDE_FLOAT damageOperand = damage;
-#if defined(LINUX_BEHAVIOR)
-            /* Preserve the binary32 store before the scaling call. */
-            damageOperand = coduo_round_f32(damageOperand);
-#endif
             float scale = G_VehicleOccupantRadiusDamageScale(target);
             /* The Windows integer operand stays live through multiplication;
              * the Linux call boundary first rounds damage to binary32. */
@@ -655,11 +560,7 @@ WIDE_FLOAT CanDamage(gentity_t *target, const float *origin)
             (WIDE_FLOAT)differenceY * differenceY,
             (WIDE_FLOAT)differenceZ * differenceZ
         };
-#if defined(WINDOWS_BEHAVIOR)
         const int first = 2, last = 0;
-#else
-        const int first = 0, last = 2;
-#endif
         WIDE_FLOAT distanceSquared = (squares[first] + squares[1]) + squares[last];
         if (distanceSquared < DAMAGE_VISIBILITY_EPSILON) {
             return 1.0f;
@@ -710,27 +611,6 @@ WIDE_FLOAT CanDamage(gentity_t *target, const float *origin)
     /* 0x505b6/0x505f5/0x5065e/0x506c7: stock stores each z point as
      * center+side*radius (one float rounding), then adds/subtracts
      * halfHeight in a second rounding (VectorMA then z adjust). */
-#if EMULATE_X87
-    for (int j = 0; j < 3; j++) {
-        float plus = x87f_store_f32(x87f_add(
-            x87f_load_f32(center[j]),
-            x87f_mul(x87f_load_f32(side[j]),
-                     x87f_load_f32(DAMAGE_VISIBILITY_SAMPLE_RADIUS))));
-        float minus = x87f_store_f32(x87f_sub(
-            x87f_load_f32(center[j]),
-            x87f_mul(x87f_load_f32(side[j]),
-                     x87f_load_f32(DAMAGE_VISIBILITY_SAMPLE_RADIUS))));
-        tracePoints[1][j] = plus;
-        tracePoints[2][j] = plus;
-        tracePoints[3][j] = minus;
-        tracePoints[4][j] = minus;
-    }
-    /* halfHeight z adjusts are single adds/subs (a second rounding). */
-    tracePoints[1][2] += halfHeight;
-    tracePoints[2][2] -= halfHeight;
-    tracePoints[3][2] += halfHeight;
-    tracePoints[4][2] -= halfHeight;
-#else
     for (int j = 0; j < 3; j++) {
         float plus = (float)((WIDE_FLOAT)center[j] + (WIDE_FLOAT)side[j] * DAMAGE_VISIBILITY_SAMPLE_RADIUS);
         float minus = (float)((WIDE_FLOAT)center[j] - (WIDE_FLOAT)side[j] * DAMAGE_VISIBILITY_SAMPLE_RADIUS);
@@ -743,7 +623,6 @@ WIDE_FLOAT CanDamage(gentity_t *target, const float *origin)
     tracePoints[2][2] -= halfHeight;
     tracePoints[3][2] += halfHeight;
     tracePoints[4][2] -= halfHeight;
-#endif
 
     hitCount = 0;
     for (int index = 0; index < 5; index++) {
@@ -759,16 +638,8 @@ WIDE_FLOAT CanDamage(gentity_t *target, const float *origin)
     if (hitCount < 4) {
         /* Windows carries the live quotient into radius-damage scaling;
          * Linux stores the quotient as binary32 before returning. */
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-        return x87f_store_f32(
-            x87f_div(x87f_load_i32(hitCount), x87f_load_f32(3.0f)));
-#else
         WIDE_FLOAT fraction = (WIDE_FLOAT)hitCount / 3.0f;
-#if defined(LINUX_BEHAVIOR)
-        fraction = coduo_round_f32(fraction);
-#endif
         return fraction;
-#endif
     }
 
     return 1.0f;

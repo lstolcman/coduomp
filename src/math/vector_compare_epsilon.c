@@ -1,13 +1,7 @@
 #include "q_math.h"
 #include "qcommon/q_shared_types.h"
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 static const float s_vectorCompareEpsilonSquared =
     1.0000001111620804e-6f;
@@ -30,7 +24,6 @@ static const float s_vectorCompareEpsilonSquared =
  * squared value. FCOMP versus FUCOMPP is compiler lowering, not a second
  * source-level behavior distinction; both take the same unordered path.
  */
-#if defined(WINDOWS_BEHAVIOR)
 int32_t VectorCompareEpsilon(const vec3_t first, const vec3_t second)
 {
     for (int32_t component = 0; component < 3; ++component) {
@@ -69,57 +62,3 @@ int32_t VectorCompareEpsilon(const vec3_t first, const vec3_t second)
 
     return qtrue;
 }
-#else
-int32_t VectorCompareEpsilon(const vec3_t first, const vec3_t second)
-{
-    for (int32_t component = 0; component < 3; ++component) {
-#if EMULATE_X87
-        const x87f firstDifference = x87f_sub(
-            x87f_load_f32(first[component]),
-            x87f_load_f32(second[component]));
-        const x87f secondDifference = x87f_sub(
-            x87f_load_f32(first[component]),
-            x87f_load_f32(second[component]));
-
-        if (x87f_lt(x87f_load_f32(s_vectorCompareEpsilonSquared),
-                    x87f_mul(firstDifference, secondDifference))) {
-            return qfalse;
-        }
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
-        uint16_t status;
-
-        __asm__ __volatile__("flds 0(%1)\n\t"
-                             "fsubs 0(%2)\n\t"
-                             "flds 0(%1)\n\t"
-                             "fsubs 0(%2)\n\t"
-                             "fmulp %%st, %%st(1)\n\t"
-                             "flds %3\n\t"
-                             "fxch %%st(1)\n\t"
-                             "fucompp\n\t"
-                             "fnstsw %%ax"
-                             : "=a"(status)
-                             : "r"(&first[component]),
-                               "r"(&second[component]),
-                               "m"(s_vectorCompareEpsilonSquared)
-                             : "st", "st(1)", "memory");
-
-        if ((status & UINT16_C(0x4100)) == 0) {
-            return qfalse;
-        }
-#else
-        const long double firstDifference =
-            (long double)first[component] - second[component];
-        const long double secondDifference =
-            (long double)first[component] - second[component];
-
-        if (firstDifference * secondDifference >
-            (long double)s_vectorCompareEpsilonSquared) {
-            return qfalse;
-        }
-#endif
-    }
-
-    return qtrue;
-}
-#endif

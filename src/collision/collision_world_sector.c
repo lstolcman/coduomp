@@ -46,17 +46,11 @@ void CM_InitWorldSector(void)
     }
     cm_worldSectorPool[SERVER_WORLD_SECTOR_POOL_COUNT - 1].parent = NULL;
 
-#if defined(WINDOWS_BEHAVIOR)
     /* Windows compares both unspilled x87 subtractions. */
     const long double widthX =
         (long double)cm_worldMaxs[0] - (long double)cm_worldMins[0];
     const long double widthY =
         (long double)cm_worldMaxs[1] - (long double)cm_worldMins[1];
-#else
-    /* Linux stores both widths to binary32 before comparing them. */
-    const float widthX = cm_worldMaxs[0] - cm_worldMins[0];
-    const float widthY = cm_worldMaxs[1] - cm_worldMins[1];
-#endif
     cm_worldSectorRoot.axis = widthX <= widthY ? 1 : 0;
     cm_worldSectorRoot.dist = (float)(
         ((long double)cm_worldMins[cm_worldSectorRoot.axis] +
@@ -75,19 +69,12 @@ worldSector_t *CM_AllocWorldSector(const vec2_t mins, const vec2_t maxs)
         return NULL;
     }
 
-#if defined(WINDOWS_BEHAVIOR)
     /* Windows keeps the X subtraction live while storing both array lanes. */
     const long double liveSizeX =
         (long double)maxs[0] - (long double)mins[0];
     sizes[0] = (float)liveSizeX;
     sizes[1] = (float)((long double)maxs[1] - (long double)mins[1]);
     axis = liveSizeX <= (long double)sizes[1] ? 1 : 0;
-#else
-    /* Linux compares the two stored binary32 lanes. */
-    sizes[0] = maxs[0] - mins[0];
-    sizes[1] = maxs[1] - mins[1];
-    axis = sizes[0] <= sizes[1] ? 1 : 0;
-#endif
 
     if (sizes[axis] <= (float)CM_WORLD_SECTOR_MIN_SPLIT_SIZE) {
         return NULL;
@@ -349,7 +336,6 @@ void SV_LinkEntityToWorldSector(svEntity_t *serverEntity,
 
 qboolean CM_IsBigStaticModel(const vec3_t mins, const vec3_t maxs)
 {
-#if defined(WINDOWS_BEHAVIOR)
     /* CoDUOMP.exe 0x004c57b0 and the inlined copy at 0x0042aaa0 test Z,
      * Y, then X.  Unordered extents follow the large-model path. */
     if ((long double)maxs[2] - (long double)mins[2] <
@@ -365,12 +351,6 @@ qboolean CM_IsBigStaticModel(const vec3_t mins, const vec3_t maxs)
         return qfalse;
     }
     return qtrue;
-#else
-    /* coduo_lnxded 0x0805e021 is an unconditional false return. */
-    (void)mins;
-    (void)maxs;
-    return qfalse;
-#endif
 }
 
 void CM_LinkStaticModel(worldSectorAreaLink_t *areaLink)

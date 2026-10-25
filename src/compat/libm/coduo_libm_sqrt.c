@@ -26,9 +26,9 @@
  * turns a signalling NaN into a quiet one).
  */
 #include "coduo_libm.h"
-#include "compat/coduo_x87emu.h"
 
 #include <string.h>
+#include "coduo_wide_math.h"
 
 #define SQRT_HIGH_SIGN_MASK     0x80000000u
 #define SQRT_HIGH_EXPONENT_MASK 0x7ff00000u
@@ -50,20 +50,6 @@ static uint32_t CoduoLibm_DoubleLowDword(double value)
     return (uint32_t)bits;
 }
 
-#if EMULATE_X87
-/* Correctly-rounded double square root (SoftFloat), equal to FSQRT at PC=53. */
-static double f64_sqrt_wrapper(double value)
-{
-    float64_t in;
-    float64_t out;
-    double result;
-
-    memcpy(&in, &value, sizeof(in));
-    out = f64_sqrt(in);
-    memcpy(&result, &out, sizeof(result));
-    return result;
-}
-#endif
 
 /* The x87 indefinite QNaN the CRT loads from 0x200b0180 on a domain error. */
 static double CoduoLibm_IndefiniteNaN(void)
@@ -86,12 +72,7 @@ double CoduoLibm_Sqrt(double value)
         /* 0x2008a6b9: infinity or NaN. */
         if (mantissa != 0u || low != 0u) {
             /* NaN: quieted by the add at 0x2008aa39, value otherwise kept. */
-#if EMULATE_X87
-            return x87f_store_f64(
-                x87f_add(x87f_load_f64(value), x87f_load_f64(1.0)));
-#else
             return (double)((long double)value + 1.0L);
-#endif
         }
         if ((high & SQRT_HIGH_SIGN_MASK) == 0u) {
             return value; /* +inf: FSQRT skipped, argument returned as is. */
@@ -108,82 +89,9 @@ double CoduoLibm_Sqrt(double value)
     }
 
     /* 0x2008a67c: FSQRT at the ambient 64-bit precision, narrowed on return. */
-#if EMULATE_X87
-    return x87f_store_f64(x87f_sqrt(x87f_load_f64(value)));
-#else
     {
-        /* FSQRT emitted directly rather than via sqrtl(), so this carries no
-         * dependency on the platform libm. */
-        long double root;
-
-        __asm__ __volatile__("fsqrt" : "=t"(root) : "0"((long double)value));
-        return (double)root;
+        /* The shared adapter uses native FSQRT where supported and the
+         * widest native C square root elsewhere. */
+        return (double)coduomp_math_sqrtl((long double)value);
     }
-#endif
-}
-
-/* glibc/i386 sqrt — the Linux server's actual reference.
- *
- * glibc does NOT match the MSVC CRT here. __sqrt_finite clears bit 8 of the
- * control word before the FSQRT:
- *
- *   fstcw 0x4(%esp)          ; save
- *   mov   $0xfeff,%edx
- *   and   0x4(%esp),%edx     ; PC 11b (64-bit) -> 10b (53-bit)
- *   fldcw (%esp)
- *   fsqrt                    ; computed at 53-bit
- *   fldcw 0x4(%esp)          ; restore
- *
- * so the double result comes from a SINGLE rounding, whereas the MSVC CRT
- * computes at 64-bit and lets the caller narrow — a double rounding. The two
- * disagree for roughly 1 input in 4100 (measured: 9749 of 40e6). Reconstructions
- * that target the Linux binaries must use this variant.
- *
- * Rounding to 53 bits and then storing to a double is exact, so this is simply
- * the correctly-rounded double square root.
- */
-double CoduoLibm_SqrtGlibc(double value)
-{
-    const uint32_t high = CoduoLibm_DoubleHighDword(value);
-    const uint32_t low = CoduoLibm_DoubleLowDword(value);
-    const uint32_t exponent = high & SQRT_HIGH_EXPONENT_MASK;
-    const uint32_t mantissa = high & SQRT_HIGH_MANTISSA_MASK;
-
-    if (exponent == SQRT_HIGH_EXPONENT_MASK) {
-        if (mantissa != 0u || low != 0u) {
-#if EMULATE_X87
-            return x87f_store_f64(
-                x87f_add(x87f_load_f64(value), x87f_load_f64(1.0)));
-#else
-            return (double)((long double)value + 1.0L);
-#endif
-        }
-        if ((high & SQRT_HIGH_SIGN_MASK) == 0u) {
-            return value;
-        }
-        return CoduoLibm_IndefiniteNaN();
-    }
-
-    if ((high & SQRT_HIGH_SIGN_MASK) != 0u &&
-        (exponent != 0u || mantissa != 0u || low != 0u)) {
-        return CoduoLibm_IndefiniteNaN();
-    }
-
-#if EMULATE_X87
-    /* Correctly-rounded double root: exactly what FSQRT at PC=53 produces. */
-    return f64_sqrt_wrapper(value);
-#else
-    {
-        unsigned short saved;
-        unsigned short narrowed;
-        long double root;
-
-        __asm__ __volatile__("fstcw %0" : "=m"(saved));
-        narrowed = (unsigned short)(saved & 0xfeffu);
-        __asm__ __volatile__("fldcw %0" : : "m"(narrowed));
-        __asm__ __volatile__("fsqrt" : "=t"(root) : "0"((long double)value));
-        __asm__ __volatile__("fldcw %0" : : "m"(saved));
-        return (double)root;
-    }
-#endif
 }

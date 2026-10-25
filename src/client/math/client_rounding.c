@@ -1,6 +1,5 @@
 #include "client_math.h"
 
-#include "compat/coduo_x87emu.h"
 
 #include <limits.h>
 #include <math.h>
@@ -16,10 +15,6 @@ int32_t Script_BiasedRoundToInt(float value)
 {
     static const double bias = 0.499999999068677425384521484375;
 
-#if EMULATE_X87
-    return x87f_store_i32(x87f_sub(x87f_load_f32(value),
-                                   x87f_load_f64(bias)));
-#else
     const long double rounded =
         nearbyintl((long double)value - (long double)bias);
 
@@ -30,5 +25,4 @@ int32_t Script_BiasedRoundToInt(float value)
         return INT32_MIN;
     }
     return (int32_t)rounded;
-#endif
 }

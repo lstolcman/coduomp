@@ -60,7 +60,6 @@ static void coduo_script_callback_free_scripts(uint8_t unusedMode)
     Scr_FreeScripts();
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 /* NOT_FROM_ORIGINAL_SOURCE: native callback-signature adapter. */
 static uint16_t coduo_script_callback_sl_get_string(const char *text,
                                                      uint8_t user)
@@ -81,24 +80,17 @@ static void *coduo_script_callback_mt_alloc(size_t size, int32_t unusedType)
     (void)unusedType;
     return MT_Alloc(size);
 }
-#endif
 
 #define CODUO_SCRIPT_CALLBACK_SAVE_PRE coduo_script_callback_save_pre
 #define CODUO_SCRIPT_CALLBACK_SAVE_POST coduo_script_callback_save_post
 #define CODUO_SCRIPT_CALLBACK_LOAD_PRE coduo_script_callback_load_pre
 #define CODUO_SCRIPT_CALLBACK_ALLOC_STRING coduo_script_callback_alloc_string
 #define CODUO_SCRIPT_CALLBACK_FREE_SCRIPTS coduo_script_callback_free_scripts
-#if defined(WINDOWS_BEHAVIOR)
 #define CODUO_SCRIPT_CALLBACK_SL_GET_STRING \
     coduo_script_callback_sl_get_string
 #define CODUO_SCRIPT_CALLBACK_SL_GET_LOWERCASE_STRING \
     coduo_script_callback_sl_get_lowercase_string
 #define CODUO_SCRIPT_CALLBACK_MT_ALLOC coduo_script_callback_mt_alloc
-#else
-#define CODUO_SCRIPT_CALLBACK_SL_GET_STRING SL_GetString
-#define CODUO_SCRIPT_CALLBACK_SL_GET_LOWERCASE_STRING SL_GetLowercaseString
-#define CODUO_SCRIPT_CALLBACK_MT_ALLOC MT_Alloc
-#endif
 #else
 /* The casts below are the original i386 cdecl contract described above:
  * the game pushes legacy arguments, the engine ignores them, and the caller
@@ -120,18 +112,12 @@ static void *coduo_script_callback_mt_alloc(size_t size, int32_t unusedType)
     ((uint16_t (*)(const char *, int32_t))Scr_AllocString)
 #define CODUO_SCRIPT_CALLBACK_FREE_SCRIPTS \
     ((void (*)(uint8_t))Scr_FreeScripts)
-#if defined(WINDOWS_BEHAVIOR)
 #define CODUO_SCRIPT_CALLBACK_SL_GET_STRING \
     ((uint16_t (*)(const char *, uint8_t))SL_GetString)
 #define CODUO_SCRIPT_CALLBACK_SL_GET_LOWERCASE_STRING \
     ((uint16_t (*)(const char *, uint8_t))SL_GetLowercaseString)
 #define CODUO_SCRIPT_CALLBACK_MT_ALLOC \
     ((void *(*)(size_t, int32_t))MT_Alloc)
-#else
-#define CODUO_SCRIPT_CALLBACK_SL_GET_STRING SL_GetString
-#define CODUO_SCRIPT_CALLBACK_SL_GET_LOWERCASE_STRING SL_GetLowercaseString
-#define CODUO_SCRIPT_CALLBACK_MT_ALLOC MT_Alloc
-#endif
 #endif
 
 #define SCRIPT_IMPORT_ASSIGN(importId, member, callback) \
@@ -206,15 +192,9 @@ script_vm_callback_slot_t *Scr_NearHook(
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_GET_ANIM,
                          anim_ref_from_u32_xanimtree,
                          Scr_GetAnim);
-#if defined(WINDOWS_BEHAVIOR)
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_GET_ANIM_TREE,
                          xanim_from_u32,
                          Scr_GetAnimTree);
-#else
-    SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_GET_ANIM_TREE,
-                         anim_tree_ref_from_u32,
-                         Scr_GetAnimTree);
-#endif
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_GET_FLOAT,
                          float_from_u32,
                          Scr_GetFloat);
@@ -239,15 +219,9 @@ script_vm_callback_slot_t *Scr_NearHook(
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_GET_FUNC,
                          u32_from_u32,
                          Scr_GetFunc);
-#if defined(WINDOWS_BEHAVIOR)
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_GET_ENTITY_NUM,
                          u16_from_u32_intp,
                          Scr_GetEntityNum);
-#else
-    SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_GET_ENTITY_NUM,
-                         u32_from_u32_intp,
-                         Scr_GetEntityNum);
-#endif
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_GET_TYPE,
                          variable_type_from_u32,
                          Scr_GetType);
@@ -395,15 +369,9 @@ script_vm_callback_slot_t *Scr_NearHook(
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_LOAD_SCRIPT,
                          bool_from_cstring,
                          Scr_LoadScript);
-#if defined(WINDOWS_BEHAVIOR)
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_FIND_ANIM_TREE,
                          xanim_from_cstring,
                          Scr_FindAnimTree);
-#else
-    SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_FIND_ANIM_TREE,
-                         anim_tree_ref_from_cstring,
-                         Scr_FindAnimTree);
-#endif
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_FIND_ANIM,
                          void_from_cstring_cstring_animref,
                          Scr_FindAnim);
@@ -443,15 +411,9 @@ script_vm_callback_slot_t *Scr_NearHook(
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_SHUTDOWN_SYSTEM,
                          void_from_u8,
                          Scr_ShutdownSystem);
-#if defined(WINDOWS_BEHAVIOR)
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_IS_SYSTEM_ACTIVE,
                          bool_from_bool,
                          Scr_IsSystemActive);
-#else
-    SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_IS_SYSTEM_ACTIVE,
-                         bool_from_u8,
-                         Scr_IsSystemActive);
-#endif
     SCRIPT_IMPORT_ASSIGN(SCRIPT_IMPORT_ADD_EXEC_THREAD,
                          void_from_u32_u32,
                          Scr_AddExecThread);

@@ -430,12 +430,8 @@ uint16_t SL_GetStringOfLen(const char *text, uint8_t user, size_t size,
 
     uint32_t allocationSize =
         (uint32_t)size + (uint32_t)sizeof(script_string_header_t);
-#if defined(WINDOWS_BEHAVIOR)
     (void)type;
     head->stringHandle = MT_AllocIndex(allocationSize);
-#else
-    head->stringHandle = MT_AllocIndex(allocationSize, type);
-#endif
     unsigned char *entry =
         GetRefStringByHandle(head->stringHandle);
     memcpy(entry + sizeof(script_string_header_t), text, size);
@@ -450,19 +446,11 @@ uint16_t SL_GetStringOfLen(const char *text, uint8_t user, size_t size,
  * Linux source: coduo_lnxded 0x080a4d5c..0x080a4d98.
  * Linux narrows user to a byte at entry; Windows forwards its complete dword
  * and SL_GetStringOfLen consumes its low byte. */
-#if defined(WINDOWS_BEHAVIOR)
 uint16_t SL_GetString_(const char *text, int32_t user, int32_t type)
 {
     return SL_GetStringOfLen(
         text, (uint8_t)user, (uint32_t)strlen(text) + 1u, type);
 }
-#else
-uint16_t SL_GetString_(const char *text, uint8_t user, int32_t type)
-{
-    return SL_GetStringOfLen(
-        text, user, (uint32_t)strlen(text) + 1u, type);
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00482910..0x00482977.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00482910_00482978.mcode. */
@@ -491,21 +479,12 @@ uint16_t SL_GetLowercaseStringOfLen(const char *text, uint8_t user,
 
 /* Windows source: CoDUOMP.exe 0x00482980..0x004829a5.
  * Linux source: coduo_lnxded 0x080a4e42..0x080a4e7e. */
-#if defined(WINDOWS_BEHAVIOR)
 uint16_t SL_GetLowercaseString_(const char *text, int32_t user,
                                int32_t type)
 {
     return SL_GetLowercaseStringOfLen(
         text, (uint8_t)user, (uint32_t)strlen(text) + 1u, type);
 }
-#else
-uint16_t SL_GetLowercaseString_(const char *text, uint8_t user,
-                               int32_t type)
-{
-    return SL_GetLowercaseStringOfLen(
-        text, user, (uint32_t)strlen(text) + 1u, type);
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00482310..0x00482387.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00482310_00482388.mcode. */
@@ -752,33 +731,18 @@ uint16_t Scr_CreateCanonicalFilename(const char *filename)
 
 /* Windows source: CoDUOMP.exe 0x004828e0..0x0048290c.
  * Linux source: coduo_lnxded 0x080a4d9a..0x080a4dc5. */
-#if defined(WINDOWS_BEHAVIOR)
 uint16_t SL_GetString(const char *text, int32_t user)
 {
     return SL_GetString_(text, user, SCRIPT_STRING_DEFAULT_TYPE);
 }
-#else
-uint16_t SL_GetString(const char *text, uint8_t user)
-{
-    return SL_GetString_(text, user, SCRIPT_STRING_DEFAULT_TYPE);
-}
-#endif
 
 /* Windows source: CoDUOMP.exe 0x004829b0..0x004829dc.
  * Linux source immediately follows SL_GetLowercaseString_. */
-#if defined(WINDOWS_BEHAVIOR)
 uint16_t SL_GetLowercaseString(const char *text, int32_t user)
 {
     return SL_GetLowercaseString_(text, user,
                                   SCRIPT_STRING_DEFAULT_TYPE);
 }
-#else
-uint16_t SL_GetLowercaseString(const char *text, uint8_t user)
-{
-    return SL_GetLowercaseString_(text, user,
-                                  SCRIPT_STRING_DEFAULT_TYPE);
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00482be0..0x00482c09.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00482be0_00482c0a.mcode. */

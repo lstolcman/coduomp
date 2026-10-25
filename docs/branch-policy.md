@@ -10,8 +10,11 @@ This repository has two maintained public products:
 Stock preserves behavior for legitimate supported inputs, including gameplay,
 presentation, defaults, network and file formats, VM and module interfaces,
 ordering, arithmetic, precision, and valid-input failure behavior. The original
-Windows i386 client and Linux i386 server/module behavior define the historical
-platform contract.
+Windows i386 client and server binaries define the behavior contract on every
+supported host. Linux and macOS builds implement that same contract; original
+Linux binaries are not an alternate authority. Platform-behavior selectors and
+software x87 emulation are unsupported. Native x87 and wide native C arithmetic
+retain the required rounding and truncation boundaries.
 
 Stock also carries implementation changes required to realize that contract on
 supported systems:

@@ -308,14 +308,10 @@ void CastVector2(VariableValue values[3])
     }
 
     values[0].type = SCRIPT_VAR_VECTOR;
-#if defined(WINDOWS_BEHAVIOR)
     script_vector_storage_t *storage = MT_Alloc(sizeof(*storage));
     storage->refCount = 0;
     memcpy(storage->value, vector, sizeof(vector));
     values[0].payload = (uintptr_t)storage->value;
-#else
-    values[0].payload = (uintptr_t)AllocVectorCopy(vector);
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x004889d0..0x00488a8c.
@@ -650,7 +646,6 @@ qboolean CastInt(VariableValue *value)
 
 /* Source: CoDUOMP.exe 0x004886e0..0x004887b5.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004886e0_004887b6.mcode. */
-#if defined(WINDOWS_BEHAVIOR)
 qboolean CastFloat(VariableValue *value)
 {
     if (value->type == SCRIPT_VAR_FLOAT) {
@@ -699,54 +694,6 @@ qboolean CastFloat(VariableValue *value)
     value->type = SCRIPT_VAR_UNDEFINED;
     return qfalse;
 }
-#else
-/* coduo_lnxded 0x080aac34..0x080aad7a stores atof's result to the binary32
- * payload at 0x080aaca7, reloads that payload at 0x080aacac, and performs the
- * zero comparison on the reloaded value. */
-qboolean CastFloat(VariableValue *value)
-{
-    if (value->type == SCRIPT_VAR_FLOAT) {
-        return qtrue;
-    }
-
-    if (value->type == SCRIPT_VAR_INT) {
-        float floatValue = (float)(int32_t)(uint32_t)value->payload;
-
-        value->type = SCRIPT_VAR_FLOAT;
-        memcpy(&value->payload, &floatValue, sizeof(floatValue));
-        return qtrue;
-    }
-
-    if (value->type == SCRIPT_VAR_STRING) {
-        uint16_t string = (uint16_t)value->payload;
-        float floatValue =
-            (float)coduo_compat_atof(SL_ConvertToString(string));
-
-        memcpy(&value->payload, &floatValue, sizeof(floatValue));
-        if (floatValue == 0.0f &&
-            ScriptRuntime_StringStartsWithZeroLiteral(
-                SL_ConvertToString(string)) == qfalse) {
-            script_errorMessage =
-                va("cannot cast \"%s\" to float",
-                   SL_ConvertToString(string));
-            SL_RemoveRefToString(string);
-            value->type = SCRIPT_VAR_UNDEFINED;
-            return qfalse;
-        }
-
-        value->type = SCRIPT_VAR_FLOAT;
-        SL_RemoveRefToString(string);
-        return qtrue;
-    }
-
-    script_errorMessage =
-        va("cannot cast %s to float",
-           script_variableTypeNames[value->type]);
-    RemoveRefToValue(value);
-    value->type = SCRIPT_VAR_UNDEFINED;
-    return qfalse;
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x004887c0..0x00488852.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004887c0_00488853.mcode. */
@@ -1023,22 +970,16 @@ void Scr_AddConstString(uint16_t value)
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004908c0_00490908.mcode. */
 void Scr_AddVector(const vec3_t vector)
 {
-#if defined(WINDOWS_BEHAVIOR)
     script_vector_storage_t *storage;
-#endif
 
     IncInParam();
     script_valueStackTop->type = SCRIPT_VAR_VECTOR;
-#if defined(WINDOWS_BEHAVIOR)
     storage = MT_Alloc(sizeof(*storage));
     storage->refCount = 0;
     storage->value[0] = vector[0];
     storage->value[1] = vector[1];
     storage->value[2] = vector[2];
     script_valueStackTop->payload = (uintptr_t)storage->value;
-#else
-    script_valueStackTop->payload = (uintptr_t)AllocVectorCopy(vector);
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x00490910..0x00490958.
@@ -1078,21 +1019,12 @@ void Scr_AddArrayStringIndexed(uint16_t name)
 
 /* Source: CoDUOMP.exe 0x00490040..0x00490062.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00490040_00490063.mcode. */
-#if defined(WINDOWS_BEHAVIOR)
 const char *Scr_GetString(uint32_t index)
 {
     uint16_t string = Scr_GetConstString(index);
 
     return string != 0 ? SL_ConvertToString(string) : NULL;
 }
-#else
-/* coduo_lnxded 0x080afbaa..0x080afbed zero-extends the returned handle and
- * calls SL_ConvertToString unconditionally. */
-const char *Scr_GetString(uint32_t index)
-{
-    return SL_ConvertToString(Scr_GetConstString(index));
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x0048ffa0..0x00490030.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0048ffa0_00490031.mcode. */
@@ -1114,7 +1046,6 @@ uint16_t Scr_GetConstString(uint32_t index)
 
 /* Source: CoDUOMP.exe 0x00490070..0x004901b7.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00490070_004901b8.mcode. */
-#if defined(WINDOWS_BEHAVIOR)
 const char *Scr_GetDebugString(uint32_t index)
 {
     if (index >= script_parameterCount) {
@@ -1161,50 +1092,6 @@ const char *Scr_GetDebugString(uint32_t index)
 
     return debugString;
 }
-#else
-const char *Scr_GetDebugString(uint32_t index)
-{
-    if (index >= script_parameterCount) {
-        Scr_Error(va("parameter %d does not exist", index + 1));
-        return NULL;
-    }
-
-    VariableValue *value = &script_valueStackTop[-(int32_t)index];
-    script_variable_type_t originalType = value->type;
-    script_variable_type_t debugType = originalType;
-
-    /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-    if (originalType == SCRIPT_VAR_LOCALIZED_STRING) {
-        script_errorMessage = NULL;
-        script_errorSource = NULL;
-        script_errorParameterIndex = 0;
-        return SL_ConvertToString((uint16_t)value->payload);
-    }
-
-    if (originalType == SCRIPT_VAR_OBJECT) {
-        debugType = GetVarType((uint16_t)value->payload);
-    }
-
-    const char *debugString = script_variableTypeNames[debugType];
-    if (CastString(value) != qfalse) {
-        return SL_ConvertToString((uint16_t)value->payload);
-    }
-
-    script_errorMessage = NULL;
-    script_errorSource = NULL;
-    script_errorParameterIndex = 0;
-
-    if (originalType == SCRIPT_VAR_ANIMATION) {
-        scr_anim_t animRef;
-
-        memcpy(&animRef, &value->payload, sizeof(animRef));
-        debugString = XAnimGetAnimName(
-            Scr_GetAnims(animRef.treeIndex), animRef.animIndex);
-    }
-
-    return debugString;
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x0048fc90..0x0048fdc8.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0048fc90_0048fdc9.mcode. */
@@ -1250,7 +1137,6 @@ scr_anim_t Scr_GetAnim(uint32_t index, XAnimTree *runtimeTree)
 
 /* Source: CoDUOMP.exe 0x0048fdd0..0x0048fefe.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0048fdd0_0048feff.mcode. */
-#if defined(WINDOWS_BEHAVIOR)
 XAnim *Scr_GetAnimTree(uint32_t index)
 {
     int32_t slot = xanim_activePoolPayloadSlot;
@@ -1279,40 +1165,6 @@ XAnim *Scr_GetAnimTree(uint32_t index)
     Scr_Error(va("parameter %d does not exist", index + 1));
     return script_animTrees[slot][0];
 }
-#else
-/* The Linux source ABI returns the same one-pointer value as its retained
- * script_anim_tree_ref_t aggregate. Keep the complete function under the
- * behavior gate because its i386 calling convention uses an aggregate return. */
-script_anim_tree_ref_t Scr_GetAnimTree(uint32_t index)
-{
-    int32_t slot = xanim_activePoolPayloadSlot;
-
-    if (index < script_parameterCount) {
-        VariableValue *value = &script_valueStackTop[-(int32_t)index];
-        if (value->type == SCRIPT_VAR_INT) {
-            uint32_t treeIndex = (uint32_t)value->payload;
-            if (treeIndex <= (uint32_t)script_animTreeCounts[slot] &&
-                script_animTrees[slot][treeIndex] != NULL) {
-                return (script_anim_tree_ref_t){
-                    script_animTrees[slot][treeIndex]};
-            }
-            script_errorMessage = "bad anim tree";
-        } else {
-            script_errorMessage =
-                va("cannot cast %s to animtree",
-                   script_variableTypeNames[value->type]);
-        }
-
-        RemoveRefToValue(value);
-        value->type = SCRIPT_VAR_UNDEFINED;
-        script_errorParameterIndex = (int32_t)index + 1;
-        ScriptRuntime_RaiseError();
-    }
-
-    Scr_Error(va("parameter %d does not exist", index + 1));
-    return (script_anim_tree_ref_t){script_animTrees[slot][0]};
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00479010..0x00479038.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00479010_00479039.mcode. */
@@ -1376,19 +1228,12 @@ void Scr_SetDynamicEntityField(int32_t entityNum, int32_t classNum,
 
 /* Source: CoDUOMP.exe 0x00490270..0x00490292.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00490270_00490293.mcode. */
-#if defined(WINDOWS_BEHAVIOR)
 const char *Scr_GetIString(uint32_t index)
 {
     uint16_t string = Scr_GetConstIString(index);
 
     return string != 0 ? SL_ConvertToString(string) : NULL;
 }
-#else
-const char *Scr_GetIString(uint32_t index)
-{
-    return SL_ConvertToString(Scr_GetConstIString(index));
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x004901c0..0x0049026d.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004901c0_0049026e.mcode. */
@@ -1487,11 +1332,7 @@ uint32_t Scr_GetFunc(uint32_t index)
  * Linux game-import slot and game-module callers declare the same bounded
  * value as uint32_t.  Preserve that public ABI distinction even though both
  * bodies return the same zero-extended 16-bit entity field. */
-#if defined(WINDOWS_BEHAVIOR)
 uint16_t
-#else
-uint32_t
-#endif
 Scr_GetEntityNum(uint32_t index, int32_t *classNum)
 {
     if (index < script_parameterCount) {
@@ -1534,9 +1375,6 @@ void Scr_Error(const char *message)
 void Scr_TerminalError(const char *message)
 {
     Scr_DumpScriptThreads();
-#if defined(LINUX_BEHAVIOR)
-    Scr_DumpScriptVariables();
-#endif
     script_forceErrorReport = qtrue;
     Scr_Error(message);
 }
@@ -1568,11 +1406,7 @@ void Scr_ObjectError(const char *message)
     ScriptRuntime_RaiseError();
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 qboolean Scr_IsSystemActive(qboolean unused)
-#else
-qboolean Scr_IsSystemActive(uint8_t unused)
-#endif
 {
     (void)unused;
     return script_timeArrayHandle != 0 ? qtrue : qfalse;

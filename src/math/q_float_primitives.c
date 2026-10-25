@@ -6,11 +6,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /*
  * The retained Windows Q_fabs bodies are instruction-identical apart from
@@ -52,15 +47,7 @@ void BG_SinCos(float angle, float *sinOut, float *cosOut)
  * platform bodies because one FSINCOS reduction is observably different from
  * two libm calls for exceptional and very large inputs.
  */
-#if defined(WINDOWS_BEHAVIOR)
 void CG_SinCos(double angle, double *sinOut, double *cosOut)
 {
     coduo_x87_sincos(angle, sinOut, cosOut);
 }
-#else
-void CG_SinCos(double angle, double *sinOut, double *cosOut)
-{
-    *sinOut = sin(angle);
-    *cosOut = cos(angle);
-}
-#endif

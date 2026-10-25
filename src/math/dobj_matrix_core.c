@@ -2,11 +2,6 @@
 
 #include <float.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /*
  * Common DObj quaternion/matrix core.
@@ -30,7 +25,6 @@
  * GNU AT&T fsubrp below encodes the Intel subtract-pop operation. */
 static void coduomp_dobj_quat_multiply_native(const vec4_t lhs, const vec4_t rhs, vec4_t out)
 {
-#if defined(WINDOWS_BEHAVIOR)
     float spillZ;
 
     __asm__ __volatile__(
@@ -88,68 +82,6 @@ static void coduomp_dobj_quat_multiply_native(const vec4_t lhs, const vec4_t rhs
         : [spillZ] "=m"(spillZ)
         : [lhs] "r"(lhs), [rhs] "r"(rhs), [out] "r"(out)
         : "eax", "memory", "st", "st(1)", "st(2)", "st(3)");
-#else
-    float spillX, spillY, spillZ;
-
-    __asm__ __volatile__(
-        "flds 0(%[lhs])\n\t"
-        "fmuls 12(%[rhs])\n\t"
-        "flds 12(%[lhs])\n\t"
-        "fmuls 0(%[rhs])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds 8(%[lhs])\n\t"
-        "fmuls 4(%[rhs])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds 4(%[lhs])\n\t"
-        "fmuls 8(%[rhs])\n\t"
-        "fsubrp %%st, %%st(1)\n\t"
-        "fstps %[spillX]\n\t"
-        "flds 4(%[lhs])\n\t"
-        "fmuls 12(%[rhs])\n\t"
-        "flds 8(%[lhs])\n\t"
-        "fmuls 0(%[rhs])\n\t"
-        "fsubrp %%st, %%st(1)\n\t"
-        "flds 12(%[lhs])\n\t"
-        "fmuls 4(%[rhs])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds 0(%[lhs])\n\t"
-        "fmuls 8(%[rhs])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fstps %[spillY]\n\t"
-        "flds 8(%[lhs])\n\t"
-        "fmuls 12(%[rhs])\n\t"
-        "flds 4(%[lhs])\n\t"
-        "fmuls 0(%[rhs])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds 0(%[lhs])\n\t"
-        "fmuls 4(%[rhs])\n\t"
-        "fsubrp %%st, %%st(1)\n\t"
-        "flds 12(%[lhs])\n\t"
-        "fmuls 8(%[rhs])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fstps %[spillZ]\n\t"
-        "flds 12(%[lhs])\n\t"
-        "fmuls 12(%[rhs])\n\t"
-        "flds 0(%[lhs])\n\t"
-        "fmuls 0(%[rhs])\n\t"
-        "fsubrp %%st, %%st(1)\n\t"
-        "flds 4(%[lhs])\n\t"
-        "fmuls 4(%[rhs])\n\t"
-        "fsubrp %%st, %%st(1)\n\t"
-        "flds 8(%[lhs])\n\t"
-        "fmuls 8(%[rhs])\n\t"
-        "fsubrp %%st, %%st(1)\n\t"
-        "fstps 12(%[out])\n\t"
-        "movl %[spillX], %%eax\n\t"
-        "movl %%eax, 0(%[out])\n\t"
-        "movl %[spillY], %%eax\n\t"
-        "movl %%eax, 4(%[out])\n\t"
-        "movl %[spillZ], %%eax\n\t"
-        "movl %%eax, 8(%[out])"
-        : [spillX] "=m"(spillX), [spillY] "=m"(spillY), [spillZ] "=m"(spillZ)
-        : [lhs] "r"(lhs), [rhs] "r"(rhs), [out] "r"(out)
-        : "eax", "memory", "st", "st(1)", "st(2)", "st(3)");
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: retain the original x87 memory operands and
@@ -157,7 +89,6 @@ static void coduomp_dobj_quat_multiply_native(const vec4_t lhs, const vec4_t rhs
  * matrix and point reads precede the in-place output stores. */
 static void coduomp_dobj_transform_in_place_native(vec3_t point, const DObjSkelMat *matrix)
 {
-#if defined(WINDOWS_BEHAVIOR)
 
     __asm__ __volatile__(
         "flds 32(%[matrix])\n\t"
@@ -194,48 +125,6 @@ static void coduomp_dobj_transform_in_place_native(vec3_t point, const DObjSkelM
         :
         : [point] "r"(point), [matrix] "r"(matrix)
         : "memory", "st", "st(1)", "st(2)", "st(3)");
-#else
-    float spillX, spillY;
-
-    __asm__ __volatile__(
-        "flds 0(%[point])\n\t"
-        "fmuls 0(%[matrix])\n\t"
-        "flds 4(%[point])\n\t"
-        "fmuls 16(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds 8(%[point])\n\t"
-        "fmuls 32(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fadds 48(%[matrix])\n\t"
-        "fstps %[spillX]\n\t"
-        "flds 0(%[point])\n\t"
-        "fmuls 4(%[matrix])\n\t"
-        "flds 4(%[point])\n\t"
-        "fmuls 20(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds 8(%[point])\n\t"
-        "fmuls 36(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fadds 52(%[matrix])\n\t"
-        "fstps %[spillY]\n\t"
-        "flds 0(%[point])\n\t"
-        "fmuls 8(%[matrix])\n\t"
-        "flds 4(%[point])\n\t"
-        "fmuls 24(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds 8(%[point])\n\t"
-        "fmuls 40(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fadds 56(%[matrix])\n\t"
-        "fstps 8(%[point])\n\t"
-        "movl %[spillX], %%eax\n\t"
-        "movl %%eax, 0(%[point])\n\t"
-        "movl %[spillY], %%eax\n\t"
-        "movl %%eax, 4(%[point])"
-        : [spillX] "=m"(spillX), [spillY] "=m"(spillY)
-        : [point] "r"(point), [matrix] "r"(matrix)
-        : "eax", "memory", "st", "st(1)", "st(2)", "st(3)");
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: retain x87 arithmetic memory operands.
@@ -243,7 +132,6 @@ static void coduomp_dobj_transform_in_place_native(vec3_t point, const DObjSkelM
  * point, matrix, and output storage therefore retains the original ordering. */
 static void coduomp_dobj_transform_native(const vec3_t point, const DObjSkelMat *matrix, vec3_t out)
 {
-#if defined(WINDOWS_BEHAVIOR)
     __asm__ __volatile__(
         "flds 32(%[matrix])\n\t"
         "fmuls 8(%[point])\n\t"
@@ -278,42 +166,6 @@ static void coduomp_dobj_transform_native(const vec3_t point, const DObjSkelMat 
         :
         : [point] "r"(point), [matrix] "r"(matrix), [out] "r"(out)
         : "memory", "st", "st(1)");
-#else
-    __asm__ __volatile__(
-        "flds 0(%[point])\n\t"
-        "fmuls 0(%[matrix])\n\t"
-        "flds 4(%[point])\n\t"
-        "fmuls 16(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds 8(%[point])\n\t"
-        "fmuls 32(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fadds 48(%[matrix])\n\t"
-        "fstps 0(%[out])\n\t"
-        "flds 0(%[point])\n\t"
-        "fmuls 4(%[matrix])\n\t"
-        "flds 4(%[point])\n\t"
-        "fmuls 20(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds 8(%[point])\n\t"
-        "fmuls 36(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fadds 52(%[matrix])\n\t"
-        "fstps 4(%[out])\n\t"
-        "flds 0(%[point])\n\t"
-        "fmuls 8(%[matrix])\n\t"
-        "flds 4(%[point])\n\t"
-        "fmuls 24(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds 8(%[point])\n\t"
-        "fmuls 40(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fadds 56(%[matrix])\n\t"
-        "fstps 8(%[out])"
-        :
-        : [point] "r"(point), [matrix] "r"(matrix), [out] "r"(out)
-        : "memory", "st", "st(1)");
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: retain x87 arithmetic memory operands.
@@ -321,7 +173,6 @@ static void coduomp_dobj_transform_native(const vec3_t point, const DObjSkelMat 
  * Linux. Later matrix rows are read after earlier output stores. */
 static void coduomp_dobj_inverse_transform_native(const vec3_t point, const DObjSkelMat *matrix, vec3_t out)
 {
-#if defined(WINDOWS_BEHAVIOR)
     __asm__ __volatile__(
         "flds 0(%[point])\n\t"
         "fsubs 48(%[matrix])\n\t"
@@ -358,57 +209,12 @@ static void coduomp_dobj_inverse_transform_native(const vec3_t point, const DObj
         :
         : [point] "r"(point), [matrix] "r"(matrix), [out] "r"(out)
         : "memory", "st", "st(1)", "st(2)", "st(3)", "st(4)");
-#else
-    float translatedX, translatedY, translatedZ;
-
-    __asm__ __volatile__(
-        "flds 0(%[point])\n\t"
-        "fsubs 48(%[matrix])\n\t"
-        "fstps %[translatedX]\n\t"
-        "flds 4(%[point])\n\t"
-        "fsubs 52(%[matrix])\n\t"
-        "fstps %[translatedY]\n\t"
-        "flds 8(%[point])\n\t"
-        "fsubs 56(%[matrix])\n\t"
-        "fstps %[translatedZ]\n\t"
-        "flds %[translatedX]\n\t"
-        "fmuls 0(%[matrix])\n\t"
-        "flds %[translatedY]\n\t"
-        "fmuls 4(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds %[translatedZ]\n\t"
-        "fmuls 8(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fstps 0(%[out])\n\t"
-        "flds %[translatedX]\n\t"
-        "fmuls 16(%[matrix])\n\t"
-        "flds %[translatedY]\n\t"
-        "fmuls 20(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds %[translatedZ]\n\t"
-        "fmuls 24(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fstps 4(%[out])\n\t"
-        "flds %[translatedX]\n\t"
-        "fmuls 32(%[matrix])\n\t"
-        "flds %[translatedY]\n\t"
-        "fmuls 36(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "flds %[translatedZ]\n\t"
-        "fmuls 40(%[matrix])\n\t"
-        "faddp %%st, %%st(1)\n\t"
-        "fstps 8(%[out])"
-        : [translatedX] "=m"(translatedX), [translatedY] "=m"(translatedY), [translatedZ] "=m"(translatedZ)
-        : [point] "r"(point), [matrix] "r"(matrix), [out] "r"(out)
-        : "memory", "st", "st(1)");
-#endif
 }
 
 #else
 #define CODUOMP_DOBJ_NATIVE_X87 0
 #endif
 
-#if defined(WINDOWS_BEHAVIOR)
 
 /* NOT_FROM_ORIGINAL_SOURCE: round an extended matrix result directly into its
  * output lane, without reloading a binary32 temporary before publication. */
@@ -607,175 +413,3 @@ void DObjQuatMultiplyIntoSecond(const vec4_t lhs, vec4_t quat)
     quat[1] = (float)outY;
 #endif
 }
-
-#else
-
-void DObjMatrixTransformVector43(const vec3_t in,
-                                 const DObjSkelMat *matrix,
-                                 vec3_t out)
-{
-#if CODUOMP_DOBJ_NATIVE_X87
-    coduomp_dobj_transform_native(in, matrix, out);
-#else
-    out[0] = in[0] * matrix->axis[0][0] +
-             in[1] * matrix->axis[1][0] +
-             in[2] * matrix->axis[2][0] + matrix->origin[0];
-    out[1] = in[0] * matrix->axis[0][1] +
-             in[1] * matrix->axis[1][1] +
-             in[2] * matrix->axis[2][1] + matrix->origin[1];
-    out[2] = in[0] * matrix->axis[0][2] +
-             in[1] * matrix->axis[1][2] +
-             in[2] * matrix->axis[2][2] + matrix->origin[2];
-#endif
-}
-
-void DObjMatrixInverseTransformVector43(const vec3_t in,
-                                        const DObjSkelMat *matrix,
-                                        vec3_t out)
-{
-#if CODUOMP_DOBJ_NATIVE_X87
-    coduomp_dobj_inverse_transform_native(in, matrix, out);
-#else
-    float translated0 = in[0] - matrix->origin[0];
-    float translated1 = in[1] - matrix->origin[1];
-    float translated2 = in[2] - matrix->origin[2];
-
-    out[0] = translated0 * matrix->axis[0][0] +
-             translated1 * matrix->axis[0][1] +
-             translated2 * matrix->axis[0][2];
-    out[1] = translated0 * matrix->axis[1][0] +
-             translated1 * matrix->axis[1][1] +
-             translated2 * matrix->axis[1][2];
-    out[2] = translated0 * matrix->axis[2][0] +
-             translated1 * matrix->axis[2][1] +
-             translated2 * matrix->axis[2][2];
-#endif
-}
-
-void DObjQuatToMatrix43(const vec4_t quat, DObjSkelMat *matrix)
-{
-    float q0Sq = quat[0] * quat[0];
-    float q1Sq = quat[1] * quat[1];
-    float q2Sq = quat[2] * quat[2];
-    float lengthSq = ((q0Sq + q1Sq) + q2Sq) + quat[3] * quat[3];
-
-    if (lengthSq != 0.0f) {
-        float scale = 2.0f / lengthSq;
-        float xx = q0Sq * scale;
-        float yy = q1Sq * scale;
-        float zz = q2Sq * scale;
-        float xScale = quat[0] * scale;
-        float xy = xScale * quat[1];
-        float xz = xScale * quat[2];
-        float xw = xScale * quat[3];
-        float yScale = quat[1] * scale;
-        float yz = yScale * quat[2];
-        float yw = yScale * quat[3];
-        float zw = (quat[2] * quat[3]) * scale;
-
-        matrix->axis[0][0] = 1.0f - (yy + zz);
-        matrix->axis[0][1] = xy + zw;
-        matrix->axis[0][2] = xz - yw;
-        matrix->axis[0][3] = 0.0f;
-        matrix->axis[1][0] = xy - zw;
-        matrix->axis[1][1] = 1.0f - (xx + zz);
-        matrix->axis[1][2] = yz + xw;
-        matrix->axis[1][3] = 0.0f;
-        matrix->axis[2][0] = xz + yw;
-        matrix->axis[2][1] = yz - xw;
-        matrix->axis[2][2] = 1.0f - (xx + yy);
-        matrix->axis[2][3] = 0.0f;
-    } else {
-        matrix->axis[0][0] = 1.0f;
-        matrix->axis[0][1] = 0.0f;
-        matrix->axis[0][2] = 0.0f;
-        matrix->axis[0][3] = 0.0f;
-        matrix->axis[1][0] = 0.0f;
-        matrix->axis[1][1] = 1.0f;
-        matrix->axis[1][2] = 0.0f;
-        matrix->axis[1][3] = 0.0f;
-        matrix->axis[2][0] = 0.0f;
-        matrix->axis[2][1] = 0.0f;
-        matrix->axis[2][2] = 1.0f;
-        matrix->axis[2][3] = 0.0f;
-    }
-}
-
-void DObjMatrixTransformVector43InPlace(
-    vec3_t point, const DObjSkelMat *matrix)
-{
-#if CODUOMP_DOBJ_NATIVE_X87
-    coduomp_dobj_transform_in_place_native(point, matrix);
-#else
-    float x = point[0];
-    float y = point[1];
-    float z = point[2];
-    float outX =
-        x * matrix->axis[0][0] + y * matrix->axis[1][0] +
-        z * matrix->axis[2][0] + matrix->origin[0];
-    float outY =
-        x * matrix->axis[0][1] + y * matrix->axis[1][1] +
-        z * matrix->axis[2][1] + matrix->origin[1];
-
-    point[2] = x * matrix->axis[0][2] + y * matrix->axis[1][2] +
-               z * matrix->axis[2][2] + matrix->origin[2];
-    point[0] = outX;
-    point[1] = outY;
-#endif
-}
-
-void DObjQuatMultiplyIntoFirst(vec4_t quat, const vec4_t rhs)
-{
-#if CODUOMP_DOBJ_NATIVE_X87
-    coduomp_dobj_quat_multiply_native(quat, rhs, quat);
-#else
-    float rhsW = rhs[3];
-    float quatW = quat[3];
-    float rhsX = rhs[0];
-    float rhsY = rhs[1];
-    float rhsZ = rhs[2];
-    float quatX = quat[0];
-    float quatY = quat[1];
-    float quatZ = quat[2];
-
-    float outX = ((quatX * rhsW + quatW * rhsX) + quatZ * rhsY) -
-                 quatY * rhsZ;
-    float outY = ((quatY * rhsW - quatZ * rhsX) + quatW * rhsY) +
-                 quatX * rhsZ;
-    float outZ = ((quatZ * rhsW + quatY * rhsX) - quatX * rhsY) +
-                 quatW * rhsZ;
-
-    quat[3] = ((quatW * rhsW - quatX * rhsX) - quatY * rhsY) -
-              quatZ * rhsZ;
-    quat[0] = outX;
-    quat[1] = outY;
-    quat[2] = outZ;
-#endif
-}
-
-void DObjQuatMultiplyIntoSecond(const vec4_t lhs, vec4_t quat)
-{
-#if CODUOMP_DOBJ_NATIVE_X87
-    coduomp_dobj_quat_multiply_native(lhs, quat, quat);
-#else
-    float lhsX = lhs[0];
-    float rhsW = quat[3];
-    float lhsW = lhs[3];
-    float lhsZ = lhs[2];
-    float lhsY = lhs[1];
-    float rhsX = quat[0];
-    float rhsY = quat[1];
-    float rhsZ = quat[2];
-
-    float outX = ((lhsX * rhsW + lhsW * rhsX) + lhsZ * rhsY) - lhsY * rhsZ;
-    float outY = ((lhsY * rhsW - lhsZ * rhsX) + lhsW * rhsY) + lhsX * rhsZ;
-    float outZ = ((lhsZ * rhsW + lhsY * rhsX) - lhsX * rhsY) + lhsW * rhsZ;
-
-    quat[3] = ((lhsW * rhsW - lhsX * rhsX) - lhsY * rhsY) - lhsZ * rhsZ;
-    quat[0] = outX;
-    quat[1] = outY;
-    quat[2] = outZ;
-#endif
-}
-
-#endif

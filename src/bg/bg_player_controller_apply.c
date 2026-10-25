@@ -53,8 +53,6 @@
 #include "bg_animation.h"
 #include "bg_animation_services.h"
 
-#include "compat/coduo_x87emu.h"
-
 #include <stdint.h>
 
 /* Windows cgame stores this table at 0x300823e0..0x300823f4 and Windows game
@@ -76,14 +74,8 @@ static const char BG_ControllerOriginTagName[] = "tag_origin";
  * scales on hosts without native x87. */
 static float bg_compat_controller_frame_scale(float scale)
 {
-#if EMULATE_X87
-    return x87f_store_f32(x87f_mul(
-        x87f_load_i32(bg_compat_animation_frame_time()),
-        x87f_load_f32(scale)));
-#else
     return (float)((long double)bg_compat_animation_frame_time() *
                    (long double)scale);
-#endif
 }
 
 void BG_Player_DoControllers(void *dobjOwner, const entityState_t *entity,

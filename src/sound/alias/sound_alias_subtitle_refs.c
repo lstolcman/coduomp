@@ -35,7 +35,6 @@ uint32_t Com_HashAliasName(const char *name)
 
     hash = 0;
     while (*name != '\0') {
-#if defined(WINDOWS_BEHAVIOR)
         /* MSVC's retained body lowers only ASCII A-Z. Linux reaches its CRT
          * ctype table instead. Accepted alias names use the common ASCII
          * grammar, but retain each original lowering for raw lookup input. */
@@ -45,10 +44,6 @@ uint32_t Com_HashAliasName(const char *name)
         }
         hash = (uint32_t)character +
                hash * SOUND_ALIAS_HASH_MULTIPLIER;
-#else
-        hash = (uint32_t)tolower(coduo_ctype_signed_byte_arg(*name)) +
-               hash * SOUND_ALIAS_HASH_MULTIPLIER;
-#endif
         name++;
     }
 
@@ -60,7 +55,6 @@ uint32_t Com_HashAliasName(const char *name)
  * engine symbol. */
 qboolean Com_IsValidAliasName(const char *name)
 {
-#if defined(WINDOWS_BEHAVIOR)
     /* The authoritative Windows body uses the Quake ASCII predicates; the
      * Linux body below uses its signed-byte CRT ctype path. Both accept the
      * same maintained alias-name domain under the original C locale. */
@@ -79,27 +73,6 @@ qboolean Com_IsValidAliasName(const char *name)
     }
 
     return qtrue;
-#else
-    signed char ch;
-
-    ch = (signed char)*name;
-    if (ch <= SOUND_ALIAS_NAME_MIN_PRINTABLE ||
-        (isalpha(coduo_ctype_signed_byte_arg(ch)) == 0 && ch != '_')) {
-        return qfalse;
-    }
-
-    do {
-        name++;
-        ch = (signed char)*name;
-        if (ch == '\0') {
-            return qtrue;
-        }
-        if (ch <= SOUND_ALIAS_NAME_MIN_PRINTABLE ||
-            (isalnum(coduo_ctype_signed_byte_arg(ch)) == 0 && ch != '_')) {
-            return qfalse;
-        }
-    } while (1);
-#endif
 }
 
 /* CoDUOMP.exe 0x004385c0..0x00438766 and coduo_lnxded

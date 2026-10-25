@@ -1,7 +1,6 @@
 #include "q_math.h"
 
 #include "compat/coduo_fp_conversion.h"
-#include "compat/coduo_x87emu.h"
 
 #include <stdint.h>
 
@@ -64,14 +63,8 @@ float AngleNormalize360Accurate(float angle)
         /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
         do {
             const float previous = angle;
-#if EMULATE_X87
-            angle = x87f_store_f32(
-                x87f_add(x87f_load_f32(angle),
-                         x87f_load_f32(ANGLE_FULL_CIRCLE)));
-#else
             angle = (float)((long double)angle +
                             (long double)ANGLE_FULL_CIRCLE);
-#endif
             if (angle == previous) {
                 break;
             }
@@ -82,14 +75,8 @@ float AngleNormalize360Accurate(float angle)
     if (angle >= ANGLE_FULL_CIRCLE) {
         do {
             const float previous = angle;
-#if EMULATE_X87
-            angle = x87f_store_f32(
-                x87f_sub(x87f_load_f32(angle),
-                         x87f_load_f32(ANGLE_FULL_CIRCLE)));
-#else
             angle = (float)((long double)angle -
                             (long double)ANGLE_FULL_CIRCLE);
-#endif
             if (angle == previous) {
                 break;
             }
@@ -104,14 +91,8 @@ float AngleNormalize180Accurate(float angle)
     if (angle <= -ANGLE_HALF_CIRCLE) {
         do {
             const float previous = angle;
-#if EMULATE_X87
-            angle = x87f_store_f32(
-                x87f_add(x87f_load_f32(angle),
-                         x87f_load_f32(ANGLE_FULL_CIRCLE)));
-#else
             angle = (float)((long double)angle +
                             (long double)ANGLE_FULL_CIRCLE);
-#endif
             if (angle == previous) {
                 break;
             }
@@ -119,14 +100,8 @@ float AngleNormalize180Accurate(float angle)
     } else if (angle > ANGLE_HALF_CIRCLE) {
         do {
             const float previous = angle;
-#if EMULATE_X87
-            angle = x87f_store_f32(
-                x87f_sub(x87f_load_f32(angle),
-                         x87f_load_f32(ANGLE_FULL_CIRCLE)));
-#else
             angle = (float)((long double)angle -
                             (long double)ANGLE_FULL_CIRCLE);
-#endif
             if (angle == previous) {
                 break;
             }

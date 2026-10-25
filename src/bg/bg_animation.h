@@ -64,12 +64,7 @@ void BG_SetupAnimNoteTypes(bg_static_animation_table_t *table);
 void BG_FinalizePlayerAnims(void);
 void BG_LoadAnimTreeInstances(void);
 void BG_FindAnims(void);
-#if defined(WINDOWS_BEHAVIOR)
 XAnim *BG_FindAnimTree(const char *treeName, qboolean errorIfMissing);
-#else
-script_anim_tree_ref_t BG_FindAnimTree(const char *treeName,
-                                       qboolean errorIfMissing);
-#endif
 void BG_FindAnimTrees(void);
 void BG_InitWeaponStrings(void);
 void BG_ParseConditionBits(char **parse, bg_indexed_string_t *values,

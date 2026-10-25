@@ -1,10 +1,5 @@
 #include "collision_brush_traces.h"
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "collision_test_box_in_brush.c requires a platform behavior mode"
-#endif
 
 /*
  * Complete position-versus-brush primitive:
@@ -18,7 +13,6 @@
  * binary32.  The complete platform bodies preserve those proven spill points.
  */
 
-#if defined(WINDOWS_BEHAVIOR)
 void CM_TestBoxInBrush(
     traceWork_t *traceWork,
     const collisionBrush_t *brush)
@@ -117,90 +111,3 @@ void CM_TestBoxInBrush(
     traceWork->trace.fraction = 0.0f;
     traceWork->trace.contents = brush->contents;
 }
-#else
-void CM_TestBoxInBrush(traceWork_t *traceWork,
-                        const collisionBrush_t *brush)
-{
-    if (traceWork->bounds[0][0] > brush->maxs[0]) {
-        return;
-    }
-    if (traceWork->bounds[0][1] > brush->maxs[1]) {
-        return;
-    }
-    if (traceWork->bounds[0][2] > brush->maxs[2]) {
-        return;
-    }
-    if (brush->mins[0] > traceWork->bounds[1][0]) {
-        return;
-    }
-    if (brush->mins[1] > traceWork->bounds[1][1]) {
-        return;
-    }
-    if (brush->mins[2] > traceWork->bounds[1][2]) {
-        return;
-    }
-
-    const collisionBrushSide_t *side = brush->nonAxialSides;
-    int32_t sideCount = brush->nonAxialSideCount;
-
-    if (traceWork->sphere.use != 0) {
-        for (; sideCount != 0; --sideCount, ++side) {
-            const cplane_t *plane = side->plane;
-            const float planeDist = plane->dist + traceWork->sphere.radius;
-            const float sphereOffset =
-                ((plane->normal[0] * traceWork->sphere.offset[0]) +
-                 (plane->normal[1] * traceWork->sphere.offset[1])) +
-                (plane->normal[2] * traceWork->sphere.offset[2]);
-            vec3_t testPoint;
-
-            if (sphereOffset > 0.0f) {
-                testPoint[0] =
-                    traceWork->start[0] - traceWork->sphere.offset[0];
-                testPoint[1] =
-                    traceWork->start[1] - traceWork->sphere.offset[1];
-                testPoint[2] =
-                    traceWork->start[2] - traceWork->sphere.offset[2];
-            } else {
-                testPoint[0] =
-                    traceWork->start[0] + traceWork->sphere.offset[0];
-                testPoint[1] =
-                    traceWork->start[1] + traceWork->sphere.offset[1];
-                testPoint[2] =
-                    traceWork->start[2] + traceWork->sphere.offset[2];
-            }
-
-            const float distance =
-                (((testPoint[0] * plane->normal[0]) +
-                  (testPoint[1] * plane->normal[1])) +
-                 (testPoint[2] * plane->normal[2])) -
-                planeDist;
-            if (distance > 0.0f) {
-                return;
-            }
-        }
-    } else {
-        for (; sideCount != 0; --sideCount, ++side) {
-            const cplane_t *plane = side->plane;
-            const float *offset = traceWork->offsets[plane->signbits];
-            const float planeDist =
-                plane->dist -
-                (((offset[0] * plane->normal[0]) +
-                  (offset[1] * plane->normal[1])) +
-                 (offset[2] * plane->normal[2]));
-            const float distance =
-                (((traceWork->start[0] * plane->normal[0]) +
-                  (traceWork->start[1] * plane->normal[1])) +
-                 (traceWork->start[2] * plane->normal[2])) -
-                planeDist;
-            if (distance > 0.0f) {
-                return;
-            }
-        }
-    }
-
-    traceWork->trace.allsolid = 1;
-    traceWork->trace.startsolid = 1;
-    traceWork->trace.fraction = 0.0f;
-    traceWork->trace.contents = brush->contents;
-}
-#endif

@@ -90,20 +90,8 @@ int32_t Com_SoundAliasIndex(const snd_alias_t *alias, sndAliasBank_t bank)
         (uint32_t)(uintptr_t)com_soundAliases[bank] +
         (uint32_t)sizeof(*alias);
 
-#if defined(WINDOWS_BEHAVIOR)
     const int32_t soundHandle =
         coduo_int32_from_bits(rawOffset) / (int32_t)sizeof(*alias);
-#elif defined(LINUX_BEHAVIOR)
-    enum {
-        SOUND_ALIAS_STRIDE_WORD_INVERSE = UINT32_C(0x286bca1b)
-    };
-    const uint32_t wordOffset = coduo_int32_sar_bits(rawOffset, 2U);
-    const int32_t soundHandle =
-        coduo_int32_from_bits(
-            wordOffset * SOUND_ALIAS_STRIDE_WORD_INVERSE);
-#else
-#error "Com_SoundAliasIndex requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 #else
     if (alias == NULL) {
         return SOUND_ALIAS_INDEX_NONE;

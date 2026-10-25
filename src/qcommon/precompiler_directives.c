@@ -10,17 +10,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR)
 void *GetMemory(size_t size);
 void *GetClearedMemory(size_t size);
 void FreeMemory(void *memory);
-#elif defined(LINUX_BEHAVIOR)
-void *Com_ZoneDebugAlloc(size_t size);
-void *Com_ZoneDebugAllocClear(size_t size);
-void Com_DebugFree(void *pointer);
-#else
-#error "precompiler_directives.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /* Original global-define list head at CoDUOMP.exe 0x04927e80; the Linux
  * dedicated parser owns the same process-global list. */
@@ -31,38 +23,14 @@ define_t *pc_globalDefines;
 static void coduo_pc_store_synthetic_float_from_i32(token_t *token,
                                                      int32_t value)
 {
-#if defined(WINDOWS_BEHAVIOR)
     token->floatValue = (double)value;
-#elif EMULATE_X87
-    memset(token->floatValue, 0, sizeof(token->floatValue));
-    coduo_pc_store_token_float80(token->floatValue, x87f_load_i32(value));
-#else
-    const long double extendedValue = (long double)value;
-    const size_t copySize = sizeof(extendedValue) < PC_X87_EXTENDED_TBYTE_SIZE
-                                ? sizeof(extendedValue)
-                                : PC_X87_EXTENDED_TBYTE_SIZE;
-    memset(token->floatValue, 0, sizeof(token->floatValue));
-    memcpy(token->floatValue, &extendedValue, copySize);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: binary64-input companion for $evalfloat. */
 static void coduo_pc_store_synthetic_float_from_f64(token_t *token,
                                                      double value)
 {
-#if defined(WINDOWS_BEHAVIOR)
     token->floatValue = value;
-#elif EMULATE_X87
-    memset(token->floatValue, 0, sizeof(token->floatValue));
-    coduo_pc_store_token_float80(token->floatValue, x87f_load_f64(value));
-#else
-    const long double extendedValue = (long double)value;
-    const size_t copySize = sizeof(extendedValue) < PC_X87_EXTENDED_TBYTE_SIZE
-                                ? sizeof(extendedValue)
-                                : PC_X87_EXTENDED_TBYTE_SIZE;
-    memset(token->floatValue, 0, sizeof(token->floatValue));
-    memcpy(token->floatValue, &extendedValue, copySize);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: both i386 compilers lower the $evalfloat integer
@@ -202,11 +170,7 @@ qboolean PC_Directive_define(source_t *source)
 
     const size_t nameLength = strlen(token.string);
     define_t *define;
-#if defined(WINDOWS_BEHAVIOR)
     define = GetMemory(sizeof(*define) + nameLength + 1);
-#else
-    define = Com_ZoneDebugAlloc(sizeof(*define) + nameLength + 1);
-#endif
     memset(define, 0, sizeof(*define));
     define->name = define->nameStorage;
     strcpy(define->name, token.string);
@@ -305,13 +269,8 @@ define_t *PC_DefineFromString(const char *string)
     memset(&source, 0, sizeof(source));
     strncpy(source.filename, "*extern", sizeof(source.filename));
     source.scriptStack = script;
-#if defined(WINDOWS_BEHAVIOR)
     source.defineHash = GetClearedMemory(
         PC_DEFINE_HASH_BUCKET_COUNT * sizeof(*source.defineHash));
-#else
-    source.defineHash = Com_ZoneDebugAllocClear(
-        PC_DEFINE_HASH_BUCKET_COUNT * sizeof(*source.defineHash));
-#endif
 
     const qboolean parsed = PC_Directive_define(&source);
 
@@ -343,11 +302,7 @@ define_t *PC_DefineFromString(const char *string)
         define = NULL;
     }
 
-#if defined(WINDOWS_BEHAVIOR)
     FreeMemory(source.defineHash);
-#else
-    Com_DebugFree(source.defineHash);
-#endif
     FreeScript(script);
 
     if (parsed == qfalse)
@@ -425,11 +380,7 @@ define_t *PC_CopyDefine(source_t *source,
 
     const size_t nameLength = strlen(define->name);
     define_t *copy;
-#if defined(WINDOWS_BEHAVIOR)
     copy = GetMemory(sizeof(*copy) + nameLength + 1);
-#else
-    copy = Com_ZoneDebugAlloc(sizeof(*copy) + nameLength + 1);
-#endif
 
     copy->name = copy->nameStorage;
     strcpy(copy->name, define->name);
@@ -670,12 +621,8 @@ qboolean PC_Directive_eval(source_t *source)
     const int32_t magnitude = value == INT32_MIN
                                   ? INT32_MIN
                                   : (value < 0 ? -value : value);
-#if defined(WINDOWS_BEHAVIOR)
     coduo_crt_snprintf(token.string, sizeof(token.string), "%d",
                          magnitude);
-#else
-    sprintf(token.string, "%d", magnitude);
-#endif
     token.type = PC_TOKEN_TYPE_NUMBER;
     token.subtype = PC_TOKEN_SUBTYPE_DECIMAL_INTEGER_LONG;
     /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
@@ -703,12 +650,8 @@ qboolean PC_Directive_evalfloat(source_t *source)
         return qfalse;
 
     token_t token;
-#if defined(WINDOWS_BEHAVIOR)
     coduo_crt_snprintf(token.string, sizeof(token.string), "%1.2f",
                          fabs(value));
-#else
-    sprintf(token.string, "%1.2f", fabs(value));
-#endif
     token.type = PC_TOKEN_TYPE_NUMBER;
     token.subtype = PC_TOKEN_SUBTYPE_DECIMAL_FLOAT_LONG;
     /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
@@ -810,12 +753,8 @@ qboolean PC_DollarDirective_evalint(source_t *source)
     const int32_t magnitude = value == INT32_MIN
                                   ? INT32_MIN
                                   : (value < 0 ? -value : value);
-#if defined(WINDOWS_BEHAVIOR)
     coduo_crt_snprintf(token.string, sizeof(token.string), "%d",
                          magnitude);
-#else
-    sprintf(token.string, "%d", magnitude);
-#endif
     token.type = PC_TOKEN_TYPE_NUMBER;
     token.subtype = PC_TOKEN_SUBTYPE_DECIMAL_INTEGER_LONG;
     token.intValue = value;
@@ -842,12 +781,8 @@ qboolean PC_DollarDirective_evalfloat(source_t *source)
         return qfalse;
 
     token_t token;
-#if defined(WINDOWS_BEHAVIOR)
     coduo_crt_snprintf(token.string, sizeof(token.string), "%1.2f",
                          fabs(value));
-#else
-    sprintf(token.string, "%1.2f", fabs(value));
-#endif
     token.type = PC_TOKEN_TYPE_NUMBER;
     token.subtype = PC_TOKEN_SUBTYPE_DECIMAL_FLOAT_LONG;
     token.intValue = coduo_pc_f64_to_low_i32(value);

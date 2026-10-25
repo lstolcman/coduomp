@@ -5,13 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 /*
  * The original table is mutable data, matching the core Quake 3 declaration.
@@ -208,7 +202,6 @@ vec3_t bytedirs[NUMVERTEXNORMALS] = {
  * stored candidate and selected index.  FCOMP versus FUCOMPP is only a
  * comparison-lowering distinction.
  */
-#if defined(WINDOWS_BEHAVIOR)
 uint8_t DirToByte(const vec3_t direction)
 {
     float bestDot = 0.0f;
@@ -221,17 +214,7 @@ uint8_t DirToByte(const vec3_t direction)
     for (uint8_t index = 0; index < NUMVERTEXNORMALS; ++index) {
         float dot;
 
-#if EMULATE_X87
-        dot = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(bytedirs[index][2]),
-                              x87f_load_f32(direction[2])),
-                     x87f_mul(x87f_load_f32(bytedirs[index][0]),
-                              x87f_load_f32(direction[0]))),
-            x87f_mul(x87f_load_f32(bytedirs[index][1]),
-                     x87f_load_f32(direction[1]))));
-        if (x87f_lt(x87f_load_f32(bestDot), x87f_load_f32(dot))) {
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-    (defined(__GNUC__) || defined(__clang__))
+#if   (defined(__i386__) || defined(__x86_64__)) &&      (defined(__GNUC__) || defined(__clang__))
         __asm__ __volatile__("flds %1\n\t"
                              "fmuls %2\n\t"
                              "flds %3\n\t"
@@ -276,77 +259,6 @@ uint8_t DirToByte(const vec3_t direction)
 
     return bestIndex;
 }
-#else
-/*
- * The Linux bodies at coduo_lnxded 0x080661f4 and game.mp.uo.i386.so RVA
- * 0x00039bd4 instead evaluate and spill (x*dx + y*dy) + z*dz.  Their running
- * maximum comparison is quiet FUCOMPP.  The supporting Mac game body named
- * DirToByte uses the same lane order with PowerPC fused multiply-adds; it is
- * useful naming support but does not override the Linux server authority.
- */
-uint8_t DirToByte(const vec3_t direction)
-{
-    float bestDot = 0.0f;
-    uint8_t bestIndex = 0;
-
-    if (direction == NULL) {
-        return 0;
-    }
-
-    for (uint8_t index = 0; index < NUMVERTEXNORMALS; ++index) {
-        float dot;
-
-#if EMULATE_X87
-        dot = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(direction[0]),
-                              x87f_load_f32(bytedirs[index][0])),
-                     x87f_mul(x87f_load_f32(direction[1]),
-                              x87f_load_f32(bytedirs[index][1]))),
-            x87f_mul(x87f_load_f32(direction[2]),
-                     x87f_load_f32(bytedirs[index][2]))));
-        if (x87f_lt(x87f_load_f32(bestDot), x87f_load_f32(dot))) {
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
-        __asm__ __volatile__("flds %1\n\t"
-                             "fmuls %2\n\t"
-                             "flds %3\n\t"
-                             "fmuls %4\n\t"
-                             "faddp %%st, %%st(1)\n\t"
-                             "flds %5\n\t"
-                             "fmuls %6\n\t"
-                             "faddp %%st, %%st(1)\n\t"
-                             "fstps %0"
-                             : "=m"(dot)
-                             : "m"(direction[0]), "m"(bytedirs[index][0]),
-                               "m"(direction[1]), "m"(bytedirs[index][1]),
-                               "m"(direction[2]), "m"(bytedirs[index][2])
-                             : "st", "st(1)", "memory");
-
-        uint16_t status;
-        __asm__ __volatile__("flds %1\n\t"
-                             "flds %2\n\t"
-                             "fxch %%st(1)\n\t"
-                             "fucompp\n\t"
-                             "fnstsw %%ax"
-                             : "=a"(status)
-                             : "m"(dot), "m"(bestDot)
-                             : "st", "st(1)", "memory");
-        if ((status & UINT16_C(0x4100)) == 0) {
-#else
-        /* Round the complete wide dot once before comparing candidates. */
-        dot = (float)(((WIDE_FLOAT)direction[0] * bytedirs[index][0] +
-                       (WIDE_FLOAT)direction[1] * bytedirs[index][1]) +
-                      (WIDE_FLOAT)direction[2] * bytedirs[index][2]);
-        if (isless(bestDot, dot)) {
-#endif
-            bestDot = dot;
-            bestIndex = index;
-        }
-    }
-
-    return bestIndex;
-}
-#endif
 
 /*
  * All bodies use signed bounds 0 <= value < 162 and copy valid table entries

@@ -96,9 +96,7 @@ int32_t BG_CheckProne(int32_t clientNum, const vec3_t origin,
 int32_t BG_CheckProneTurned(playerState_t *ps, float yaw,
                             pm_trace_fn_t traceFunc);
 void PM_UpdatePronePitch(void);
-#if defined(WINDOWS_BEHAVIOR)
 int32_t Script_RoundToNearestInt(float value);
-#endif
 int32_t PM_SlideMove(int32_t gravity);
 void PM_StepSlideMove(int32_t gravity);
 

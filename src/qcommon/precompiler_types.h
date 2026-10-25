@@ -7,17 +7,9 @@
 #include "q_shared_types.h"
 
 enum {
-#if defined(WINDOWS_BEHAVIOR)
     PC_SCRIPT_FILENAME_CAPACITY = 260,
     PC_SOURCE_FILENAME_CAPACITY = 260,
     PC_SOURCE_INCLUDE_PATH_CAPACITY = 260,
-#elif defined(LINUX_BEHAVIOR)
-    PC_SCRIPT_FILENAME_CAPACITY = MAX_QPATH,
-    PC_SOURCE_FILENAME_CAPACITY = MAX_QPATH,
-    PC_SOURCE_INCLUDE_PATH_CAPACITY = MAX_QPATH,
-#else
-#error "precompiler_types.h requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
     PC_DEFINE_HASH_BUCKET_COUNT = 1024,
     PC_SOURCE_HANDLE_COUNT = 64,
     PC_DEFAULT_PUNCTUATION_COUNT = 53,
@@ -169,14 +161,10 @@ struct token_s {
     int32_t type;
     int32_t subtype;
     int32_t intValue;
-#if defined(WINDOWS_BEHAVIOR)
 #if defined(__cplusplus)
     alignas(8) double floatValue;
 #else
     _Alignas(8) double floatValue;
-#endif
-#else
-    uint8_t floatValue[PC_TOKEN_FLOAT_VALUE_SIZE];
 #endif
     char *whitespaceStart;
     char *whitespaceEnd;
@@ -259,7 +247,6 @@ PC_LAYOUT_ASSERT(pc_define_name_storage_offset,
                  offsetof(define_t, nameStorage) == 0x20);
 PC_LAYOUT_ASSERT(pc_define_size, sizeof(define_t) == 0x20);
 
-#if defined(WINDOWS_BEHAVIOR)
 PC_LAYOUT_ASSERT(pc_windows_token_float_offset,
                  offsetof(token_t, floatValue) == 0x410);
 PC_LAYOUT_ASSERT(pc_windows_token_next_offset,
@@ -275,23 +262,6 @@ PC_LAYOUT_ASSERT(pc_windows_source_include_path_offset,
 PC_LAYOUT_ASSERT(pc_windows_source_token_offset,
                  offsetof(source_t, token) == 0x228);
 PC_LAYOUT_ASSERT(pc_windows_source_size, sizeof(source_t) == 0x658);
-#else
-PC_LAYOUT_ASSERT(pc_linux_token_float_offset,
-                 offsetof(token_t, floatValue) == 0x40c);
-PC_LAYOUT_ASSERT(pc_linux_token_next_offset,
-                 offsetof(token_t, next) == 0x428);
-PC_LAYOUT_ASSERT(pc_linux_token_size, sizeof(token_t) == 0x42c);
-PC_LAYOUT_ASSERT(pc_linux_script_buffer_offset,
-                 offsetof(script_t, buffer) == 0x040);
-PC_LAYOUT_ASSERT(pc_linux_script_token_offset,
-                 offsetof(script_t, token) == 0x074);
-PC_LAYOUT_ASSERT(pc_linux_script_size, sizeof(script_t) == 0x4a4);
-PC_LAYOUT_ASSERT(pc_linux_source_include_path_offset,
-                 offsetof(source_t, includePath) == 0x040);
-PC_LAYOUT_ASSERT(pc_linux_source_token_offset,
-                 offsetof(source_t, token) == 0x09c);
-PC_LAYOUT_ASSERT(pc_linux_source_size, sizeof(source_t) == 0x4c8);
-#endif
 
 #undef PC_LAYOUT_ASSERT
 #endif

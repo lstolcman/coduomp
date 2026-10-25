@@ -363,15 +363,8 @@ void MT_Error(const char *operation, size_t size)
 
 /* Source: CoDUOMP.exe 0x00480dc0..0x00480edc.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00480dc0_00480edd.mcode. */
-#if defined(WINDOWS_BEHAVIOR)
 uint16_t MT_AllocIndex(size_t size)
-#else
-uint16_t MT_AllocIndex(size_t size, int32_t type)
-#endif
 {
-#if !defined(WINDOWS_BEHAVIOR)
-    (void)type;
-#endif
     int32_t requestedBucket =
         MT_GetSize(coduomp_script_memory_int32_from_size(size));
     int32_t bucket = requestedBucket;
@@ -437,15 +430,9 @@ void MT_FreeIndex(uint16_t blockIndex, size_t size)
 /* Source: CoDUOMP.exe 0x00480f90..0x00480fa7 and coduo_lnxded
  * 0x080a2f68..0x080a2f8c.  Linux retains the unused allocation tag in the
  * source interface; Windows does not pass it. */
-#if defined(WINDOWS_BEHAVIOR)
 void *MT_Alloc(size_t size)
 {
     uint16_t blockIndex = MT_AllocIndex(size);
-#else
-void *MT_Alloc(size_t size, int32_t type)
-{
-    uint16_t blockIndex = MT_AllocIndex(size, type);
-#endif
     return &script_memoryBlocks[blockIndex];
 }
 

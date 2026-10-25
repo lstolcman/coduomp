@@ -1292,22 +1292,14 @@ VM_Execute(VariableValue *stackTop, uint8_t *codePos,
                     } else if (script_loopWatchdogWarningFlag != 0) {
                         Com_Printf(
                             "script runtime warning: potential infinite loop in script.\n");
-#if defined(WINDOWS_BEHAVIOR)
                         RuntimeError(0, 0, NULL, NULL);
-#else
-                        Scr_PrintPrevCodePos(0, codePos, 0);
-#endif
                         script_loopWatchdogTick =
                             rdtsc();
                         codePos += offset;
                     } else if (script_runtimeDeveloperFlag == 0) {
                         Com_Printf(
                             "script runtime error: potential infinite loop in script - killing thread.\n");
-#if defined(WINDOWS_BEHAVIOR)
                         RuntimeError(0, 0, NULL, NULL);
-#else
-                        Scr_PrintPrevCodePos(0, codePos, 0);
-#endif
                         script_loopWatchdogTick =
                             rdtsc();
                         while (true) {
@@ -1323,9 +1315,7 @@ VM_Execute(VariableValue *stackTop, uint8_t *codePos,
                             }
                         }
                     } else {
-#if defined(WINDOWS_BEHAVIOR)
                         Scr_DumpScriptThreads();
-#endif
                         Scr_TerminalError("potential infinite loop in script");
                     }
                 }
@@ -1343,21 +1333,13 @@ VM_Execute(VariableValue *stackTop, uint8_t *codePos,
                 } else if (script_loopWatchdogWarningFlag != 0) {
                     Com_Printf(
                         "script runtime warning: potential infinite loop in script.\n");
-#if defined(WINDOWS_BEHAVIOR)
                     RuntimeError(0, 0, NULL, NULL);
-#else
-                    Scr_PrintPrevCodePos(0, codePos, 0);
-#endif
                     script_loopWatchdogTick = rdtsc();
                     codePos += ScriptInterpreter_ReadI32(codePos);
                 } else if (script_runtimeDeveloperFlag == 0) {
                     Com_Printf(
                         "script runtime error: potential infinite loop in script - killing thread.\n");
-#if defined(WINDOWS_BEHAVIOR)
                     RuntimeError(0, 0, NULL, NULL);
-#else
-                    Scr_PrintPrevCodePos(0, codePos, 0);
-#endif
                     script_loopWatchdogTick = rdtsc();
                     while (true) {
                         KillThread(thread);
@@ -1372,9 +1354,7 @@ VM_Execute(VariableValue *stackTop, uint8_t *codePos,
                         }
                     }
                 } else {
-#if defined(WINDOWS_BEHAVIOR)
                     Scr_DumpScriptThreads();
-#endif
                     Scr_TerminalError("potential infinite loop in script");
                 }
                 break;

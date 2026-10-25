@@ -11,11 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "q_command.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 enum {
     Q_COMMAND_PB_CONSOLE_OPCODE = 14,
@@ -36,17 +31,11 @@ void CL_ForwardCommandToServer(const char *text);
 extern cvar_t *cl_running;
 extern cvar_t *sv_running;
 
-#if defined(WINDOWS_BEHAVIOR)
 cvar_t *Cvar_FindVar(const char *name);
 void Sys_OutOfMemory(void);
 qboolean PB_ClientTrapConsole(const char *text);
 void PB_DispatchClientConsoleCommand(const char *text);
 void PB_DispatchServerConsoleCommand(const char *text);
-#else
-int32_t Cvar_VariableIntegerValue(const char *name);
-void PB_CallServerSbGlobal(int32_t command, int32_t clientNum,
-                           uint32_t length, const char *text);
-#endif
 
 #include "q_command_services.h"
 
@@ -181,7 +170,6 @@ void Cbuf_Execute(void)
     }
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 void Cmd_Exec_f(void)
 {
     char filename[MAX_QPATH];
@@ -215,39 +203,6 @@ void Cmd_Exec_f(void)
     Cbuf_InsertText((const char *)fileBuffer);
     FS_FreeFile(fileBuffer);
 }
-#else
-void Cmd_Exec_f(void)
-{
-    char filename[MAX_QPATH];
-    void *fileBuffer;
-
-    if (Cmd_Argc() != 2) {
-        Com_Printf("exec <filename> : execute a script file\n");
-        return;
-    }
-
-    Q_strncpyz(filename, Cmd_Argv(1), (int32_t)sizeof(filename));
-    Com_DefaultExtension(filename, (int32_t)sizeof(filename), ".cfg");
-    const int32_t fileLength = FS_ReadFile(filename, &fileBuffer);
-
-    if (fileBuffer == NULL) {
-        Com_Printf("couldn't exec %s\n", Cmd_Argv(1));
-        return;
-    }
-
-    Com_Printf("execing %s\n", Cmd_Argv(1));
-    if (Cvar_VariableIntegerValue("sv_console_lockout") != 0) {
-        const int32_t checksum =
-            (int32_t)Com_BlockChecksum(fileBuffer, fileLength);
-        Cbuf_InsertText(
-            va("say Server exec: %s, size: %i, checksum: %i",
-               filename, fileLength, checksum));
-    }
-
-    Cbuf_InsertText((const char *)fileBuffer);
-    FS_FreeFile(fileBuffer);
-}
-#endif
 
 void Cmd_ShowChecksum_f(void)
 {
@@ -467,7 +422,6 @@ void Cmd_TokenizeString(const char *text)
     Cmd_TokenizeString2(text, 0);
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 void Cmd_AddCommand(const char *name, xcommand_t function)
 {
     for (cmd_function_t *command = cmd_functions;
@@ -527,56 +481,6 @@ void Cmd_Shutdown(void)
         free(command);
     }
 }
-#else
-void Cmd_AddCommand(const char *name, xcommand_t function)
-{
-    for (cmd_function_t *command = cmd_functions;
-         command != NULL;
-         command = command->next) {
-        if (strcmp(name, command->name) == 0) {
-            if (function != NULL) {
-                Com_Printf("Cmd_AddCommand: %s already defined\n", name);
-            }
-            return;
-        }
-    }
-
-    cmd_function_t *command =
-        Z_MallocInternal(sizeof(*command));
-    command->name = CopyStringInternal(name);
-    command->function = function;
-    command->next = cmd_functions;
-    cmd_functions = command;
-}
-
-void Cmd_RemoveCommand(const char *name)
-{
-    cmd_function_t **link = &cmd_functions;
-
-    while (*link != NULL) {
-        cmd_function_t *const command = *link;
-        if (strcmp(name, command->name) == 0) {
-            *link = command->next;
-            if (command->name != NULL) {
-                Z_FreeInternal(command->name);
-            }
-            Z_FreeInternal(command);
-            return;
-        }
-        link = &command->next;
-    }
-}
-
-void Cmd_Shutdown(void)
-{
-    while (cmd_functions != NULL) {
-        cmd_function_t *const command = cmd_functions;
-        cmd_functions = command->next;
-        Z_FreeInternal(command->name);
-        Z_FreeInternal(command);
-    }
-}
-#endif
 
 void Cmd_CommandCompletion(name_completion_callback_t callback)
 {
@@ -587,7 +491,6 @@ void Cmd_CommandCompletion(name_completion_callback_t callback)
     }
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 void Cmd_ExecuteString(const char *text)
 {
     if (PB_ClientTrapConsole(text) != qfalse) {
@@ -643,60 +546,6 @@ void Cmd_ExecuteString(const char *text)
 
     CL_ForwardCommandToServer(text);
 }
-#else
-void Cmd_ExecuteString(const char *text)
-{
-    Cmd_TokenizeString(text);
-    if (cmd_argc == 0) {
-        return;
-    }
-
-    cmd_function_t **link = &cmd_functions;
-    while (*link != NULL) {
-        cmd_function_t *const command = *link;
-        if (Q_stricmp(cmd_argv[0], command->name) == 0) {
-            *link = command->next;
-            command->next = cmd_functions;
-            cmd_functions = command;
-
-            if (command->function != NULL) {
-                command->function();
-                return;
-            }
-            break;
-        }
-        link = &command->next;
-    }
-
-    if (Q_strncmp(text, "pb_", 3) == 0) {
-        if (Q_strncmp(text + 3, "sv_", 3) == 0) {
-            PB_CallServerSbGlobal(Q_COMMAND_PB_CONSOLE_OPCODE,
-                                  Q_COMMAND_PB_CONSOLE_CLIENT_NUM,
-                                  (uint32_t)strlen(text) + UINT32_C(1),
-                                  text);
-        }
-        return;
-    }
-
-    if (Cvar_Command() != qfalse) {
-        return;
-    }
-    if (cl_running != NULL && cl_running->integer != 0 &&
-        CL_GameCommand() != qfalse) {
-        return;
-    }
-    if (sv_running != NULL && sv_running->integer != 0 &&
-        SV_GameCommand() != qfalse) {
-        return;
-    }
-    if (cl_running != NULL && cl_running->integer != 0 &&
-        UI_GameCommand() != qfalse) {
-        return;
-    }
-
-    CL_ForwardCommandToServer(text);
-}
-#endif
 
 void Cmd_List_f(void)
 {

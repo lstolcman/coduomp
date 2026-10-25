@@ -41,7 +41,6 @@ xanim_rate_frequency_t XAnimGetAverageRateFrequency(uint32_t nodeIndex)
             float weight = payload->currentWeight;
 
             if (weight != 0.0f) {
-#if defined(WINDOWS_BEHAVIOR)
                 const long double frequency =
                     (long double)XAnimGetAverageRateFrequency(childIndex);
 
@@ -52,46 +51,14 @@ xanim_rate_frequency_t XAnimGetAverageRateFrequency(uint32_t nodeIndex)
                         (frequency * (long double)payload->rateScale) *
                             (long double)weight);
                 }
-#else
-                float frequency = XAnimGetAverageRateFrequency(childIndex);
-
-                if (frequency != 0.0f) {
-#if EMULATE_X87
-                    weightSum = x87f_store_f32(x87f_add(
-                        x87f_load_f32(weightSum), x87f_load_f32(weight)));
-                    frequencySum = x87f_store_f32(x87f_add(
-                        x87f_mul(
-                            x87f_mul(x87f_load_f32(frequency),
-                                     x87f_load_f32(weight)),
-                            x87f_load_f32(payload->rateScale)),
-                        x87f_load_f32(frequencySum)));
-#else
-                    weightSum += weight;
-                    frequencySum +=
-                        frequency * weight * payload->rateScale;
-#endif
-                }
-#endif
             }
         }
     }
 
-#if defined(WINDOWS_BEHAVIOR)
     return weightSum != 0.0f
         ? (double)((long double)frequencySum /
                    (long double)weightSum)
         : 0.0f;
-#else
-    if (weightSum == 0.0f) {
-        return 0.0f;
-    }
-#if EMULATE_X87
-    return x87f_store_f32(
-        x87f_div(x87f_load_f32(frequencySum), x87f_load_f32(weightSum)));
-#else
-    return frequencySum / weightSum;
-#endif
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x00498340..0x00498445.
@@ -161,11 +128,7 @@ void XAnimAddClientNotify(XAnimInfo *node,
 
     ++insertIndex;
     xanim_deferredNotifies[insertIndex].name =
-#if defined(WINDOWS_BEHAVIOR)
         nameHandle != 0 ? SL_ConvertToString(nameHandle) : NULL;
-#else
-        SL_ConvertToString(nameHandle);
-#endif
     xanim_deferredNotifies[insertIndex].notifyType = notifyType;
     xanim_deferredNotifies[insertIndex].timeFrac = timeFrac;
     ++xanim_deferredNotifyCount;
@@ -282,17 +245,11 @@ void XAnimUpdateClientInfoSyncInternal(uint32_t nodeIndex,
     }
 
     /* Windows keeps the frame time plus epsilon wide through this comparison. */
-#if defined(WINDOWS_BEHAVIOR)
     if ((long double)primary->weightBlendTimeRemaining <
         (long double)xanim_evalTime + (long double)XANIM_BLEND_TIME_EPSILON) {
-#else
-    if (primary->weightBlendTimeRemaining <
-        xanim_evalTime + XANIM_BLEND_TIME_EPSILON) {
-#endif
         primary->currentWeight = primary->targetWeight;
         primary->weightBlendTimeRemaining = 0.0f;
     } else {
-#if defined(WINDOWS_BEHAVIOR)
         /* 0x00498a6c..0x00498a81 divides before multiplying, stores the
          * result at 0x00498a7e, and compares the retained x87 value. */
         const long double currentWeightRaw =
@@ -306,33 +263,6 @@ void XAnimUpdateClientInfoSyncInternal(uint32_t nodeIndex,
             primary->currentWeight =
                 primary->targetWeight * XANIM_BLEND_TIME_EPSILON;
         }
-#elif EMULATE_X87
-        x87f currentWeightRaw = x87f_add(
-            x87f_load_f32(primary->currentWeight),
-            x87f_div(
-                x87f_mul(
-                    x87f_sub(x87f_load_f32(primary->targetWeight),
-                             x87f_load_f32(primary->currentWeight)),
-                    x87f_load_f32(xanim_evalTime)),
-                x87f_load_f32(primary->weightBlendTimeRemaining)));
-        primary->currentWeight = x87f_store_f32(currentWeightRaw);
-        if (primary->currentWeight < XANIM_WEIGHT_EPSILON) {
-            primary->currentWeight =
-                primary->targetWeight * XANIM_BLEND_TIME_EPSILON;
-        }
-#else
-        const long double currentWeightRaw =
-            (long double)primary->currentWeight +
-            (((long double)primary->targetWeight -
-              (long double)primary->currentWeight) *
-             (long double)xanim_evalTime) /
-                (long double)primary->weightBlendTimeRemaining;
-        primary->currentWeight = (float)currentWeightRaw;
-        if (primary->currentWeight < XANIM_WEIGHT_EPSILON) {
-            primary->currentWeight =
-                primary->targetWeight * XANIM_BLEND_TIME_EPSILON;
-        }
-#endif
         primary->weightBlendTimeRemaining -= xanim_evalTime;
     }
 
@@ -397,17 +327,11 @@ void XAnimUpdateClientInfoInternal(uint32_t nodeIndex, float delta,
     }
 
     /* Windows keeps the frame time plus epsilon wide through this comparison. */
-#if defined(WINDOWS_BEHAVIOR)
     if ((long double)primary->weightBlendTimeRemaining <
         (long double)xanim_evalTime + (long double)XANIM_BLEND_TIME_EPSILON) {
-#else
-    if (primary->weightBlendTimeRemaining <
-        xanim_evalTime + XANIM_BLEND_TIME_EPSILON) {
-#endif
         primary->currentWeight = primary->targetWeight;
         primary->weightBlendTimeRemaining = 0.0f;
     } else {
-#if defined(WINDOWS_BEHAVIOR)
         /* 0x00498c8b..0x00498ca0 is the same retained blend chain as the
          * standalone primary-weight update. */
         const long double currentWeightRaw =
@@ -421,33 +345,6 @@ void XAnimUpdateClientInfoInternal(uint32_t nodeIndex, float delta,
             primary->currentWeight =
                 primary->targetWeight * XANIM_BLEND_TIME_EPSILON;
         }
-#elif EMULATE_X87
-        x87f currentWeightRaw = x87f_add(
-            x87f_load_f32(primary->currentWeight),
-            x87f_div(
-                x87f_mul(
-                    x87f_sub(x87f_load_f32(primary->targetWeight),
-                             x87f_load_f32(primary->currentWeight)),
-                    x87f_load_f32(xanim_evalTime)),
-                x87f_load_f32(primary->weightBlendTimeRemaining)));
-        primary->currentWeight = x87f_store_f32(currentWeightRaw);
-        if (primary->currentWeight < XANIM_WEIGHT_EPSILON) {
-            primary->currentWeight =
-                primary->targetWeight * XANIM_BLEND_TIME_EPSILON;
-        }
-#else
-        const long double currentWeightRaw =
-            (long double)primary->currentWeight +
-            (((long double)primary->targetWeight -
-              (long double)primary->currentWeight) *
-             (long double)xanim_evalTime) /
-                (long double)primary->weightBlendTimeRemaining;
-        primary->currentWeight = (float)currentWeightRaw;
-        if (primary->currentWeight < XANIM_WEIGHT_EPSILON) {
-            primary->currentWeight =
-                primary->targetWeight * XANIM_BLEND_TIME_EPSILON;
-        }
-#endif
         primary->weightBlendTimeRemaining -= xanim_evalTime;
     }
 
@@ -466,7 +363,6 @@ void XAnimUpdateClientInfoInternal(uint32_t nodeIndex, float delta,
 
         XAnimParts *record =
             entry->payload.leafAsset->data.xanimParts;
-#if defined(WINDOWS_BEHAVIOR)
         /* 0x00498d4b..0x00498d64 stores the time step but retains its x87
          * value for the add and all wrap/clamp decisions. */
         const long double timeStepRaw =
@@ -495,42 +391,6 @@ void XAnimUpdateClientInfoInternal(uint32_t nodeIndex, float delta,
         xanim_evalStartTime = primary->time;
         xanim_evalStartFrame = primary->cycleCount;
         xanim_evalCurrentTime = (float)currentTimeRaw;
-#else
-#if EMULATE_X87
-        xanim_evalTimeStep = x87f_store_f32(x87f_mul(
-            x87f_mul(x87f_load_f32(primary->rateScale),
-                     x87f_load_f32(record->frequency)),
-            x87f_load_f32(delta)));
-        float currentTime = x87f_store_f32(x87f_add(
-            x87f_load_f32(primary->time),
-            x87f_load_f32(xanim_evalTimeStep)));
-#else
-        xanim_evalTimeStep =
-            (primary->rateScale * record->frequency) * delta;
-        float currentTime = primary->time + xanim_evalTimeStep;
-#endif
-        int16_t currentFrame = primary->cycleCount;
-
-        if (1.0f <= currentTime) {
-            if (record->looped == 0) {
-                currentTime = 1.0f;
-            } else {
-                do {
-#if EMULATE_X87
-                    currentTime = x87f_store_f32(x87f_sub(
-                        x87f_load_f32(currentTime), x87f_load_f32(1.0f)));
-#else
-                    currentTime -= 1.0f;
-#endif
-                    ++currentFrame;
-                } while (1.0f <= currentTime);
-            }
-        }
-
-        xanim_evalStartTime = primary->time;
-        xanim_evalStartFrame = primary->cycleCount;
-        xanim_evalCurrentTime = currentTime;
-#endif
         xanim_evalCurrentFrame = currentFrame;
         XAnimSetClientTime(
             node, entry, allowNotify ? node->notifyType : 0);
@@ -566,7 +426,6 @@ void XAnimUpdateClientInfoInternal(uint32_t nodeIndex, float delta,
         return;
     }
 
-#if defined(WINDOWS_BEHAVIOR)
     /* 0x00498ea3..0x00498ec1 retains this independently computed step across
      * its float store and the following add/wrap chain. */
     const long double timeStepRaw =
@@ -593,45 +452,6 @@ void XAnimUpdateClientInfoInternal(uint32_t nodeIndex, float delta,
     xanim_evalStartTime = primary->time;
     xanim_evalStartFrame = primary->cycleCount;
     xanim_evalCurrentTime = (float)currentTimeRaw;
-#else
-#if EMULATE_X87
-    xanim_evalTimeStep = x87f_store_f32(x87f_mul(
-        x87f_mul(
-            x87f_load_f32(XAnimGetAverageRateFrequency(nodeIndex)),
-            x87f_load_f32(primary->rateScale)),
-        x87f_load_f32(delta)));
-    float currentTime = x87f_store_f32(x87f_add(
-        x87f_load_f32(primary->time),
-        x87f_load_f32(xanim_evalTimeStep)));
-#else
-    xanim_evalTimeStep =
-        (XAnimGetAverageRateFrequency(nodeIndex) * primary->rateScale) *
-        delta;
-    float currentTime = primary->time + xanim_evalTimeStep;
-#endif
-    int16_t currentFrame = primary->cycleCount;
-
-    if (1.0f <= currentTime) {
-        if ((entry->payload.parent.flags &
-             XANIM_PROPERTY_NON_LOOP_SYNC) == 0) {
-            do {
-#if EMULATE_X87
-                currentTime = x87f_store_f32(x87f_sub(
-                    x87f_load_f32(currentTime), x87f_load_f32(1.0f)));
-#else
-                currentTime -= 1.0f;
-#endif
-                ++currentFrame;
-            } while (1.0f <= currentTime);
-        } else {
-            currentTime = 1.0f;
-        }
-    }
-
-    xanim_evalStartTime = primary->time;
-    xanim_evalStartFrame = primary->cycleCount;
-    xanim_evalCurrentTime = currentTime;
-#endif
     xanim_evalCurrentFrame = currentFrame;
     XAnimSetClientTime(
         node, entry, allowNotify ? node->notifyType : 0);
@@ -662,17 +482,11 @@ void XAnimUpdateServerInfoSyncInternal(uint32_t nodeIndex)
     secondary->oldTime = secondary->time;
     secondary->oldCycleCount = secondary->cycleCount;
     /* Windows keeps the frame time plus epsilon wide through this comparison. */
-#if defined(WINDOWS_BEHAVIOR)
     if ((long double)secondary->weightBlendTimeRemaining <
         (long double)xanim_evalTime + (long double)XANIM_BLEND_TIME_EPSILON) {
-#else
-    if (secondary->weightBlendTimeRemaining <
-        xanim_evalTime + XANIM_BLEND_TIME_EPSILON) {
-#endif
         secondary->currentWeight = secondary->targetWeight;
         secondary->weightBlendTimeRemaining = 0.0f;
     } else {
-#if defined(WINDOWS_BEHAVIOR)
         /* 0x004991b0..0x004991c9 divides before multiplying and compares the
          * retained result after storing its float copy at 0x004991c3. */
         const long double currentWeightRaw =
@@ -686,33 +500,6 @@ void XAnimUpdateServerInfoSyncInternal(uint32_t nodeIndex)
             secondary->currentWeight =
                 secondary->targetWeight * XANIM_BLEND_TIME_EPSILON;
         }
-#elif EMULATE_X87
-        x87f currentWeightRaw = x87f_add(
-            x87f_load_f32(secondary->currentWeight),
-            x87f_div(
-                x87f_mul(
-                    x87f_sub(x87f_load_f32(secondary->targetWeight),
-                             x87f_load_f32(secondary->currentWeight)),
-                    x87f_load_f32(xanim_evalTime)),
-                x87f_load_f32(secondary->weightBlendTimeRemaining)));
-        secondary->currentWeight = x87f_store_f32(currentWeightRaw);
-        if (secondary->currentWeight < XANIM_WEIGHT_EPSILON) {
-            secondary->currentWeight =
-                secondary->targetWeight * XANIM_BLEND_TIME_EPSILON;
-        }
-#else
-        const long double currentWeightRaw =
-            (long double)secondary->currentWeight +
-            (((long double)secondary->targetWeight -
-              (long double)secondary->currentWeight) *
-             (long double)xanim_evalTime) /
-                (long double)secondary->weightBlendTimeRemaining;
-        secondary->currentWeight = (float)currentWeightRaw;
-        if (secondary->currentWeight < XANIM_WEIGHT_EPSILON) {
-            secondary->currentWeight =
-                secondary->targetWeight * XANIM_BLEND_TIME_EPSILON;
-        }
-#endif
         secondary->weightBlendTimeRemaining -= xanim_evalTime;
     }
 
@@ -780,7 +567,6 @@ float XAnimGetServerNotifyFracSyncTotal(XAnimInfo *node,
 
             if (childNode->states[1].currentWeight != 0.0f &&
                 childNode->states[1].targetWeight != 0.0f) {
-#if defined(WINDOWS_BEHAVIOR)
                 const long double childFraction =
                     (long double)XAnimGetServerNotifyFracSyncTotal(
                         childNode,
@@ -790,15 +576,6 @@ float XAnimGetServerNotifyFracSyncTotal(XAnimInfo *node,
                 if (childFraction < (long double)earliest) {
                     earliest = (float)childFraction;
                 }
-#else
-                float childFraction = XAnimGetServerNotifyFracSyncTotal(
-                    childNode,
-                    &xanim_currentTree->sourceTree->entries[childIndex]);
-
-                if (childFraction < earliest) {
-                    earliest = childFraction;
-                }
-#endif
             }
         }
     }
@@ -831,7 +608,6 @@ xanim_notify_fraction_t XAnimFindServerNoteTrack(uint32_t nodeIndex,
     if (entry->childCount == 0) {
         XAnimParts *record =
             entry->payload.leafAsset->data.xanimParts;
-#if defined(WINDOWS_BEHAVIOR)
         const float timeStep = (float)(
             ((long double)record->frequency *
              (long double)secondary->rateScale) *
@@ -864,56 +640,6 @@ xanim_notify_fraction_t XAnimFindServerNoteTrack(uint32_t nodeIndex,
         }
 
         const float currentTime = (float)currentTimeRaw;
-#else
-#if EMULATE_X87
-        const float timeStep = x87f_store_f32(x87f_mul(
-            x87f_mul(x87f_load_f32(secondary->rateScale),
-                     x87f_load_f32(record->frequency)),
-            x87f_load_f32(delta)));
-        float currentTime = x87f_store_f32(x87f_add(
-            x87f_load_f32(secondary->oldTime), x87f_load_f32(timeStep)));
-#else
-        const float timeStep =
-            (secondary->rateScale * record->frequency) * delta;
-        float currentTime = secondary->oldTime + timeStep;
-#endif
-        if (timeStep == 0.0f) {
-            return 1.0f;
-        }
-
-        int16_t currentFrame = secondary->oldCycleCount;
-        if (record->looped == 0) {
-            if (1.0f <= currentTime) {
-                currentTime = 1.0f;
-            }
-        } else {
-            while (1.0f <= currentTime) {
-#if EMULATE_X87
-                currentTime = x87f_store_f32(x87f_sub(
-                    x87f_load_f32(currentTime), x87f_load_f32(1.0f)));
-#else
-                currentTime -= 1.0f;
-#endif
-                ++currentFrame;
-            }
-        }
-
-#if EMULATE_X87
-        if (x87f_lt(
-                x87f_load_i32((int32_t)currentFrame -
-                              (int32_t)secondary->cycleCount),
-                x87f_sub(x87f_load_f32(secondary->time),
-                         x87f_load_f32(currentTime)))) {
-            return 1.0f;
-        }
-#else
-        if ((long double)((int32_t)currentFrame -
-                          (int32_t)secondary->cycleCount) <
-            (long double)secondary->time - (long double)currentTime) {
-            return 1.0f;
-        }
-#endif
-#endif
         xanim_evalStartTime = secondary->oldTime;
         xanim_evalStartFrame = secondary->oldCycleCount;
         xanim_evalCurrentTime = currentTime;
@@ -945,7 +671,6 @@ xanim_notify_fraction_t XAnimFindServerNoteTrack(uint32_t nodeIndex,
         return earliest;
     }
 
-#if defined(WINDOWS_BEHAVIOR)
     const float timeStep = (float)(
         ((long double)XAnimGetAverageRateFrequency(nodeIndex) *
          (long double)secondary->rateScale) *
@@ -975,57 +700,6 @@ xanim_notify_fraction_t XAnimFindServerNoteTrack(uint32_t nodeIndex,
     }
 
     const float currentTime = (float)currentTimeRaw;
-#else
-#if EMULATE_X87
-    const float timeStep = x87f_store_f32(x87f_mul(
-        x87f_mul(
-            x87f_load_f32(XAnimGetAverageRateFrequency(nodeIndex)),
-            x87f_load_f32(secondary->rateScale)),
-        x87f_load_f32(delta)));
-    float currentTime = x87f_store_f32(x87f_add(
-        x87f_load_f32(secondary->oldTime), x87f_load_f32(timeStep)));
-#else
-    const float timeStep =
-        (XAnimGetAverageRateFrequency(nodeIndex) * secondary->rateScale) *
-        delta;
-    float currentTime = secondary->oldTime + timeStep;
-#endif
-    if (timeStep == 0.0f) {
-        return 1.0f;
-    }
-
-    int16_t currentFrame = secondary->oldCycleCount;
-    if ((entry->payload.parent.flags &
-         XANIM_PROPERTY_NON_LOOP_SYNC) == 0) {
-        while (1.0f <= currentTime) {
-#if EMULATE_X87
-            currentTime = x87f_store_f32(x87f_sub(
-                x87f_load_f32(currentTime), x87f_load_f32(1.0f)));
-#else
-            currentTime -= 1.0f;
-#endif
-            ++currentFrame;
-        }
-    } else if (1.0f <= currentTime) {
-        currentTime = 1.0f;
-    }
-
-#if EMULATE_X87
-    if (x87f_lt(
-            x87f_load_i32((int32_t)currentFrame -
-                          (int32_t)secondary->cycleCount),
-            x87f_sub(x87f_load_f32(secondary->time),
-                     x87f_load_f32(currentTime)))) {
-        return 1.0f;
-    }
-#else
-    if ((long double)((int32_t)currentFrame -
-                      (int32_t)secondary->cycleCount) <
-        (long double)secondary->time - (long double)currentTime) {
-        return 1.0f;
-    }
-#endif
-#endif
     xanim_evalStartTime = secondary->oldTime;
     xanim_evalStartFrame = secondary->oldCycleCount;
     xanim_evalCurrentTime = currentTime;
@@ -1194,7 +868,6 @@ void XAnimUpdateServerInfoInternal(uint32_t nodeIndex, float delta,
     if (entry->childCount == 0) {
         XAnimParts *record =
             entry->payload.leafAsset->data.xanimParts;
-#if defined(WINDOWS_BEHAVIOR)
         /* 0x00499b1b..0x00499bb4 retains this complete x87 chain through
          * every clamp, wrap, and the frame-window comparison. */
         long double currentTimeRaw =
@@ -1235,70 +908,6 @@ void XAnimUpdateServerInfoInternal(uint32_t nodeIndex, float delta,
             secondary->time = currentTime;
             secondary->cycleCount = currentFrame;
         }
-#else
-#if EMULATE_X87
-        float currentTime = x87f_store_f32(x87f_add(
-            x87f_load_f32(secondary->oldTime),
-            x87f_mul(
-                x87f_mul(x87f_load_f32(delta),
-                         x87f_load_f32(secondary->rateScale)),
-                x87f_load_f32(record->frequency))));
-#else
-        float currentTime = secondary->oldTime +
-                            delta * secondary->rateScale * record->frequency;
-#endif
-        int16_t currentFrame = secondary->oldCycleCount;
-
-        if (record->looped == 0) {
-            if (1.0f <= currentTime) {
-                currentTime = 1.0f;
-            } else if (currentTime <= 0.0f) {
-                return;
-            }
-        } else {
-            while (currentTime < 0.0f) {
-#if EMULATE_X87
-                currentTime = x87f_store_f32(x87f_add(
-                    x87f_load_f32(currentTime), x87f_load_f32(1.0f)));
-#else
-                currentTime += 1.0f;
-#endif
-                --currentFrame;
-            }
-            while (1.0f <= currentTime) {
-#if EMULATE_X87
-                currentTime = x87f_store_f32(x87f_sub(
-                    x87f_load_f32(currentTime), x87f_load_f32(1.0f)));
-#else
-                currentTime -= 1.0f;
-#endif
-                ++currentFrame;
-            }
-        }
-
-#if EMULATE_X87
-        qboolean reachedWindow = x87f_le(
-            x87f_sub(x87f_load_f32(secondary->time),
-                     x87f_load_f32(currentTime)),
-            x87f_load_i32((int32_t)currentFrame -
-                          (int32_t)secondary->cycleCount));
-#else
-        qboolean reachedWindow =
-            (long double)secondary->time - (long double)currentTime <=
-            (long double)((int32_t)currentFrame -
-                          (int32_t)secondary->cycleCount);
-#endif
-        if (reachedWindow) {
-            if (allowNotify) {
-                xanim_evalCurrentTime = currentTime;
-                xanim_evalStartTime = secondary->time;
-                xanim_evalStartFrame = secondary->cycleCount;
-                XAnimProcessServerNotify(node, entry);
-            }
-            secondary->time = currentTime;
-            secondary->cycleCount = currentFrame;
-        }
-#endif
         return;
     }
 
@@ -1312,7 +921,6 @@ void XAnimUpdateServerInfoInternal(uint32_t nodeIndex, float delta,
         return;
     }
 
-#if defined(WINDOWS_BEHAVIOR)
     /* 0x00499c1e..0x00499ccd likewise leaves the synchronized-node time on
      * the x87 stack until its final decision/store. */
     long double currentTimeRaw =
@@ -1351,72 +959,6 @@ void XAnimUpdateServerInfoInternal(uint32_t nodeIndex, float delta,
         xanim_evalCurrentFrame = currentFrame;
         XAnimStampSecondaryWindowStart(nodeIndex);
     }
-#else
-#if EMULATE_X87
-    float timeStep = x87f_store_f32(x87f_mul(
-        x87f_mul(
-            x87f_load_f32(XAnimGetAverageRateFrequency(nodeIndex)),
-            x87f_load_f32(secondary->rateScale)),
-        x87f_load_f32(delta)));
-    float currentTime = x87f_store_f32(x87f_add(
-        x87f_load_f32(secondary->oldTime), x87f_load_f32(timeStep)));
-#else
-    float timeStep =
-        (XAnimGetAverageRateFrequency(nodeIndex) * secondary->rateScale) *
-        delta;
-    float currentTime = secondary->oldTime + timeStep;
-#endif
-    int16_t currentFrame = secondary->oldCycleCount;
-
-    if ((entry->payload.parent.flags &
-         XANIM_PROPERTY_NON_LOOP_SYNC) == 0) {
-        while (currentTime < 0.0f) {
-#if EMULATE_X87
-            currentTime = x87f_store_f32(x87f_add(
-                x87f_load_f32(currentTime), x87f_load_f32(1.0f)));
-#else
-            currentTime += 1.0f;
-#endif
-            --currentFrame;
-        }
-        while (1.0f <= currentTime) {
-#if EMULATE_X87
-            currentTime = x87f_store_f32(x87f_sub(
-                x87f_load_f32(currentTime), x87f_load_f32(1.0f)));
-#else
-            currentTime -= 1.0f;
-#endif
-            ++currentFrame;
-        }
-    } else if (1.0f <= currentTime) {
-        currentTime = 1.0f;
-    } else if (currentTime <= 0.0f) {
-        return;
-    }
-
-#if EMULATE_X87
-    qboolean reachedWindow = x87f_le(
-        x87f_sub(x87f_load_f32(secondary->time),
-                 x87f_load_f32(currentTime)),
-        x87f_load_i32((int32_t)currentFrame -
-                      (int32_t)secondary->cycleCount));
-#else
-    qboolean reachedWindow =
-        (long double)secondary->time - (long double)currentTime <=
-        (long double)((int32_t)currentFrame -
-                      (int32_t)secondary->cycleCount);
-#endif
-    if (reachedWindow) {
-        xanim_evalCurrentTime = currentTime;
-        if (allowNotify) {
-            xanim_evalStartTime = secondary->time;
-            xanim_evalStartFrame = secondary->cycleCount;
-            XAnimProcessServerNotify_r(node, entry);
-        }
-        xanim_evalCurrentFrame = currentFrame;
-        XAnimStampSecondaryWindowStart(nodeIndex);
-    }
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x0049b4f0..0x0049b58f.
@@ -1539,7 +1081,6 @@ void XAnimClearGoalWeightKnobInternal(XAnimTree *tree,
         }
     }
 
-#if defined(WINDOWS_BEHAVIOR)
     /* 0x0049b8ec..0x0049b8f4 stores this product for child calls, while its
      * retained x87 value controls the epsilon clamp. */
     const long double siblingBlendTimeRaw =
@@ -1548,17 +1089,6 @@ void XAnimClearGoalWeightKnobInternal(XAnimTree *tree,
     if (siblingBlendTimeRaw < (long double)XANIM_BLEND_TIME_EPSILON) {
         siblingBlendTime = 0.0f;
     }
-#else
-#if EMULATE_X87
-    float siblingBlendTime = x87f_store_f32(x87f_mul(
-        x87f_load_f32(maxWeight), x87f_load_f32(blendTime)));
-#else
-    float siblingBlendTime = maxWeight * blendTime;
-#endif
-    if (siblingBlendTime < XANIM_BLEND_TIME_EPSILON) {
-        siblingBlendTime = 0.0f;
-    }
-#endif
 
     for (int32_t child = 0; child < parent->childCount; ++child) {
         uint32_t childIndex =
@@ -1752,25 +1282,12 @@ int32_t XAnimSetGoalWeightInternal(uint32_t animIndex, float weight,
     float weightDifference;
     memcpy(&weightDifference, &weightDifferenceBits,
            sizeof(weightDifference));
-#if defined(WINDOWS_BEHAVIOR)
     const long double blendRemainingRaw =
         (long double)weightDifference * (long double)blendTime;
     payload->weightBlendTimeRemaining = (float)blendRemainingRaw;
     if (blendRemainingRaw < (long double)XANIM_BLEND_TIME_EPSILON) {
         payload->weightBlendTimeRemaining = 0.0f;
         payload->currentWeight = weight;
-#else
-#if EMULATE_X87
-    payload->weightBlendTimeRemaining = x87f_store_f32(x87f_mul(
-        x87f_load_f32(weightDifference), x87f_load_f32(blendTime)));
-#else
-    payload->weightBlendTimeRemaining =
-        (float)((long double)weightDifference * (long double)blendTime);
-#endif
-    if (payload->weightBlendTimeRemaining < XANIM_BLEND_TIME_EPSILON) {
-        payload->weightBlendTimeRemaining = 0.0f;
-        payload->currentWeight = weight;
-#endif
     } else if (payload->currentWeight == 0.0f) {
         payload->currentWeight = weight * XANIM_BLEND_TIME_EPSILON;
     }
@@ -1908,7 +1425,6 @@ qboolean DObjUpdateServerInfo(DObj *obj, float serverTime,
         return qfalse;
     }
 
-#if defined(WINDOWS_BEHAVIOR)
     xanim_notify_fraction_t notifyFraction =
         XAnimFindServerNoteTrack(0, serverTime);
     if (notifyFraction == 1.0f) {
@@ -1926,23 +1442,6 @@ qboolean DObjUpdateServerInfo(DObj *obj, float serverTime,
         XAnimUpdateServerInfoInternal(0, serverTime, qtrue);
         return qfalse;
     }
-#else
-    float notifyFraction = XAnimFindServerNoteTrack(0, serverTime);
-#if EMULATE_X87
-    float notifyWindowEnd = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(serverTime),
-                 x87f_load_f32(notifyFraction)),
-        x87f_load_f32(XANIM_BLEND_TIME_EPSILON)));
-#else
-    float notifyWindowEnd =
-        serverTime * notifyFraction + XANIM_BLEND_TIME_EPSILON;
-#endif
-
-    if (notifyFraction == 1.0f || !(serverTime >= notifyWindowEnd)) {
-        XAnimUpdateServerInfoInternal(0, serverTime, qtrue);
-        return qfalse;
-    }
-#endif
 
     XAnimUpdateServerInfoInternal(0, notifyWindowEnd, qtrue);
     return qtrue;

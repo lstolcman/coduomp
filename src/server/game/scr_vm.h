@@ -104,11 +104,7 @@ extern uint32_t Scr_GetEntityNum(uint32_t index, int *classnum);
 extern uint32_t Scr_GetFunc(uint32_t index);
 extern void Scr_GetVector(uint32_t index, float *value);
 extern scr_anim_t Scr_GetAnim(uint32_t index, XAnimTree *runtimeTree);
-#if defined(WINDOWS_BEHAVIOR)
 extern XAnim *Scr_GetAnimTree(uint32_t index);
-#else
-extern script_anim_tree_ref_t Scr_GetAnimTree(uint32_t index);
-#endif
 
 /* Return values */
 extern void Scr_AddInt(int value);
@@ -221,11 +217,7 @@ extern void Scr_NotifyId(uint16_t objectId, uint16_t event,
 /* Animation */
 extern void Scr_FindAnim(const char *treeName, const char *animName,
                          scr_anim_t *outAnim);
-#if defined(WINDOWS_BEHAVIOR)
 extern XAnim *Scr_FindAnimTree(const char *treeName);
-#else
-extern script_anim_tree_ref_t Scr_FindAnimTree(const char *treeName);
-#endif
 extern uint32_t Scr_GetAnimsIndex(XAnim *anims);
 extern XAnim *Scr_GetAnims(uint32_t animsIndex);
 

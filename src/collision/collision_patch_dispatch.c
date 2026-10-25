@@ -1,17 +1,11 @@
 #include "collision_patch_dispatch.h"
 
 #include "collision_patch_trace.h"
-#include "compat/coduo_x87emu.h"
 #include "collision_terrain_dispatch.h"
 #include "collision_trace_bounds.h"
 
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "collision_patch_dispatch.c requires a platform behavior mode"
-#endif
 
 extern dshader_t *cm_materials;
 
@@ -47,20 +41,8 @@ void CM_TraceThroughPatch(
                                       terrainPatch->terrainCollide);
     }
 
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-    const qboolean closer = x87f_lt_signaling(
-        x87f_load_f32(traceWork->trace.fraction),
-        x87f_load_f32(savedFraction)) ? qtrue : qfalse;
-#else
-    const qboolean closer = x87f_lt(
-        x87f_load_f32(traceWork->trace.fraction),
-        x87f_load_f32(savedFraction)) ? qtrue : qfalse;
-#endif
-#else
     const qboolean closer =
         traceWork->trace.fraction < savedFraction ? qtrue : qfalse;
-#endif
 
     if (closer != qfalse) {
         dshader_t *const material =

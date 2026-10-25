@@ -4,7 +4,6 @@
 #include "bg_vehicle.h"
 #include "bg_weapon.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <stddef.h>
@@ -307,13 +306,8 @@ void PmoveSingle(pmove_t *move)
     pml.previousVelocity[1] = ps->velocity[1];
     ps = move->ps;
     float previousVelocityZ = ps->velocity[2];
-#if EMULATE_X87
-    pml.frametime = x87f_store_f32(x87f_mul(
-        x87f_load_i32(pml.msec), x87f_load_f32(PM_MS_TO_SEC)));
-#else
     pml.frametime = (float)((long double)pml.msec *
                             (long double)PM_MS_TO_SEC);
-#endif
     pml.previousVelocity[2] = previousVelocityZ;
 
     ps = move->ps;
@@ -538,48 +532,6 @@ pm_default_tail:
          * the velocity[0] rebuild (FMUL ST1 @ 0x3000e6d2) with no store -- asymmetric,
          * so dx is long double while dy/dz stay float. moveSq/velSq/lhs/rhs are all
          * register-carried into the FCOMPP (0x3000e6b7), never stored to a float slot. */
-#if defined(WINDOWS_BEHAVIOR)
-#if EMULATE_X87
-        const x87f dx = x87f_sub(x87f_load_f32(p->psOrigin[0]),
-                                 x87f_load_f32(pml.previousOrigin[0]));
-        const float dy = x87f_store_f32(x87f_sub(
-            x87f_load_f32(p->psOrigin[1]),
-            x87f_load_f32(pml.previousOrigin[1])));
-        const float dz = x87f_store_f32(x87f_sub(
-            x87f_load_f32(p->psOrigin[2]),
-            x87f_load_f32(pml.previousOrigin[2])));
-        const x87f moveSq = x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(dz), x87f_load_f32(dz)),
-                     x87f_mul(x87f_load_f32(dy), x87f_load_f32(dy))),
-            x87f_mul(dx, dx));
-        const x87f lhs = x87f_div(
-            moveSq, x87f_mul(x87f_load_f32(pml.frametime),
-                             x87f_load_f32(pml.frametime)));
-        const x87f velSq = x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(p->velocity[0]),
-                              x87f_load_f32(p->velocity[0])),
-                     x87f_mul(x87f_load_f32(p->velocity[1]),
-                              x87f_load_f32(p->velocity[1]))),
-            x87f_mul(x87f_load_f32(p->velocity[2]),
-                     x87f_load_f32(p->velocity[2])));
-        const x87f rhs = x87f_mul(velSq, x87f_load_f32(PM_VEL_QUARTER));
-
-        if (x87f_lt_signaling(lhs, rhs)) {
-            p->velocity[0] = x87f_store_f32(x87f_mul(
-                x87f_div(x87f_load_f32(PM_ONE),
-                         x87f_load_f32(pml.frametime)), dx));
-            p = notifyPm->ps;
-            p->velocity[1] = x87f_store_f32(x87f_mul(
-                x87f_div(x87f_load_f32(PM_ONE),
-                         x87f_load_f32(pml.frametime)),
-                x87f_load_f32(dy)));
-            p = notifyPm->ps;
-            p->velocity[2] = x87f_store_f32(x87f_mul(
-                x87f_div(x87f_load_f32(PM_ONE),
-                         x87f_load_f32(pml.frametime)),
-                x87f_load_f32(dz)));
-        }
-#else
         const long double dx = (long double)p->psOrigin[0] -
                                (long double)pml.previousOrigin[0];
         const float dy = (float)((long double)p->psOrigin[1] -
@@ -607,75 +559,6 @@ pm_default_tail:
             inverseFrame = (long double)PM_ONE / (long double)pml.frametime;
             p->velocity[2] = (float)(inverseFrame * (long double)dz);
         }
-#endif
-#else
-        /* Linux RVAs 0x0002e072..0x0002e12c store all three deltas, the
-         * distance-derived speed, and the velocity squared to binary32. */
-#if EMULATE_X87
-        const float dx = x87f_store_f32(x87f_sub(
-            x87f_load_f32(p->psOrigin[0]),
-            x87f_load_f32(pml.previousOrigin[0])));
-        const float dy = x87f_store_f32(x87f_sub(
-            x87f_load_f32(p->psOrigin[1]),
-            x87f_load_f32(pml.previousOrigin[1])));
-        const float dz = x87f_store_f32(x87f_sub(
-            x87f_load_f32(p->psOrigin[2]),
-            x87f_load_f32(pml.previousOrigin[2])));
-        const float deltaSpeedSq = x87f_store_f32(x87f_div(
-            x87f_add(
-                x87f_add(x87f_mul(x87f_load_f32(dx), x87f_load_f32(dx)),
-                         x87f_mul(x87f_load_f32(dy), x87f_load_f32(dy))),
-                x87f_mul(x87f_load_f32(dz), x87f_load_f32(dz))),
-            x87f_mul(x87f_load_f32(pml.frametime),
-                     x87f_load_f32(pml.frametime))));
-        const float velocitySpeedSq = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(p->velocity[0]),
-                              x87f_load_f32(p->velocity[0])),
-                     x87f_mul(x87f_load_f32(p->velocity[1]),
-                              x87f_load_f32(p->velocity[1]))),
-            x87f_mul(x87f_load_f32(p->velocity[2]),
-                     x87f_load_f32(p->velocity[2]))));
-        const x87f rhs = x87f_mul(x87f_load_f32(velocitySpeedSq),
-                                  x87f_load_f32(PM_VEL_QUARTER));
-
-        if (x87f_lt(x87f_load_f32(deltaSpeedSq), rhs)) {
-            for (int32_t lane = 0; lane < 3; ++lane) {
-                const float delta = lane == 0 ? dx : lane == 1 ? dy : dz;
-                p = notifyPm->ps;
-                p->velocity[lane] = x87f_store_f32(x87f_mul(
-                    x87f_div(x87f_load_f32(PM_ONE),
-                             x87f_load_f32(pml.frametime)),
-                    x87f_load_f32(delta)));
-            }
-        }
-#else
-        const float dx = (float)((long double)p->psOrigin[0] -
-                                 (long double)pml.previousOrigin[0]);
-        const float dy = (float)((long double)p->psOrigin[1] -
-                                 (long double)pml.previousOrigin[1]);
-        const float dz = (float)((long double)p->psOrigin[2] -
-                                 (long double)pml.previousOrigin[2]);
-        const float deltaSpeedSq = (float)(
-            (((long double)dx * dx + (long double)dy * dy) +
-             (long double)dz * dz) /
-            ((long double)pml.frametime * (long double)pml.frametime));
-        const float velocitySpeedSq = (float)(
-            ((long double)p->velocity[0] * p->velocity[0] +
-             (long double)p->velocity[1] * p->velocity[1]) +
-            (long double)p->velocity[2] * p->velocity[2]);
-
-        if ((long double)deltaSpeedSq <
-            (long double)velocitySpeedSq * (long double)PM_VEL_QUARTER) {
-            const float delta[3] = {dx, dy, dz};
-            for (int32_t lane = 0; lane < 3; ++lane) {
-                p = notifyPm->ps;
-                p->velocity[lane] = (float)(
-                    ((long double)PM_ONE / (long double)pml.frametime) *
-                    (long double)delta[lane]);
-            }
-        }
-#endif
-#endif
 
         /* 0x3000e707 reloads ps through the retained 0x3000e647 move pointer;
          * it does not reread pm after the arithmetic. */

@@ -1,7 +1,6 @@
 #include "msg.h"
 
 #include "compat/coduo_fp_conversion.h"
-#include "compat/coduo_x87emu.h"
 #include "huffman.h"
 #include "q_string.h"
 #include "qcommon_limits.h"
@@ -287,7 +286,6 @@ void MSG_WriteBigString(msg_t *message, const char *string)
     MSG_WriteData(message, sanitized, length + 1);
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 void MSG_WriteAngle(msg_t *message, float angle)
 {
     int32_t packed;
@@ -300,35 +298,11 @@ void MSG_WriteAngle(msg_t *message, float angle)
         return;
     }
 
-#if EMULATE_X87
-    packed = (int32_t)(uint32_t)x87f_store_i64_trunc(x87f_mul(
-        x87f_load_f32(angle), x87f_load_f32(MSG_ANGLE_TO_BYTE_SCALE)));
-#else
     packed = coduo_fp_to_i32_extended(
         (long double)angle * (long double)MSG_ANGLE_TO_BYTE_SCALE);
-#endif
     message->data[message->cursize++] = (uint8_t)packed;
 }
-#else
-void MSG_WriteAngle(msg_t *message, float angle)
-{
-    int32_t packed;
 
-    /* coduo_lnxded 0x080807cb evaluates angle * 256 / 360 before the normal
-     * MSG_WriteByte capacity decision and truncates directly to a dword. */
-#if EMULATE_X87
-    packed = x87f_store_i32_trunc(x87f_div(
-        x87f_mul(x87f_load_f32(angle), x87f_load_f32(256.0f)),
-        x87f_load_f32(360.0f)));
-#else
-    packed = coduo_fp_to_i32_extended(
-        ((long double)angle * 256.0L) / 360.0L);
-#endif
-    MSG_WriteByte(message, packed & MSG_BYTE_MASK);
-}
-#endif
-
-#if defined(WINDOWS_BEHAVIOR)
 void MSG_WriteAngle16(msg_t *message, float angle)
 {
     const int32_t end = (int32_t)((uint32_t)message->cursize + 2U);
@@ -341,34 +315,12 @@ void MSG_WriteAngle16(msg_t *message, float angle)
         return;
     }
 
-#if EMULATE_X87
-    packed = (int32_t)(uint32_t)x87f_store_i64_trunc(x87f_mul(
-        x87f_load_f32(angle), x87f_load_f32(MSG_ANGLE_TO_SHORT_SCALE)));
-#else
     packed = coduo_fp_to_i32_extended(
         (long double)angle * (long double)MSG_ANGLE_TO_SHORT_SCALE);
-#endif
     message->data[message->cursize] = (uint8_t)packed;
     message->data[message->cursize + 1] = (uint8_t)((uint32_t)packed >> 8U);
     message->cursize = end;
 }
-#else
-void MSG_WriteAngle16(msg_t *message, float angle)
-{
-    int32_t packed;
-
-    /* coduo_lnxded 0x08080815 computes and truncates first, then delegates
-     * the capacity decision to MSG_WriteShort. */
-#if EMULATE_X87
-    packed = x87f_store_i32_trunc(x87f_mul(
-        x87f_load_f32(angle), x87f_load_f32(MSG_ANGLE_TO_SHORT_SCALE)));
-#else
-    packed = coduo_fp_to_i32_extended(
-        (long double)angle * (long double)MSG_ANGLE_TO_SHORT_SCALE);
-#endif
-    MSG_WriteShort(message, packed & MSG_SHORT_MASK);
-}
-#endif
 
 int32_t MSG_ReadByte(msg_t *message)
 {

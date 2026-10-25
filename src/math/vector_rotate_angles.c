@@ -1,14 +1,8 @@
 #include "q_math.h"
 
-#include "compat/coduo_x87emu.h"
 
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /*
  * The four Windows VectorRotateAngles bodies are instruction-identical apart
@@ -23,8 +17,8 @@
  * retain the same lane table, branch behavior, sin/cos call, binary32 stores,
  * and output.  There is one genuine source-level difference: Windows
  * multiplies by binary32 pi before dividing by binary64 180, whereas Linux
- * multiplies by binary64 pi.  EMULATE_X87 is independent of that behavior
- * selection and preserves the selected x87 operation graph on non-x87 hosts.
+ * multiplies by binary64 pi. The maintained Windows body preserves its
+ * constant widths with native wide intermediates on every host.
  */
 void VectorRotateAngles(const vec3_t input, const vec3_t angles,
                         vec3_t output)
@@ -43,52 +37,19 @@ void VectorRotateAngles(const vec3_t input, const vec3_t angles,
             double sine;
             double cosine;
 
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-            radians = x87f_store_f64(x87f_div(
-                x87f_mul(x87f_load_f32(angles[axis]),
-                         x87f_load_f32(3.1415927410125732f)),
-                x87f_load_f64(180.0)));
-#else
-            radians = x87f_store_f64(x87f_div(
-                x87f_mul(x87f_load_f32(angles[axis]),
-                         x87f_load_f64(3.141592653589793)),
-                x87f_load_f64(180.0)));
-#endif
-#else
-#if defined(WINDOWS_BEHAVIOR)
             radians = (double)(
                 (long double)angles[axis] *
                 (long double)3.1415927410125732f / 180.0L);
-#else
-            radians = (double)(
-                (long double)angles[axis] *
-                (long double)3.141592653589793 / 180.0L);
-#endif
-#endif
             CG_SinCos(radians, &sine, &cosine);
 
             const int32_t first = componentPairs[axis][0];
             const int32_t second = componentPairs[axis][1];
-#if EMULATE_X87
-            rotated[first] = x87f_store_f32(x87f_sub(
-                x87f_mul(x87f_load_f32(previous[first]),
-                         x87f_load_f64(cosine)),
-                x87f_mul(x87f_load_f32(previous[second]),
-                         x87f_load_f64(sine))));
-            rotated[second] = x87f_store_f32(x87f_add(
-                x87f_mul(x87f_load_f32(previous[second]),
-                         x87f_load_f64(cosine)),
-                x87f_mul(x87f_load_f32(previous[first]),
-                         x87f_load_f64(sine))));
-#else
             rotated[first] = (float)(
                 (long double)previous[first] * (long double)cosine -
                 (long double)previous[second] * (long double)sine);
             rotated[second] = (float)(
                 (long double)previous[second] * (long double)cosine +
                 (long double)previous[first] * (long double)sine);
-#endif
         }
 
         previous[0] = rotated[0];

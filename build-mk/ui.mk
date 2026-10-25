@@ -3,10 +3,7 @@
 
 ROOT := .
 include build-mk/sources/ui.mk
-CODUO_DEFAULT_BEHAVIOR := windows
 # The recovered UI represents only the retail Windows client module.
-override CODUO_BEHAVIOR := windows
-include $(ROOT)/build-mk/platform-behavior.mk
 CC ?= clang
 WIDTH_CC ?= clang
 WINDOWS_CC ?= x86_64-w64-mingw32-gcc
@@ -152,9 +149,6 @@ SHARED_C_SOURCES := $(ROOT)/src/qcommon/com_parse.c \
 	$(ROOT)/src/math/q_shared_random.c \
 	$(ROOT)/src/math/vector_projection.c
 ALL_C_SOURCES := $(C_SOURCES) $(SHARED_C_SOURCES)
-# UI targets are client code and must never inherit the generic arm64
-# software-x87 default through a shared translation unit's include order.
-override CLIENT_FP_CPPFLAGS := -DEMULATE_X87=0
 INCLUDE_FLAGS := -iquote $(UI_DIR)/bindings \
 	-iquote $(ROOT)/src/qcommon/bindings/default \
 	-I$(ROOT)/src
@@ -178,12 +172,12 @@ UI_NATIVE_STORAGE_FLAGS := -fno-common
 
 native-link:
 	mkdir -p $(dir $(NATIVE_LIBRARY))
-	$(CC) -std=c11 $(CLIENT_FP_CPPFLAGS) $(RECOVERY_POLICY_CPPFLAGS) $(PLATFORM_BEHAVIOR_CPPFLAGS) -Wall -Wextra -Werror -g -O0 -fPIC \
+	$(CC) -std=c11 $(RECOVERY_POLICY_CPPFLAGS) -Wall -Wextra -Werror -g -O0 -fPIC \
 		$(UI_INTEGER_FLAGS) $(UI_NATIVE_STORAGE_FLAGS) -fvisibility=hidden $(INCLUDE_FLAGS) $(ALL_C_SOURCES) $(NATIVE_LDFLAGS) -lm \
 		-o $(NATIVE_LIBRARY)
 
 syntax-check:
-	$(WIDTH_CC) -std=c11 $(CLIENT_FP_CPPFLAGS) $(RECOVERY_POLICY_CPPFLAGS) $(PLATFORM_BEHAVIOR_CPPFLAGS) -fsyntax-only $(UI_INTEGER_FLAGS) -Wall -Wextra -Werror \
+	$(WIDTH_CC) -std=c11 $(RECOVERY_POLICY_CPPFLAGS) -fsyntax-only $(UI_INTEGER_FLAGS) -Wall -Wextra -Werror \
 		-Werror=implicit-function-declaration -Werror=incompatible-pointer-types \
 		-Werror=int-conversion -Werror=shorten-64-to-32 \
 		-Werror=pointer-to-int-cast -Werror=int-to-pointer-cast \
@@ -191,19 +185,19 @@ syntax-check:
 
 windows-cross-link:
 	@mkdir -p $(dir $(WINDOWS_LIBRARY))
-	$(WINDOWS_CC) -std=c11 $(CLIENT_FP_CPPFLAGS) $(RECOVERY_POLICY_CPPFLAGS) -DWINDOWS_BEHAVIOR $(UI_INTEGER_FLAGS) -Wall -Wextra -Werror $(INCLUDE_FLAGS) $(ALL_C_SOURCES) \
+	$(WINDOWS_CC) -std=c11 $(RECOVERY_POLICY_CPPFLAGS) $(UI_INTEGER_FLAGS) -Wall -Wextra -Werror $(INCLUDE_FLAGS) $(ALL_C_SOURCES) \
 		-shared -static-libgcc $(WINDOWS_DEF) -Wl,--no-undefined -luser32 -lgdi32 -lm \
 		-o $(WINDOWS_LIBRARY)
 
 win32-abi-link:
 	@mkdir -p $(dir $(WIN32_LIBRARY))
-	$(WIN32_CC) -std=c11 $(CLIENT_FP_CPPFLAGS) $(RECOVERY_POLICY_CPPFLAGS) -DWINDOWS_BEHAVIOR $(UI_INTEGER_FLAGS) -Wall -Wextra -Werror $(INCLUDE_FLAGS) $(ALL_C_SOURCES) \
+	$(WIN32_CC) -std=c11 $(RECOVERY_POLICY_CPPFLAGS) $(UI_INTEGER_FLAGS) -Wall -Wextra -Werror $(INCLUDE_FLAGS) $(ALL_C_SOURCES) \
 		-shared -static-libgcc $(WINDOWS_DEF) -Wl,--no-undefined -luser32 -lgdi32 -lm \
 		-o $(WIN32_LIBRARY)
 
 linux-i386-link:
 	@mkdir -p $(dir $(LINUX_I386_LIBRARY))
-	$(CC) -m32 -std=c11 $(CLIENT_FP_CPPFLAGS) $(RECOVERY_POLICY_CPPFLAGS) $(PLATFORM_BEHAVIOR_CPPFLAGS) $(UI_INTEGER_FLAGS) -Wall -Wextra -Werror \
+	$(CC) -m32 -std=c11 $(RECOVERY_POLICY_CPPFLAGS) $(UI_INTEGER_FLAGS) -Wall -Wextra -Werror \
 		-g -O0 -fPIC -fvisibility=hidden \
 		$(INCLUDE_FLAGS) $(ALL_C_SOURCES) -shared -Wl,--no-undefined -lm \
 		-o $(LINUX_I386_LIBRARY)

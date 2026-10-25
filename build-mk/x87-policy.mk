@@ -38,9 +38,8 @@
 #   CODUO_FP_FAITHFUL = auto (default) | strict | relaxed
 #     auto    : be bit-exact if this toolchain can; otherwise hard-error.
 #     strict  : require bit-exact; hard-error if this toolchain cannot.
-#     relaxed : permit a build without whole-program native x87. Consumers may
-#               select EMULATE_X87 source bodies, but any remaining plain C uses
-#               SSE / native arm64 FP, so this is not yet a bit-exact rebuild.
+#     relaxed : permit native SSE / arm64 arithmetic. Wide C intermediates and
+#               explicit rounding boundaries remain; software x87 is unsupported.
 #
 # See docs/fp-faithfulness.md for the full explanation.
 # ---------------------------------------------------------------------------
@@ -102,8 +101,8 @@ endef
 # The faithful modes add -mfpmath=387 to make the plain-C float math x87-exact.
 # A 32-bit x86 target is already all-x87, so the flag is unnecessary there.
 ifeq ($(CODUO_FP_FAITHFUL),relaxed)
-  # Acknowledged non-exact build: leave X87_FLOAT_FLAGS empty. The consumer may
-  # enable EMULATE_X87 bodies; all other arithmetic remains SSE/native arm64 FP.
+  # Acknowledged non-exact build: leave X87_FLOAT_FLAGS empty and use the
+  # compiler's native floating-point types and instruction set.
 else ifeq ($(filter-out auto strict,$(CODUO_FP_FAITHFUL)),)
   # -fexcess-precision=fast: the original was built by a compiler that rounds
   # each float assignment to 32 bits (the traditional / pre-C99 behavior). With
@@ -112,16 +111,15 @@ else ifeq ($(filter-out auto strict,$(CODUO_FP_FAITHFUL)),)
   # narrows at an observable point — so a `float f = <double expr>; ... f - k`
   # subtracts the 80-bit value, not the stored float. That diverges from stock by
   # 1 ULP on round-to-even ties (found in the capsule trace, where sqrt() yields
-  # a double). `fast` restores stock's per-assignment rounding. (The EMULATE_X87
-  # build is unaffected: it rounds explicitly at every store via x87f_store_f32.)
+  # a double). `fast` restores stock's per-assignment rounding for this graph.
   # -O0 is FORCED on the faithful native x87 build: at -O2 the compiler keeps a
   # named `float` local live in an 80-bit x87 register instead of narrowing it to
   # float32 at the assignment, so the recon's float-spill points (which encode
   # stock's rounding) are not honored and the build diverges from stock. -O0
   # spills every local, restoring the narrowing. Verified on the game_mp_uo
   # common_math differential harness; see docs/x87-O0-required-O2-excess-precision.md.
-  # (The EMULATE_X87 / shipped build is -O-independent — it rounds explicitly via
-  # x87f_store_f32 — so it is NOT pinned here and can be optimized.)
+  # Explicit volatile stores remain necessary where a particular narrowing
+  # point must survive independently of local-variable allocation.
   ifeq ($(X87_POLICY_IS_I386),1)
     # 32-bit x86 is x87 already; still needs fast for per-assignment rounding.
     X87_FLOAT_FLAGS := -O0 -fexcess-precision=fast

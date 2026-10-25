@@ -52,31 +52,13 @@
 #include "bg_pmove.h"
 
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
-#if defined(LINUX_BEHAVIOR)
-#include "compat/libm/coduo_libm.h"
-#endif
 
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#if defined(LINUX_BEHAVIOR)
-/* These exported Linux BG constants are shared by several movement modes and
- * therefore remain owned by the game movement unit rather than this one
- * extracted function. */
-extern const float pm_stopspeed;
-extern const float pm_friction;
-extern const float pm_accelerate;
-#endif
 
-#if defined(WINDOWS_BEHAVIOR)
 void PM_NoclipMove(void)
 {
     int32_t targetViewHeight = bg_viewheight_standing.integer;
@@ -100,16 +82,6 @@ void PM_NoclipMove(void)
      * FDIVRP (0x300097a3, speed is the divisor). The carrier therefore retains
      * the live Windows PC=53 x87 value through the friction calculation. */
     playerState_t *frictionPs = move->ps; /* 0x30009726 independent reload. */
-#if EMULATE_X87
-    x87f speed = x87f_sqrt(x87f_add(
-        x87f_add(
-            x87f_mul(x87f_load_f32(frictionPs->velocity[0]),
-                     x87f_load_f32(frictionPs->velocity[0])),
-            x87f_mul(x87f_load_f32(frictionPs->velocity[1]),
-                     x87f_load_f32(frictionPs->velocity[1]))),
-        x87f_mul(x87f_load_f32(frictionPs->velocity[2]),
-                 x87f_load_f32(frictionPs->velocity[2]))));
-#else
     long double speedSquared =
         (long double)frictionPs->velocity[0] * frictionPs->velocity[0];
     speedSquared +=
@@ -117,13 +89,8 @@ void PM_NoclipMove(void)
     speedSquared +=
         (long double)frictionPs->velocity[2] * frictionPs->velocity[2];
     long double speed = coduo_x87_sqrtl(speedSquared);
-#endif
 
-#if EMULATE_X87
-    if (x87f_lt(speed, x87f_load_f32(1.0f))) {
-#else
     if (speed < 1.0f) {
-#endif
         /* 0x30009756..0x30009767: below the cutoff, kill the velocity entirely. */
         frictionPs->velocity[0] = 0.0f;
         playerState_t *velocityYPs = move->ps;
@@ -138,27 +105,6 @@ void PM_NoclipMove(void)
         /* control/newspeed/frictionScale stay in the x87 stack (control via FLD ST0,
          * the friction product * frametime * 8.25f, the FSUBR, and the FDIVRP) with
          * no float store until each velocity component is written -- long double. */
-#if EMULATE_X87
-        x87f control = x87f_lt(speed, x87f_load_f32(100.0f))
-                           ? x87f_load_f32(100.0f)
-                           : speed;
-        x87f newspeed = x87f_sub(
-            speed,
-            x87f_mul(x87f_mul(control, x87f_load_f32(pml.frametime)),
-                     x87f_load_f32(8.25f)));
-        if (x87f_lt(newspeed, x87f_load_f32(0.0f))) {
-            newspeed = x87f_load_f32(0.0f);
-        }
-        const x87f frictionScale = x87f_div(newspeed, speed);
-        frictionPs->velocity[0] = x87f_store_f32(x87f_mul(
-            frictionScale, x87f_load_f32(frictionPs->velocity[0])));
-        playerState_t *velocityYPs = move->ps;
-        velocityYPs->velocity[1] = x87f_store_f32(x87f_mul(
-            frictionScale, x87f_load_f32(velocityYPs->velocity[1])));
-        playerState_t *velocityZPs = move->ps;
-        velocityZPs->velocity[2] = x87f_store_f32(x87f_mul(
-            frictionScale, x87f_load_f32(velocityZPs->velocity[2])));
-#else
         long double control = (speed < 100.0L) ? 100.0L : speed;
         long double newspeed =
             speed - control * (long double)pml.frametime * 8.25L;
@@ -174,7 +120,6 @@ void PM_NoclipMove(void)
         playerState_t *velocityZPs = move->ps;
         velocityZPs->velocity[2] =
             (float)(frictionScale * velocityZPs->velocity[2]);
-#endif
     }
 
     /* 0x300097bf..0x300097c7: scale = PM_CmdScale(&move->command). The current usercmd
@@ -194,21 +139,6 @@ void PM_NoclipMove(void)
     int32_t umove = cmd->upmove;      /* upmove (widened to int by FILD) */
 
     vec3_t wishdir;
-#if EMULATE_X87
-    const x87f wishX = x87f_add(
-        x87f_mul(x87f_load_f32(pml.right[0]), x87f_load_f32(smove)),
-        x87f_mul(x87f_load_f32(pml.forward[0]), x87f_load_f32(fmove)));
-    const x87f wishY = x87f_add(
-        x87f_mul(x87f_load_f32(pml.right[1]), x87f_load_f32(smove)),
-        x87f_mul(x87f_load_f32(pml.forward[1]), x87f_load_f32(fmove)));
-    const x87f wishZBasis = x87f_add(
-        x87f_mul(x87f_load_f32(pml.right[2]), x87f_load_f32(smove)),
-        x87f_mul(x87f_load_f32(pml.forward[2]), x87f_load_f32(fmove)));
-    const x87f wishZ = x87f_add(x87f_load_i32(umove), wishZBasis);
-    wishdir[2] = x87f_store_f32(wishZ); /* 0x3000983f stores z first. */
-    wishdir[0] = x87f_store_f32(wishX);
-    wishdir[1] = x87f_store_f32(wishY);
-#else
     long double wishX = (long double)pml.right[0] * smove;
     wishX += (long double)pml.forward[0] * fmove;
     long double wishY = (long double)pml.right[1] * smove;
@@ -219,20 +149,14 @@ void PM_NoclipMove(void)
     wishdir[2] = (float)wishZ; /* 0x3000983f stores z first. */
     wishdir[0] = (float)wishX;
     wishdir[1] = (float)wishY;
-#endif
 
     /* 0x30009857..0x3000985c: wishspeed = |wishdir| (VectorNormalize normalizes in
      * place and returns the pre-normalization length), then the command scale is
      * applied to the SPEED (wishspeed *= scale) -- the noclip ordering, distinct from
      * the spectator move which scales the wishvel before normalizing. */
     const float normalizedWishspeed = VectorNormalize(wishdir);
-#if EMULATE_X87
-    float wishspeed = x87f_store_f32(x87f_mul(
-        x87f_load_f32(normalizedWishspeed), x87f_load_f32(scale)));
-#else
     float wishspeed =
         (float)((long double)normalizedWishspeed * (long double)scale);
-#endif
 
     /* 0x30009860..0x30009870: accelerate the player velocity toward wishdir with the
      * noclip acceleration of 9.0f (the pushed 0x41100000). */
@@ -241,15 +165,6 @@ void PM_NoclipMove(void)
     /* 0x30009875..0x300098b0: advance the origin with NO collision:
      * origin[i] += velocity[i] * pml.frametime (VectorMA). This direct integration,
      * with no PM_StepSlideMove/trace, is what makes this the no-clip move. */
-#if EMULATE_X87
-    for (int32_t lane = 0; lane < 3; ++lane) {
-        playerState_t *originPs = move->ps;
-        originPs->psOrigin[lane] = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_load_f32(pml.frametime),
-                     x87f_load_f32(originPs->velocity[lane])),
-            x87f_load_f32(originPs->psOrigin[lane])));
-    }
-#else
     long double frameTimeX = pml.frametime; /* 0x30009875 load precedes ps reload. */
     playerState_t *originXPs = move->ps;
     originXPs->psOrigin[0] = (float)(frameTimeX * originXPs->velocity[0]
@@ -262,145 +177,4 @@ void PM_NoclipMove(void)
     long double frameTimeZ = pml.frametime;
     originZPs->psOrigin[2] = (float)(frameTimeZ * originZPs->velocity[2]
                                      + originZPs->psOrigin[2]);
-#endif
 }
-#else
-void PM_NoclipMove(void)
-{
-    vec3_t wishvel;
-    vec3_t wishdir;
-    float speed;
-    float commandScale;
-    float friction;
-    float control;
-    float newSpeed;
-    float wishSpeed;
-
-    pm->ps->viewHeightTarget = bg_viewheight_standing.integer;
-    pm->ps->standViewHeight = bg_viewheight_standing.integer;
-
-    /* Linux forms the X/Y/Z sum at PC=64, narrows it to the binary64 glibc
-     * sqrt argument, then stores the returned root as binary32. */
-#if EMULATE_X87
-    speed = (float)CoduoLibm_SqrtGlibc(x87f_store_f64(x87f_add(
-        x87f_add(
-            x87f_mul(x87f_load_f32(pm->ps->velocity[0]),
-                     x87f_load_f32(pm->ps->velocity[0])),
-            x87f_mul(x87f_load_f32(pm->ps->velocity[1]),
-                     x87f_load_f32(pm->ps->velocity[1]))),
-        x87f_mul(x87f_load_f32(pm->ps->velocity[2]),
-                 x87f_load_f32(pm->ps->velocity[2])))));
-#else
-    const long double speedSquared =
-        ((long double)pm->ps->velocity[0] * pm->ps->velocity[0] +
-         (long double)pm->ps->velocity[1] * pm->ps->velocity[1]) +
-        (long double)pm->ps->velocity[2] * pm->ps->velocity[2];
-    speed = (float)CoduoLibm_SqrtGlibc((double)speedSquared);
-#endif
-
-    if (speed < 1.0f) {
-        pm->ps->velocity[0] = 0.0f;
-        pm->ps->velocity[1] = 0.0f;
-        pm->ps->velocity[2] = 0.0f;
-    } else {
-        /* The multiply by 1.5, selected control value, accumulated drop,
-         * subtraction, and division are each stored as binary32 in the Linux
-         * body before the next stage consumes them. */
-#if EMULATE_X87
-        friction = x87f_store_f32(x87f_mul(
-            x87f_load_f32(pm_friction), x87f_load_f32(1.5f)));
-#else
-        friction = (float)((long double)pm_friction * 1.5L);
-#endif
-        control = speed < pm_stopspeed ? pm_stopspeed : speed;
-#if EMULATE_X87
-        const float drop = x87f_store_f32(x87f_add(
-            x87f_mul(
-                x87f_mul(x87f_load_f32(control),
-                         x87f_load_f32(friction)),
-                x87f_load_f32(pml.frametime)),
-            x87f_load_f32(0.0f)));
-        newSpeed = x87f_store_f32(
-            x87f_sub(x87f_load_f32(speed), x87f_load_f32(drop)));
-#else
-        const float drop = (float)(
-            (long double)control * (long double)friction *
-                (long double)pml.frametime +
-            0.0L);
-        newSpeed = (float)((long double)speed - (long double)drop);
-#endif
-        if (newSpeed < 0.0f) {
-            newSpeed = 0.0f;
-        }
-#if EMULATE_X87
-        newSpeed = x87f_store_f32(x87f_div(
-            x87f_load_f32(newSpeed), x87f_load_f32(speed)));
-        for (int32_t lane = 0; lane < 3; ++lane) {
-            pm->ps->velocity[lane] = x87f_store_f32(x87f_mul(
-                x87f_load_f32(pm->ps->velocity[lane]),
-                x87f_load_f32(newSpeed)));
-        }
-#else
-        newSpeed = (float)((long double)newSpeed / (long double)speed);
-        for (int32_t lane = 0; lane < 3; ++lane) {
-            pm->ps->velocity[lane] = (float)(
-                (long double)pm->ps->velocity[lane] *
-                (long double)newSpeed);
-        }
-#endif
-    }
-
-    commandScale = PM_CmdScale(&pm->command);
-
-    const float forwardMove = (float)pm->command.forwardmove;
-    const float rightMove = (float)pm->command.rightmove;
-    for (int32_t lane = 0; lane < 3; ++lane) {
-#if EMULATE_X87
-        wishvel[lane] = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_load_f32(pml.forward[lane]),
-                     x87f_load_f32(forwardMove)),
-            x87f_mul(x87f_load_f32(pml.right[lane]),
-                     x87f_load_f32(rightMove))));
-#else
-        wishvel[lane] = (float)(
-            (long double)pml.forward[lane] * (long double)forwardMove +
-            (long double)pml.right[lane] * (long double)rightMove);
-#endif
-    }
-#if EMULATE_X87
-    wishvel[2] = x87f_store_f32(x87f_add(
-        x87f_load_f32(wishvel[2]), x87f_load_i32(pm->command.upmove)));
-#else
-    wishvel[2] = (float)((long double)wishvel[2] +
-                         (long double)pm->command.upmove);
-#endif
-
-    wishdir[0] = wishvel[0];
-    wishdir[1] = wishvel[1];
-    wishdir[2] = wishvel[2];
-    wishSpeed = VectorNormalize(wishdir);
-#if EMULATE_X87
-    wishSpeed = x87f_store_f32(x87f_mul(
-        x87f_load_f32(wishSpeed), x87f_load_f32(commandScale)));
-#else
-    wishSpeed = (float)((long double)wishSpeed *
-                        (long double)commandScale);
-#endif
-
-    PM_Accelerate(wishdir, wishSpeed, pm_accelerate);
-
-    for (int32_t lane = 0; lane < 3; ++lane) {
-#if EMULATE_X87
-        pm->ps->psOrigin[lane] = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_load_f32(pm->ps->velocity[lane]),
-                     x87f_load_f32(pml.frametime)),
-            x87f_load_f32(pm->ps->psOrigin[lane])));
-#else
-        pm->ps->psOrigin[lane] = (float)(
-            (long double)pm->ps->velocity[lane] *
-                (long double)pml.frametime +
-            (long double)pm->ps->psOrigin[lane]);
-#endif
-    }
-}
-#endif
