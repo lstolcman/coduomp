@@ -6207,11 +6207,19 @@ void VEH_UpdateClient(gentity_t *ent)
                         VEH_STRESS_RIGHT_TIME_SCALE;
                     static const float inputScale =
                         VEH_STRESS_INPUT_SCALE;
-                    /* 0x8803c..0x880d9: level.time feeds fmul via fild with
+                    /* Linux 0x8803c..0x880d9: level.time feeds fmul via fild with
                      * no float store; the argument rounds to DOUBLE for
                      * CoduoLibm_Sin()/CoduoLibm_Cos(), and each scaled result
                      * feeds fistp WORD directly. */
-#if EMULATE_X87
+#if defined(WINDOWS_BEHAVIOR)
+                    /* Windows rounds time to float before both phases and
+                     * truncates the retained scaled result through its CRT. */
+                    const volatile float stressTime = (float)level.time;
+                    const double forwardPhase = (double)((WIDE_FLOAT)stressTime * forwardTimeScale);
+                    const double rightPhase = (double)((WIDE_FLOAT)stressTime * rightTimeScale);
+                    input[0] = (int8_t)coduo_fp_to_i32_extended((WIDE_FLOAT)CoduoLibm_Sin(forwardPhase) * inputScale);
+                    input[1] = (int8_t)coduo_fp_to_i32_extended((WIDE_FLOAT)CoduoLibm_Cos(rightPhase) * inputScale);
+#elif EMULATE_X87
                     const double forwardPhase = x87f_store_f64(x87f_mul(
                         x87f_load_i32(level.time),
                         x87f_load_f32(forwardTimeScale)));
@@ -6310,22 +6318,26 @@ void VEH_UpdateClient(gentity_t *ent)
         if (vehGroundTraceWalkable) {
             for (int axisIndex = 0; axisIndex < 3; axisIndex++) {
                 vehicleState->acceleration[axisIndex] +=
-                    angularAccel[axisIndex] * VEH_PHYSICS_FRAME_SECONDS;
+                    (WIDE_FLOAT)angularAccel[axisIndex] * VEH_PHYSICS_FRAME_SECONDS;
             }
         }
 
+#if defined(WINDOWS_BEHAVIOR)
+        /* Windows reuses this float product for heading and turret yaw;
+         * Linux retains each product through its addition or subtraction. */
+        const volatile float yawDelta = (WIDE_FLOAT)vehicleState->acceleration[1] * VEH_PHYSICS_FRAME_SECONDS;
+#else
+        const WIDE_FLOAT yawDelta = (WIDE_FLOAT)vehicleState->acceleration[1] * VEH_PHYSICS_FRAME_SECONDS;
+#endif
         vehicleState->viewClampTargetAngles[1] =
-            AngleNormalize180(vehicleState->previousAngles[1] +
-                              vehicleState->acceleration[1] *
-                                  VEH_PHYSICS_FRAME_SECONDS);
+            AngleNormalize180((float)((WIDE_FLOAT)vehicleState->previousAngles[1] + yawDelta));
         vehicleState->viewClampTargetAngles[0] = 0.0f;
         vehicleState->viewClampTargetAngles[2] = 0.0f;
 
         if (vehicleInfo->type == VEHICLE_TYPE_TANK) {
             game_compat_veh_set_entity_primary_yaw(
                 ent,
-                game_compat_veh_entity_primary_yaw(ent) -
-                    vehicleState->acceleration[1] * VEH_PHYSICS_FRAME_SECONDS);
+                (WIDE_FLOAT)game_compat_veh_entity_primary_yaw(ent) - yawDelta);
         }
 
         AnglesToAxis(vehicleState->viewClampTargetAngles, axis.axis);
@@ -6341,7 +6353,7 @@ void VEH_UpdateClient(gentity_t *ent)
                                   worldAccel);
             for (int axisIndex = 0; axisIndex < 3; axisIndex++) {
                 vehicleState->velocity[axisIndex] +=
-                    worldAccel[axisIndex] * VEH_PHYSICS_FRAME_SECONDS;
+                    (WIDE_FLOAT)worldAccel[axisIndex] * VEH_PHYSICS_FRAME_SECONDS;
             }
             VEH_GroundFriction(ent);
         }
@@ -6372,25 +6384,28 @@ void VEH_UpdateClient(gentity_t *ent)
     {
         /* 0x88383..0x88492: the max/clamp cascade compares the unrounded
          * 80-bit quotients (clamp boundary is DOUBLE 1.0); the selected
-         * quotient rounds to double, then to float. */
-        const long double forwardFraction =
-            fabsf(vehicleState->angularVelocity[0]) / vehicleInfo->maxSpeed;
-        const long double steerFraction =
-            fabsf(vehicleState->acceleration[1]) /
-            (vehicleInfo->steeringLimit + vehicleInfo->steeringLimit);
+         * quotient rounds to double, then to float. The max/clamp is monotone:
+         * Windows's earlier double stores do not change the selected finite
+         * result after the final double-to-float conversion. An unordered
+         * selected value takes the upper clamp, as does a value at least one. */
+        const WIDE_FLOAT forwardFraction =
+            (WIDE_FLOAT)fabsf(vehicleState->angularVelocity[0]) / vehicleInfo->maxSpeed;
+        const WIDE_FLOAT steerFraction =
+            (WIDE_FLOAT)fabsf(vehicleState->acceleration[1]) /
+            ((WIDE_FLOAT)vehicleInfo->steeringLimit + vehicleInfo->steeringLimit);
         float clampedSpeedFraction;
 
         if (forwardFraction > steerFraction) {
-            if (forwardFraction >= 1.0) {
-                clampedSpeedFraction = 1.0f;
-            } else {
+            if (forwardFraction < 1.0) {
                 clampedSpeedFraction = (float)(double)forwardFraction;
+            } else {
+                clampedSpeedFraction = 1.0f;
             }
         } else {
-            if (steerFraction >= 1.0) {
-                clampedSpeedFraction = 1.0f;
-            } else {
+            if (steerFraction < 1.0) {
                 clampedSpeedFraction = (float)(double)steerFraction;
+            } else {
+                clampedSpeedFraction = 1.0f;
             }
         }
 
@@ -6895,16 +6910,10 @@ void VEH_GroundMove(gentity_t *ent)
     VEH_ClipVelocity(vehicleState->velocity, vehLastGroundTrace.normal,
                      vehicleState->velocity);
 
-    /* Both profiles retain the dot product; Windows adds X/Z/Y, Linux X/Y/Z. */
-#if defined(WINDOWS_BEHAVIOR)
-    const WIDE_FLOAT velocityDot = ((WIDE_FLOAT)vehicleState->velocity[0] * originalVelocity[0] +
-                                   (WIDE_FLOAT)vehicleState->velocity[2] * originalVelocity[2]) +
-                                  (WIDE_FLOAT)vehicleState->velocity[1] * originalVelocity[1];
-#else
+    /* Retain the dot product through its positive test on both profiles. */
     const WIDE_FLOAT velocityDot = ((WIDE_FLOAT)vehicleState->velocity[0] * originalVelocity[0] +
                                    (WIDE_FLOAT)vehicleState->velocity[1] * originalVelocity[1]) +
                                   (WIDE_FLOAT)vehicleState->velocity[2] * originalVelocity[2];
-#endif
     if (velocityDot > 0.0f) {
         VectorNormalize(vehicleState->velocity);
         vehicleState->velocity[0] *= speed;
@@ -6976,20 +6985,7 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
         vec3_t localWheel;
 
         VEH_GetWheelOrigin(ent, wheelIndex, localWheel);
-#if defined(WINDOWS_BEHAVIOR)
-        /* The inlined Windows transform folds Y/X/Z, X/Y/Z, then X/Z/Y. */
-        traceStart[0] = (((WIDE_FLOAT)localWheel[1] * axis.axis[1][0] +
-                          (WIDE_FLOAT)localWheel[0] * axis.axis[0][0]) +
-                         (WIDE_FLOAT)localWheel[2] * axis.axis[2][0]) + axis.origin[0];
-        traceStart[1] = (((WIDE_FLOAT)localWheel[0] * axis.axis[0][1] +
-                          (WIDE_FLOAT)localWheel[1] * axis.axis[1][1]) +
-                         (WIDE_FLOAT)localWheel[2] * axis.axis[2][1]) + axis.origin[1];
-        traceStart[2] = (((WIDE_FLOAT)localWheel[0] * axis.axis[0][2] +
-                          (WIDE_FLOAT)localWheel[2] * axis.axis[2][2]) +
-                         (WIDE_FLOAT)localWheel[1] * axis.axis[1][2]) + axis.origin[2];
-#else
         MatrixTransformVector43(localWheel, &axis, traceStart);
-#endif
 
         if (g_vehicleDebug.integer != 0) {
             VEH_DebugBox(traceStart, 4.0f, 1.0f, 0.0f, 0.0f);
@@ -7087,37 +7083,23 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
 #endif
 
     for (int wheelIndex = 1; wheelIndex < wheelCount; wheelIndex++) {
+        WIDE_FLOAT wheelDot =
+            ((WIDE_FLOAT)wheelPoints[wheelIndex][0] * groundNormal[0] +
+             (WIDE_FLOAT)wheelPoints[wheelIndex][1] * groundNormal[1]) +
+            (WIDE_FLOAT)wheelPoints[wheelIndex][2] * groundNormal[2];
 #if defined(WINDOWS_BEHAVIOR)
-        /* The six-wheel loop folds its middle three dots Z/Y/X; the other
-         * dots fold X/Z/Y. Each dot is stored before distance subtraction. */
-        const WIDE_FLOAT dotX = (WIDE_FLOAT)wheelPoints[wheelIndex][0] * groundNormal[0];
-        const WIDE_FLOAT dotY = (WIDE_FLOAT)wheelPoints[wheelIndex][1] * groundNormal[1];
-        const WIDE_FLOAT dotZ = (WIDE_FLOAT)wheelPoints[wheelIndex][2] * groundNormal[2];
-        const volatile float wheelDot =
-            wheelCount == VEH_SUSPENSION_WHEEL_COUNT_TANK && wheelIndex > 1 && wheelIndex < wheelCount - 1 ?
-            (dotZ + dotY) + dotX : (dotX + dotZ) + dotY;
-        const volatile float wheelDistance = (WIDE_FLOAT)wheelDot - planeDistance;
-
-        if (vehicleInfo->suspensionTravel < wheelDistance) {
-            planeDistance = (WIDE_FLOAT)wheelDot - vehicleInfo->suspensionTravel;
-        }
-#else
-        /* 0x819ba..0x81ab7: the dot product stays in the 80-bit chain up to
-         * the subtraction (never rounded on its own), and the update path
-         * recomputes the full chain minus suspensionTravel. */
-        const volatile float wheelDistance =
-            (((WIDE_FLOAT)wheelPoints[wheelIndex][0] * groundNormal[0] +
-              (WIDE_FLOAT)wheelPoints[wheelIndex][1] * groundNormal[1]) +
-             (WIDE_FLOAT)wheelPoints[wheelIndex][2] * groundNormal[2]) - planeDistance;
-
-        if (vehicleInfo->suspensionTravel < wheelDistance) {
-            planeDistance =
-                (((WIDE_FLOAT)wheelPoints[wheelIndex][0] * groundNormal[0] +
-                  (WIDE_FLOAT)wheelPoints[wheelIndex][1] * groundNormal[1]) +
-                 (WIDE_FLOAT)wheelPoints[wheelIndex][2] * groundNormal[2]) -
-                vehicleInfo->suspensionTravel;
-        }
+        /* Store each dot to float before distance subtraction. */
+        const volatile float roundedDot = wheelDot;
+        wheelDot = roundedDot;
 #endif
+        /* Linux 0x819ba..0x81ab7 retains the dot through subtraction. Its
+         * update recomputes the same dot minus suspensionTravel; no input
+         * changes between those uses, so the retained value serves both. */
+        const volatile float wheelDistance = wheelDot - planeDistance;
+
+        if (vehicleInfo->suspensionTravel < wheelDistance) {
+            planeDistance = wheelDot - vehicleInfo->suspensionTravel;
+        }
     }
 
     /* Keep both corrected axes in the matrix used to derive target angles. */
@@ -7171,13 +7153,12 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
                 (WIDE_FLOAT)baseDotX + baseDotY :
                 (WIDE_FLOAT)projected[wheelIndex][1] * groundNormal[1] +
                 (WIDE_FLOAT)projected[wheelIndex][0] * groundNormal[0];
-            projected[wheelIndex][2] = -((horizontalDot - planeDistance) / groundNormal[2]);
 #else
-            projected[wheelIndex][2] =
-                -(((WIDE_FLOAT)projected[wheelIndex][0] * groundNormal[0] +
-                   (WIDE_FLOAT)projected[wheelIndex][1] * groundNormal[1]) -
-                  planeDistance) / groundNormal[2];
+            const WIDE_FLOAT horizontalDot =
+                (WIDE_FLOAT)projected[wheelIndex][0] * groundNormal[0] +
+                (WIDE_FLOAT)projected[wheelIndex][1] * groundNormal[1];
 #endif
+            projected[wheelIndex][2] = -((horizontalDot - planeDistance) / groundNormal[2]);
         }
 
         VEH_DebugLine(projected[0], projected[1], 1.0f, 1.0f, 0.0f);
@@ -9884,7 +9865,7 @@ void VEH_UpdatePath(gentity_t *ent)
 #else
             game_compat_veh_set_entity_current_speed(
                 ent,
-                vehicleState->viewState[4] * VEH_PHYSICS_FRAME_SECONDS +
+                (WIDE_FLOAT)vehicleState->viewState[4] * VEH_PHYSICS_FRAME_SECONDS +
                     game_compat_veh_entity_current_speed(ent));
 #endif
             if (game_compat_veh_entity_current_speed(ent) > targetSpeed) {
@@ -9901,8 +9882,8 @@ void VEH_UpdatePath(gentity_t *ent)
 #else
             game_compat_veh_set_entity_current_speed(
                 ent,
-                game_compat_veh_entity_current_speed(ent) -
-                    vehicleState->viewState[4] * VEH_PHYSICS_FRAME_SECONDS);
+                (WIDE_FLOAT)game_compat_veh_entity_current_speed(ent) -
+                    (WIDE_FLOAT)vehicleState->viewState[4] * VEH_PHYSICS_FRAME_SECONDS);
 #endif
             if (targetSpeed > game_compat_veh_entity_current_speed(ent)) {
                 game_compat_veh_set_entity_current_speed(ent, targetSpeed);
@@ -9925,7 +9906,7 @@ void VEH_UpdatePath(gentity_t *ent)
                      x87f_load_f32(cursor->speed))));
 #else
         *cursorFraction +=
-            game_compat_veh_entity_current_speed(ent) / cursor->speed;
+            (WIDE_FLOAT)game_compat_veh_entity_current_speed(ent) / cursor->speed;
 #endif
     }
 
@@ -9945,8 +9926,8 @@ void VEH_UpdatePath(gentity_t *ent)
 
     for (int axis = 0; axis < 3; axis++) {
         vehicleState->origin[axis] =
-            cursor->origin[axis] +
-            (nextPosition.origin[axis] - cursor->origin[axis]) *
+            (WIDE_FLOAT)cursor->origin[axis] +
+            ((WIDE_FLOAT)nextPosition.origin[axis] - cursor->origin[axis]) *
                 *cursorFraction;
         vehicleState->viewClampTargetAngles[axis] =
             LerpAngle(cursor->currentAngles[axis],
@@ -9971,15 +9952,16 @@ void VEH_UpdatePath(gentity_t *ent)
         VEH_DebugBox(cursor->lookAheadOrigin, 8.0f, 0.0f, 1.0f, 1.0f);
     }
 
-    /* 0x889a8..0x88a0d: the deltas are stored to the velocity slots first,
-     * then scaled in place; the multiplier is the exact float constant
-     * 20.0f (0x41a00000), not the folded 1.0f/0.05f quotient. */
+    /* Both profiles compute (origin - previousOrigin) * 20.0f (0x41a00000),
+     * not the folded 1.0f/0.05f quotient. Linux 0x889a8..0x88a0d rounds
+     * the difference to float first; Windows retains it through scaling. */
     for (int axis = 0; axis < 3; axis++) {
-        vehicleState->velocity[axis] =
-            vehicleState->origin[axis] - vehicleState->previousOrigin[axis];
-    }
-    for (int axis = 0; axis < 3; axis++) {
-        vehicleState->velocity[axis] *= 20.0f;
+        WIDE_FLOAT delta = (WIDE_FLOAT)vehicleState->origin[axis] - vehicleState->previousOrigin[axis];
+#if defined(LINUX_BEHAVIOR)
+        const volatile float roundedDelta = delta;
+        delta = roundedDelta;
+#endif
+        vehicleState->velocity[axis] = delta * 20.0f;
     }
     for (int axis = 0; axis < 3; axis++) {
         vehicleState->angularVelocity[axis] = 0.0f;
