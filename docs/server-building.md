@@ -103,7 +103,7 @@ installation is required.
 ```sh
 mkdir build && cd build
 cmake -A Win32 -DBUNDLED_LIBS=YES ..
-cmake --build . --config Release --parallel 4
+cmake --build . --config Debug --parallel 4
 ```
 
 CMake selects the newest installed Visual Studio generator; add `-G` with a
@@ -117,13 +117,13 @@ without parallelism.
 Output:
 
 ```text
-build/bin/Release/coduo_dedicated_recovered.exe
+build/bin/Debug/coduo_dedicated_recovered.exe
 ```
 
 To build only the server project:
 
 ```cmd
-cmake --build . --config Release --target coduo_dedicated_recovered --parallel 4
+cmake --build . --config Debug --target coduo_dedicated_recovered --parallel 4
 ```
 
 To generate a solution that contains only the dedicated server, disable the
@@ -158,18 +158,30 @@ The direct form is equivalent to the `cmake --build` line above and needs a
 *Visual Studio Developer Command Prompt*, where `MSBuild.exe` is on `PATH`:
 
 ```sh
-MSBuild.exe CoDUOMP.sln /m:4 /p:Configuration=Release /p:Platform=Win32
+MSBuild.exe CoDUOMP.sln /m:4 /p:Configuration=Debug /p:Platform=Win32
 ```
 
-`Debug`, `MinSizeRel` and `RelWithDebInfo` are generated as well; each stages its
+`Release`, `MinSizeRel` and `RelWithDebInfo` are generated as well; each stages its
 output in `build/bin/<config>/`:
 
 ```sh
-cmake --build . --config RelWithDebInfo --target coduo_dedicated_recovered --parallel 4
+cmake --build . --config Release --target coduo_dedicated_recovered --parallel 4
 ```
 
-CD-key authorization and PunkBuster are selected at configure time; the default
-matches the Makefile target (`AUTH=0`, PunkBuster disabled):
+Configure-time options are passed at the `cmake` step as `-D<name>=<value>`:
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `CODUOMP_BUILD_SERVER` | `ON` | Build `coduo_dedicated_recovered.exe`. |
+| `CODUOMP_BUILD_CLIENT` | `ON` | Build `CoDUOMP.exe` in the same solution. |
+| `CODUOMP_BUILD_MODULES` | `ON` | Build the cgame, UI and listen-server modules. |
+| `BUNDLED_LIBS` | `ON` | Fetch and build the third-party libraries in `libs/`. |
+| `CODUOMP_DEP_PREFIX` | empty | Prefix holding `include/` and `lib/` for prebuilt dependencies when `BUNDLED_LIBS=OFF`. |
+| `CODUOMP_STATIC_VCRT` | `ON` | Link the MSVC runtime statically (`/MT`). |
+| `CODUOMP_DISABLE_SERVER_AUTH` | `ON` | Skip external CD-key authorization for joining clients; the Makefile default is `AUTH=0`. |
+| `CODUOMP_ENABLE_PUNKBUSTER` | `OFF` | Compile the PunkBuster recovery paths into the dedicated server. |
+
+A server that authenticates joining clients and compiles PunkBuster support:
 
 ```cmd
 cmake -A Win32 -DBUNDLED_LIBS=YES ^
@@ -180,7 +192,7 @@ Extra MSBuild switches go after `--`, and `CMAKE_BUILD_PARALLEL_LEVEL` supplies
 the default parallel level when `--parallel` is omitted:
 
 ```sh
-cmake --build . --config Release --parallel 4 -- /p:SomeProperty=Value
+cmake --build . --config Debug --parallel 4 -- /p:SomeProperty=Value
 ```
 
 A single-configuration generator works from the same build directory:

@@ -271,7 +271,7 @@ Generate a Visual Studio solution and build it:
 ```sh
 mkdir build && cd build
 cmake -A Win32 -DBUNDLED_LIBS=YES ..
-cmake --build . --config Release --parallel 4
+cmake --build . --config Debug --parallel 4
 ```
 
 CMake selects the newest installed Visual Studio generator; add `-G` with a
@@ -282,8 +282,8 @@ another, so the number is the budget for the whole build. Change it to suit the
 host; `--parallel` without a number uses every processor, and removing it builds
 without parallelism.
 
-The executable is written to `build/bin/Release/CoDUOMP.exe` and its modules to
-`build/bin/Release/uo/`. This build links the bundled libraries and the MSVC
+The executable is written to `build/bin/Debug/CoDUOMP.exe` and its modules to
+`build/bin/Debug/uo/`. This build links the bundled libraries and the MSVC
 runtime statically, and it uses the built-in Miniaudio backend, so it does not
 load the retail 32-bit `mss32.dll`. The dedicated server executable is staged in
 the same directory and uses `cmake/msvc-posix/` for the POSIX names that MinGW
@@ -296,21 +296,21 @@ The direct form is equivalent to the `cmake --build` line above and needs a
 *Visual Studio Developer Command Prompt*, where `MSBuild.exe` is on `PATH`:
 
 ```sh
-MSBuild.exe CoDUOMP.sln /m:4 /p:Configuration=Release /p:Platform=Win32
+MSBuild.exe CoDUOMP.sln /m:4 /p:Configuration=Debug /p:Platform=Win32
 ```
 
-`Debug`, `MinSizeRel` and `RelWithDebInfo` are generated as well; every
+`Release`, `MinSizeRel` and `RelWithDebInfo` are generated as well; every
 configuration stages its output in `build/bin/<config>/`, with the modules under
 `uo/`:
 
 ```sh
-cmake --build . --config RelWithDebInfo --parallel 4
+cmake --build . --config Release --parallel 4
 ```
 
 Build one target instead of the whole solution:
 
 ```sh
-cmake --build . --config Release --target uo_ui_mp_x86 --parallel 4
+cmake --build . --config Debug --target uo_ui_mp_x86 --parallel 4
 ```
 
 The targets are `CoDUOMP`, `uo_cgame_mp_x86`, `uo_ui_mp_x86`,
@@ -334,7 +334,7 @@ Extra MSBuild switches go after `--`, and `CMAKE_BUILD_PARALLEL_LEVEL` supplies
 the default parallel level when `--parallel` is omitted:
 
 ```sh
-cmake --build . --config Release --parallel 4 -- /p:SomeProperty=Value
+cmake --build . --config Debug --parallel 4 -- /p:SomeProperty=Value
 ```
 
 A single-configuration generator works from the same build directory:
