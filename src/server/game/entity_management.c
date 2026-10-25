@@ -1417,13 +1417,14 @@ void turret_think(gentity_t *turret)
 {
     turret_state_t *turretState = turret->turretState;
     const weaponInfo_t *weaponInfo;
-    int riderEntityNum = turret->passEntityNum;
+    gentity_t *rider;
 
     turret->nextthink = coduo_int32_from_bits(
         (uint32_t)level.time + (uint32_t)TURRET_THINK_MSEC);
     if (turret->linkInfo != NULL) {
         G_GeneralLink(turret);
     }
+    rider = &g_entities[turret->passEntityNum];
 
     if (turretState->heat >= TURRET_OVERHEAT_THRESHOLD) {
         turretState->overheating = 1;
@@ -1432,9 +1433,8 @@ void turret_think(gentity_t *turret)
         turret->s.turretOverheatState = 1;
     } else if (turretState->overheating != 0 &&
                turretState->heat <= TURRET_OVERHEAT_CLEAR_THRESHOLD) {
-        /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
+        /* Cooling releases the firing gate; the entity-state indicator stays latched. */
         turretState->overheating = 0;
-        turret->s.turretOverheatState = 0;
     }
 
     weaponInfo = (const weaponInfo_t *)BG_GetInfoForWeapon(
@@ -1445,7 +1445,7 @@ void turret_think(gentity_t *turret)
         turretState->heat = 0.0f;
     }
 
-    if (g_entities[riderEntityNum].client == NULL) {
+    if (rider->client == NULL) {
         G_UpdateTurretSound(turret);
         turret->s.eFlags &= ~TURRET_CLIENT_FIRING_FLAG;
         G_TurretReturnToRest(turret, qfalse);
@@ -1514,7 +1514,19 @@ void turret_think_init(gentity_t *turret)
         localEnd[0] = rotatedDelta[0] + aimTag->origin[0];
         localEnd[1] = rotatedDelta[1] + aimTag->origin[1];
         localEnd[2] = rotatedDelta[2] + aimTag->origin[2];
+#if defined(WINDOWS_BEHAVIOR)
+        /* This inlined transform sums Z, Y, X, then translation; each trace
+         * endpoint lane rounds only after the complete sum. */
+        for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
+            traceEnd[axisIndex] = (float)(
+                (((WIDE_FLOAT)localEnd[2] * entityAxis.axis[2][axisIndex] +
+                  (WIDE_FLOAT)localEnd[1] * entityAxis.axis[1][axisIndex]) +
+                 (WIDE_FLOAT)localEnd[0] * entityAxis.axis[0][axisIndex]) +
+                entityAxis.origin[axisIndex]);
+        }
+#else
         MatrixTransformVector43(localEnd, &entityAxis, traceEnd);
+#endif
 
         trap_LocationalTrace(&trace, traceStart, traceEnd, turret->s.number,
                              TURRET_INIT_TRACE_CONTENTS,
