@@ -126,7 +126,7 @@ which uses `/arch:IA32` for compiler-generated x87 arithmetic:
 
 ```sh
 cmake --preset msvc
-cmake --build --preset msvc --parallel 2
+cmake --build --preset msvc --config Debug --parallel 2
 ```
 
 For the Visual Studio `msvc` and `msvc-x64` presets, `--parallel N` enables
@@ -176,7 +176,7 @@ Explicitly select **64-bit x64** with:
 
 ```sh
 cmake --preset msvc-x64
-cmake --build --preset msvc-x64 --parallel 2
+cmake --build --preset msvc-x64 --config Debug --parallel 2
 ```
 
 **MSVC x64 cannot generate x87 arithmetic from C/C++.** Its compiler-generated
@@ -190,7 +190,7 @@ Visual Studio's Clang tools support, then select the `ClangCL` toolset:
 
 ```sh
 cmake --preset clang-cl-x64
-cmake --build --preset clang-cl-x64 --parallel 2
+cmake --build --preset clang-cl-x64 --config Debug --parallel 2
 ```
 
 The selected toolset must actually resolve to Clang 22 or newer; CMake checks
