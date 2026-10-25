@@ -5,6 +5,7 @@
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_int32_bits.h"
 #include "compat/coduo_native_x87.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/coduo_x87emu.h"
 #include "qcommon/q_bits.h"
 
@@ -151,12 +152,12 @@ void PM_Weapon_StartFiring(qboolean delayExpired)
 #else
             ps->weaponDelay = x87f_store_i32_trunc(delay);
 #endif
-#elif defined(WINDOWS_BEHAVIOR)
-            /* Preserve the live quotient and product through the qword
-             * conversion; a float reciprocal can change the delay. */
+#elif defined(WINDOWS_BEHAVIOR) || !CODUO_ARCH_HAS_X87
+            /* Preserve the live quotient and product through the platform's
+             * integer conversion; a float reciprocal can change the delay. */
             ps->weaponDelay = coduo_fp_to_i32_extended(
-                ((long double)one / (long double)rate) *
-                ((long double)one - (long double)adsFraction));
+                ((WIDE_FLOAT)one / (WIDE_FLOAT)rate) *
+                ((WIDE_FLOAT)one - (WIDE_FLOAT)adsFraction));
 #elif defined(__x86_64__) && \
       (defined(__GNUC__) || defined(__clang__))
             ps->weaponDelay = CODUO_X87_TRUNCATE_I32(
