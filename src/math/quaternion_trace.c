@@ -27,8 +27,8 @@
  * Windows folds the denominator w,z,y,x and returns the z,y,x numerator sum
  * live under PC=53.  Linux folds x,y,z,w, then explicitly stores the final
  * x,y,z sum to binary32 before reloading it.  long double is the project-wide
- * source carrier for this cross-platform ST0 contract; the emulated Windows
- * body transfers its PC=53 result through exact binary64 storage.
+ * source carrier for the Windows ST0 contract on every host. Native x87
+ * applies PC=53; other hosts retain their available native wide precision.
  */
 long double QuatEigenTrace(const vec4_t quaternion)
 {
