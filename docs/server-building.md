@@ -168,7 +168,6 @@ mkdir -p ~/.callofduty/uo
 ln -sfn "$PWD/uo/game.mp.uo.x86_64.so" ~/.callofduty/uo/game.mp.uo.x86_64.so
 
 ./coduo_lnxded \
-  +set com_hunkmegs 64 \
   +set dedicated 2 \
   +set net_ip "localhost" \
   +set net_port 28960 \
@@ -184,6 +183,47 @@ also searched for the module, so the game-data directory is left untouched. On
 a case-sensitive filesystem the game-data directories must be named `main` and
 `uo` in lower case. `mp_carentan` ships with the game; replace it with another
 map shipped in the game data. Stop the server with Ctrl+C.
+
+The example binds `net_ip` to `localhost`, so only players on the same machine
+can connect. Use `+set net_ip 0.0.0.0` to accept players from the network; see
+[Network ports](#network-ports).
+
+## Network ports
+
+The engine opens one UDP socket for the game port and does not listen on TCP.
+Give the server host a fixed LAN address, then forward the game port to that
+address on the router and allow it through the host firewall:
+
+| Direction | Protocol | Port | Purpose |
+| --- | --- | --- | --- |
+| Inbound | UDP | `28960` (`net_port`) | Gameplay, server queries, in-game downloads |
+| Outbound | UDP | `20610` | Master-server heartbeat for the in-game server list |
+| Outbound | UDP | `20600` | CD-key authorization when it is enabled |
+
+For example, with `ufw`:
+
+```sh
+sudo ufw allow 28960/udp
+```
+
+Use the equivalent rule for nftables or firewalld. Start the server with
+`+set net_ip 0.0.0.0` and, if the forwarded port differs from the default,
+`+set net_port <port>`. Players then connect to `<public-ip>:28960`.
+
+If port `28960` is already in use, the engine tries the next nine ports
+(`28961` through `28969`), updates `net_port`, and prints the port it bound
+(`Opening IP socket: ...:<port>`). Forward or allow that port instead. Each
+additional server on the same host needs its own port and forwarding rule.
+
+Only the game port needs an inbound rule. The master heartbeat and CD-key
+authorization are outbound connections from the server, so replies arrive on
+the existing UDP mapping. If outbound UDP is filtered, direct connections still
+work, but the server does not appear in the in-game list and authorization
+cannot complete.
+
+TCP is not used for gameplay. Setting `sv_wwwDownload 1` with `sv_wwwBaseURL`
+makes clients download mod files from that HTTP server over TCP, so open the web
+server's port rather than adding one on the game host.
 
 ## Native Windows build (MSVC)
 
