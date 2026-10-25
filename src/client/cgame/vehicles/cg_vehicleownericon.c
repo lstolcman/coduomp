@@ -47,6 +47,7 @@
 //  - 0x30021630: CG_AddHudHeadIconSprite(cent, material, yaw, 0, 180, (float)alphaScale)
 //    cdecl, 6 args, ADD ESP,0x18.
 
+#include "compat/libm/coduo_wide_math.h"
 #include <math.h>
 #include <string.h>
 
@@ -133,7 +134,7 @@ void CG_VehicleOwnerIcon(centity_t *cent)
          * float loaded FLD float into ST(1); powl keeps the base and result
          * 80-bit so the single (float) narrows once (a double pow return would
          * round twice). Exp 1.5 is the double at 0x3007c278. */
-        float alphaScale = (float)powl((long double)fade, 1.5L);
+        float alphaScale = (float)coduomp_math_powl((long double)fade, 1.5L);
 
         /* Yaw spin: rotate the icon by the phase-driven angle relative to its base
          * yaw. Both conversions use _ftol2 (0x3006be3c), truncating toward zero. */

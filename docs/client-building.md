@@ -137,17 +137,25 @@ whole program into an x87 build. Assignment to `WIDE_FLOAT` alone does not
 widen an expression computed entirely from narrower operands; existing casts
 and explicit arithmetic boundaries determine which operations are extended.
 
-The math compatibility header uses native x87 instruction kernels for the
-project's extended square root, absolute value, trigonometry, logarithm,
-exponential, and positive-base power calculations. It keeps the caller's
-control word and introduces no math dependency or software emulation.
-Nonpositive power bases, nonfinite inputs, and arguments outside the native
-kernels' domains use the platform's binary64 math. Reconstructed `CoduoLibm`
-routines remain in use; their explicit rounding boundaries are unchanged.
-These kernels do not reproduce the complete original CRT's dispatch,
-exception handling, or optional SSE2 power implementation. Rendering math
-may differ on fallback paths. Windows APIs and dependencies keep their normal
-Microsoft ABI; the SDK is not a general 80-bit long-double runtime.
+The shared C math layer (`src/compat/libm/coduo_wide_math.h`) reconstructs
+arithmetic cores from the original x87 instructions. Water log/exp and flame
+power callers use it on every compiler. C expresses the arithmetic, domain
+checks, exponent splitting, and power sign handling; the portability header
+contains only hardware instruction and control-word adapters. The clang-cl
+SDK header maps extended math names to these shared functions and handles
+SDK ABI differences. No math dependency or software emulation is added.
+
+Native x87 is selected by capability: GCC/Clang x86 with an 80-bit carrier,
+and MSVC x86 with its binary64 carrier. MSVC x86 still introduces binary64
+stores at the instruction adapters; native instructions alone do not establish
+extended-precision parity. MSVC x64 and non-x86 targets use platform math.
+Unsupported domains also use platform math. The power core preserves the
+original binary64 base store and CRT control-word adjustment; water log/exp
+keep the caller's control word. Existing `CoduoLibm` double boundaries remain
+unchanged. These cores do not reproduce the complete original CRT's exception
+handling or optional SSE2 power dispatch. Runtime parity remains unverified.
+Windows APIs and dependencies keep their normal Microsoft ABI; the SDK is
+not a general 80-bit long-double runtime.
 
 Do not add `-ffp-eval-method=extended` or disable SSE to this profile. Tested
 Clang 19.1.7 and 22.1.8 global extended evaluation mispasses variadic doubles
