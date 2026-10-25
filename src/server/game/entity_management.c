@@ -716,17 +716,17 @@ static uint32_t game_compat_g_turret_player_anim(uint32_t animationWord)
 
 /* NOT_FROM_ORIGINAL_SOURCE: weight blend-time expression; extracted during reconstruction of 0x5ac06. */
 /* VERIFIED_DECOMPILER(0x5ac06, 6ac06_FUN_0006ac06.c, VERIFY-ENTITY-MGMT-TURRET-2026-06-17): DATAFLOW_VERIFIED; current weight delta, 1000/frameTime blend frame calculation, positive reciprocal, and zero-time path match. */
-/* targetWeight is long double so call sites pass their weight EXPRESSION at
- * full 80-bit precision, as the stock inline code does (e.g. 0x5b0fe
- * subtracts the unrounded 1.0-secondWeight, not the float argument). */
+/* Linux subtracts the wide target-weight expression before its float delta
+ * store. Windows first rounds the target weight, then retains the difference
+ * and frame scaling through the reciprocal. */
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original G_PlayerTurretPositionAndBlend (0x5ac06); no standalone original body. */
 static float game_compat_g_turret_xanim_goal_time_for_weight(XAnimTree *animTree, uint32_t anim,
-                                            long double targetWeight)
+                                            WIDE_FLOAT targetWeight)
 {
-    /* 0x5b0f9..0x5b12d: |weight - targetWeight| kept 80-bit -> float (0x5b0fe);
-     * (BLEND_MSEC / fild(frameTime)) * weightDelta -> float (0x5b111); 1.0f /
-     * blendFrames (0x5b148).  targetWeight carries an exact-float value (1.0,
-     * selectedWeight, or the float-exact 1.0-selectedWeight), so load it f64. */
+    /* Linux stores the absolute weight difference and scaled frame count as
+     * floats. Windows retains both until the final float goal-time store.
+     * The target expression can carry more precision than its float syscall
+     * argument when it subtracts a child weight from one. */
 #if EMULATE_X87
     float weight = trap_XAnimGetWeight(animTree, anim);
     float weightDelta = x87f_store_f32(x87f_abs(x87f_sub(
@@ -741,15 +741,21 @@ static float game_compat_g_turret_xanim_goal_time_for_weight(XAnimTree *animTree
             x87f_div(x87f_load_f32(1.0f), x87f_load_f32(blendFrames)));
     }
     return 0.0f;
-#else
-    float weightDelta = fabsl(trap_XAnimGetWeight(animTree, anim) -
-                              targetWeight);
-    float blendFrames = (TURRET_POSITION_BLEND_MSEC /
-                         level.frameTime) *
-                        weightDelta;
+#elif defined(WINDOWS_BEHAVIOR)
+    const float roundedTargetWeight = (float)targetWeight;
+    WIDE_FLOAT weightDelta = fabsl((WIDE_FLOAT)trap_XAnimGetWeight(animTree, anim) - roundedTargetWeight);
+    WIDE_FLOAT blendFrames = ((WIDE_FLOAT)TURRET_POSITION_BLEND_MSEC / level.frameTime) * weightDelta;
 
     if (blendFrames > 0.0f) {
-        return 1.0f / blendFrames;
+        return (float)((WIDE_FLOAT)1.0f / blendFrames);
+    }
+    return 0.0f;
+#else
+    float weightDelta = (float)fabsl((WIDE_FLOAT)trap_XAnimGetWeight(animTree, anim) - targetWeight);
+    float blendFrames = (float)(((WIDE_FLOAT)TURRET_POSITION_BLEND_MSEC / level.frameTime) * weightDelta);
+
+    if (blendFrames > 0.0f) {
+        return (float)((WIDE_FLOAT)1.0f / blendFrames);
     }
     return 0.0f;
 #endif
@@ -759,7 +765,7 @@ static float game_compat_g_turret_xanim_goal_time_for_weight(XAnimTree *animTree
 /* VERIFIED_DECOMPILER(0x5ac06, 6ac06_FUN_0006ac06.c, VERIFY-ENTITY-MGMT-TURRET-2026-06-17): DATAFLOW_VERIFIED; trap_XAnimSetGoalWeight argument order, computed goal time, fixed rate, notify, and restart fields match. */
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original G_PlayerTurretPositionAndBlend (0x5ac06); no standalone original body. */
 static void game_compat_g_turret_set_anim_weight(XAnimTree *animTree, uint32_t anim,
-                                  long double targetWeight)
+                                  WIDE_FLOAT targetWeight)
 {
     trap_XAnimSetGoalWeight(animTree, anim, targetWeight,
                             game_compat_g_turret_xanim_goal_time_for_weight(animTree, anim,
@@ -771,7 +777,7 @@ static void game_compat_g_turret_set_anim_weight(XAnimTree *animTree, uint32_t a
 /* NOT_FROM_ORIGINAL_SOURCE: animation child-position clamp; extracted during reconstruction of 0x5ac06. */
 /* VERIFIED_DECOMPILER(0x5ac06, 6ac06_FUN_0006ac06.c, VERIFY-ENTITY-MGMT-TURRET-2026-06-17): DATAFLOW_VERIFIED; negative clamp, childCount-1 upper clamp, and pass-through path match. */
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original G_PlayerTurretPositionAndBlend (0x5ac06); no standalone original body. */
-static float game_compat_g_turret_clamp_child_position(float childPosition, int childCount)
+static WIDE_FLOAT game_compat_g_turret_clamp_child_position(WIDE_FLOAT childPosition, int childCount)
 {
     if (childPosition < 0.0f) {
         return 0.0f;
@@ -795,7 +801,7 @@ static void game_compat_g_turret_set_child_pair_weight(XAnimTree *animTree, uint
 
     trap_XAnimGetChildAt(&childAnim, parentAnim, childIndex);
     game_compat_g_turret_set_anim_weight(animTree, childAnim,
-                          (1.0f - secondWeight) * weightScale);
+                          ((WIDE_FLOAT)1.0f - secondWeight) * weightScale);
 
     if (secondWeight != 0.0f || isnan(secondWeight)) {
         trap_XAnimGetChildAt(&childAnim, parentAnim, childIndex + 1);
@@ -808,7 +814,7 @@ static void game_compat_g_turret_set_child_pair_weight(XAnimTree *animTree, uint
 /* VERIFIED_DECOMPILER(0x5ac06, 6ac06_FUN_0006ac06.c, VERIFY-ENTITY-MGMT-TURRET-2026-06-17): DATAFLOW_VERIFIED; search-loop child lookup outputs, immediate 1.0-rate priming, fractional split, and NaN-inclusive second child path match. */
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original G_PlayerTurretPositionAndBlend (0x5ac06); no standalone original body. */
 static float game_compat_g_turret_prime_child_pair(XAnimTree *animTree, uint32_t parentAnim,
-                                    float childPosition,
+                                    WIDE_FLOAT childPosition,
                                     int *childIndexOut,
                                     uint32_t *firstChildAnim,
                                     uint32_t *secondChildAnim)
@@ -819,9 +825,9 @@ static float game_compat_g_turret_prime_child_pair(XAnimTree *animTree, uint32_t
     int childIndex =
         CODUO_X87_TRUNCATE_I32((long double)childPosition);
 #else
-    int childIndex = game_compat_int32_from_float_trunc(childPosition);
+    int childIndex = game_compat_int32_from_long_double_trunc(childPosition);
 #endif
-    float secondWeight = childPosition - (float)childIndex;
+    float secondWeight = (float)(childPosition - (WIDE_FLOAT)childIndex);
 
     *childIndexOut = childIndex;
     *secondChildAnim = 0;
@@ -880,7 +886,7 @@ static int game_compat_g_turret_select_aiming_anim(XAnimTree *animTree, uint32_t
         uint32_t secondChildAnim;
         int childCount;
         int childIndex;
-        float childPosition;
+        WIDE_FLOAT childPosition;
         float secondWeight;
 
         trap_XAnimGetChildAt(&topAnim, rootAnim, topIndex);
@@ -892,9 +898,12 @@ static int game_compat_g_turret_select_aiming_anim(XAnimTree *animTree, uint32_t
                       trap_XAnimGetAnimName(topAnim));
         }
 
-        childPosition = game_compat_g_turret_clamp_child_position(
-            (float)childCount * 0.5f - turretYaw / horizontalRotateIncrement,
-            childCount);
+        childPosition = (WIDE_FLOAT)childCount * 0.5f - (WIDE_FLOAT)turretYaw / horizontalRotateIncrement;
+#if !defined(WINDOWS_BEHAVIOR)
+        /* Linux rounds the child position before clamping and truncation. */
+        childPosition = (float)childPosition;
+#endif
+        childPosition = game_compat_g_turret_clamp_child_position(childPosition, childCount);
         secondWeight = game_compat_g_turret_prime_child_pair(animTree, topAnim,
                                               childPosition, &childIndex,
                                               &firstChildAnim,
@@ -1018,7 +1027,7 @@ void G_PlayerTurretPositionAndBlend(gentity_t *player, gentity_t *turret)
 
     trap_XAnimClearTreeGoalWeightsStrict(animTree, rootAnim, 0.0f);
     game_compat_g_turret_set_anim_weight(animTree, selectedFirstChildAnim,
-                          1.0f - selectedSecondWeight);
+                          (WIDE_FLOAT)1.0f - selectedSecondWeight);
     if (selectedSecondWeight != 0.0f || isnan(selectedSecondWeight)) {
         game_compat_g_turret_set_anim_weight(animTree, selectedSecondChildAnim,
                               selectedSecondWeight);
@@ -1033,12 +1042,12 @@ void G_PlayerTurretPositionAndBlend(gentity_t *player, gentity_t *turret)
     } else {
         uint32_t previousAnim;
         float selectedWeight =
-            (targetForwardOffset - previousDeltaZ) /
-            (currentDeltaZ - previousDeltaZ);
+            (float)(((WIDE_FLOAT)targetForwardOffset - previousDeltaZ) /
+                    ((WIDE_FLOAT)currentDeltaZ - previousDeltaZ));
 
         game_compat_g_turret_set_anim_weight(animTree, selectedAnim, selectedWeight);
         trap_XAnimGetChildAt(&previousAnim, rootAnim, selectedTopIndex - 1);
-        game_compat_g_turret_set_anim_weight(animTree, previousAnim, 1.0f - selectedWeight);
+        game_compat_g_turret_set_anim_weight(animTree, previousAnim, (WIDE_FLOAT)1.0f - selectedWeight);
         game_compat_g_turret_set_child_pair_weight(animTree, previousAnim,
                                    previousChildIndex, previousSecondWeight,
                                    1.0f);
