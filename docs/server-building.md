@@ -8,7 +8,7 @@ The public tree contains two independently useful target families:
   its shared BG/qcommon/math dependencies.
 
 `CMakeLists.txt` builds the same dedicated-server executable natively with the
-Visual Studio 2022 toolchain on Windows; see
+Visual Studio toolchain on Windows; see
 [Native Windows build (MSVC)](#native-windows-build-msvc).
 
 ## CD-key Authorization
@@ -33,8 +33,8 @@ its original authorization defaults.
 - For Windows cross-builds, a 32-bit MinGW compiler such as
   `i686-w64-mingw32-gcc` plus its matching `g++`
 - MinGW-compatible zlib headers and library for the Windows engine
-- For the native Windows build, CMake 3.21 or newer and the Visual Studio 2022
-  C++ build tools
+- For the native Windows build, CMake 3.21 or newer and the Visual Studio C++
+  build tools
 
 ## Compile Checks
 
@@ -95,21 +95,24 @@ Output:
 
 ## Native Windows build (MSVC)
 
-`CMakeLists.txt` builds the dedicated server with the Visual Studio 2022
-toolchain together with the client targets. It uses the bundled `libs/` tree
+`CMakeLists.txt` builds the dedicated server with the Visual Studio toolchain
+together with the client targets. It uses the bundled `libs/` tree
 described in `client-building.md`, so no MinGW toolchain or external zlib
 installation is required.
 
 ```sh
 mkdir build && cd build
-cmake -G "Visual Studio 17 2022" -A Win32 -DBUNDLED_LIBS=YES ..
+cmake -A Win32 -DBUNDLED_LIBS=YES ..
 cmake --build . --config Release --parallel 4
 ```
 
-`--parallel 4` lets MSBuild build four projects at once and passes `/MP4` to the
-compiler, so each project compiles four files at a time. Change the number to
-suit the host; `--parallel` without a number uses every processor, and removing
-it builds without parallelism.
+CMake selects the newest installed Visual Studio generator; add `-G` with a
+generator from `cmake --help` to build with another installed version.
+
+`--parallel 4` compiles four source files at a time; projects build one after
+another, so the number is the budget for the whole build. Change it to suit the
+host; `--parallel` without a number uses every processor, and removing it builds
+without parallelism.
 
 Output:
 
@@ -129,7 +132,7 @@ other components. The client-only dependencies (`minizip`, `SDL2`,
 built:
 
 ```sh
-cmake -G "Visual Studio 17 2022" -A Win32 -DBUNDLED_LIBS=YES -DCODUOMP_BUILD_CLIENT=OFF -DCODUOMP_BUILD_MODULES=OFF ..
+cmake -A Win32 -DBUNDLED_LIBS=YES -DCODUOMP_BUILD_CLIENT=OFF -DCODUOMP_BUILD_MODULES=OFF ..
 ```
 
 That solution contains `coduo_dedicated_recovered` and the bundled zlib.
@@ -148,15 +151,39 @@ mount the localized pak that carries `default_mp.cfg` and startup fails with
 `localized_polish_*` and the other supported names for every language in that
 table. `fs_ignoreLozalized 1` still disables localized assets.
 
+### Advanced configuration
+
+The solution can be opened in Visual Studio, or built directly with MSBuild.
+The direct form is equivalent to the `cmake --build` line above and needs a
+*Visual Studio Developer Command Prompt*, where `MSBuild.exe` is on `PATH`:
+
+```sh
+MSBuild.exe CoDUOMP.sln /m:4 /p:Configuration=Release /p:Platform=Win32
+```
+
+`Debug`, `MinSizeRel` and `RelWithDebInfo` are generated as well; each stages its
+output in `build/bin/<config>/`:
+
+```sh
+cmake --build . --config RelWithDebInfo --target coduo_dedicated_recovered --parallel 4
+```
+
 CD-key authorization and PunkBuster are selected at configure time; the default
 matches the Makefile target (`AUTH=0`, PunkBuster disabled):
 
 ```cmd
-cmake -G "Visual Studio 17 2022" -A Win32 -DBUNDLED_LIBS=YES ^
+cmake -A Win32 -DBUNDLED_LIBS=YES ^
   -DCODUOMP_DISABLE_SERVER_AUTH=OFF -DCODUOMP_ENABLE_PUNKBUSTER=ON ..
 ```
 
-A single-configuration generator also works:
+Extra MSBuild switches go after `--`, and `CMAKE_BUILD_PARALLEL_LEVEL` supplies
+the default parallel level when `--parallel` is omitted:
+
+```sh
+cmake --build . --config Release --parallel 4 -- /p:SomeProperty=Value
+```
+
+A single-configuration generator works from the same build directory:
 
 ```sh
 cmake -G "NMake Makefiles" -DBUNDLED_LIBS=YES .. && nmake

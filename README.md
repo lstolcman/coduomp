@@ -201,7 +201,7 @@ make client-windows-i686-package \
   MINGW32_DEP_PREFIX=/c/path/to/i686-prefix
 ```
 
-#### Native Visual Studio 2022 build
+#### Native Visual Studio build
 
 A 32-bit MSVC solution for the client, its modules, and the dedicated server is
 available from `CMakeLists.txt`. See the

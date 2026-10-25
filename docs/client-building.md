@@ -261,7 +261,7 @@ to `0`.
 ### Native Windows build (MSVC)
 
 A native 32-bit Windows build is available through `CMakeLists.txt`. It uses
-the Visual Studio 2022 toolchain and the third-party libraries bundled in
+the Visual Studio toolchain and the third-party libraries bundled in
 `libs/` (zlib, minizip, SDL2, libjpeg-turbo and libcurl). The first configure
 downloads the pinned GitHub archives into `libs/<name>` (verified by SHA-256,
 no git installation required); later configures reuse them.
@@ -270,20 +270,17 @@ Generate a Visual Studio solution and build it:
 
 ```sh
 mkdir build && cd build
-cmake -G "Visual Studio 17 2022" -A Win32 -DBUNDLED_LIBS=YES ..
+cmake -A Win32 -DBUNDLED_LIBS=YES ..
 cmake --build . --config Release --parallel 4
 ```
 
-`--parallel 4` lets MSBuild build four projects at once and passes `/MP4` to the
-compiler, so each project compiles four files at a time. Change the number to
-suit the host; `--parallel` without a number uses every processor, and removing
-it builds without parallelism.
+CMake selects the newest installed Visual Studio generator; add `-G` with a
+generator from `cmake --help` to build with another installed version.
 
-Alternatively, from the same build directory, use NMake makefiles:
-
-```sh
-cmake -G "NMake Makefiles" -DBUNDLED_LIBS=YES .. && nmake
-```
+`--parallel 4` compiles four source files at a time; projects build one after
+another, so the number is the budget for the whole build. Change it to suit the
+host; `--parallel` without a number uses every processor, and removing it builds
+without parallelism.
 
 The executable is written to `build/bin/Release/CoDUOMP.exe` and its modules to
 `build/bin/Release/uo/`. This build links the bundled libraries and the MSVC
@@ -291,6 +288,60 @@ runtime statically, and it uses the built-in Miniaudio backend, so it does not
 load the retail 32-bit `mss32.dll`. The dedicated server executable is staged in
 the same directory and uses `cmake/msvc-posix/` for the POSIX names that MinGW
 provides.
+
+#### Advanced configuration
+
+The solution can be opened in Visual Studio, or built directly with MSBuild.
+The direct form is equivalent to the `cmake --build` line above and needs a
+*Visual Studio Developer Command Prompt*, where `MSBuild.exe` is on `PATH`:
+
+```sh
+MSBuild.exe CoDUOMP.sln /m:4 /p:Configuration=Release /p:Platform=Win32
+```
+
+`Debug`, `MinSizeRel` and `RelWithDebInfo` are generated as well; every
+configuration stages its output in `build/bin/<config>/`, with the modules under
+`uo/`:
+
+```sh
+cmake --build . --config RelWithDebInfo --parallel 4
+```
+
+Build one target instead of the whole solution:
+
+```sh
+cmake --build . --config Release --target uo_ui_mp_x86 --parallel 4
+```
+
+The targets are `CoDUOMP`, `uo_cgame_mp_x86`, `uo_ui_mp_x86`,
+`uo_game_mp_x86` (the listen-server game module) and
+`coduo_dedicated_recovered`.
+
+Configure-time options are passed at the `cmake` step as `-D<name>=<value>`:
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `CODUOMP_BUILD_CLIENT` | `ON` | Build `CoDUOMP.exe`. |
+| `CODUOMP_BUILD_MODULES` | `ON` | Build the cgame, UI and listen-server modules. |
+| `CODUOMP_BUILD_SERVER` | `ON` | Build the dedicated server executable. |
+| `BUNDLED_LIBS` | `ON` | Fetch and build the third-party libraries in `libs/`. |
+| `CODUOMP_DEP_PREFIX` | empty | Prefix holding `include/` and `lib/` for prebuilt dependencies when `BUNDLED_LIBS=OFF`. |
+| `CODUOMP_STATIC_VCRT` | `ON` | Link the MSVC runtime statically (`/MT`). |
+| `CODUOMP_CURL_STATIC` | `ON` | Define `CURL_STATICLIB` for a static libcurl. |
+| `CODUOMP_RENDERER_GPU_PROFILE` | `OFF` | Compile the asynchronous renderer GPU timing path. |
+
+Extra MSBuild switches go after `--`, and `CMAKE_BUILD_PARALLEL_LEVEL` supplies
+the default parallel level when `--parallel` is omitted:
+
+```sh
+cmake --build . --config Release --parallel 4 -- /p:SomeProperty=Value
+```
+
+A single-configuration generator works from the same build directory:
+
+```sh
+cmake -G "NMake Makefiles" -DBUNDLED_LIBS=YES .. && nmake
+```
 
 ### Makefile
 

@@ -2,7 +2,7 @@
 # CoDUOMP Visual Studio build
 #
 #   mkdir build && cd build
-#   cmake -G "Visual Studio 17 2022" -A Win32 -DBUNDLED_LIBS=YES ..
+#   cmake -A Win32 -DBUNDLED_LIBS=YES ..
 #   MSBuild.exe CoDUOMP.sln /m /p:Configuration=Release /p:Platform=Win32
 #
 # A single-configuration generator also works:
