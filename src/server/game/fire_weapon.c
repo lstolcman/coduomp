@@ -66,18 +66,16 @@ static void game_compat_fire_weapon_vector_ma(const float *start, float scale, c
 #endif
 }
 
+#if EMULATE_X87
 /* NOT_FROM_ORIGINAL_SOURCE: local vector helper factored from recovered fire-weapon bodies. */
 static float game_compat_fire_weapon_dot_product(const float *a, const float *b)
 {
-#if EMULATE_X87
     return x87f_store_f32(x87f_add(
         x87f_add(x87f_mul(x87f_load_f32(a[0]), x87f_load_f32(b[0])),
                  x87f_mul(x87f_load_f32(a[1]), x87f_load_f32(b[1]))),
         x87f_mul(x87f_load_f32(a[2]), x87f_load_f32(b[2]))));
-#else
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-#endif
 }
+#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: local predicate factored from recovered tracer checks. */
 static qboolean game_compat_fire_weapon_is_tracer_ammo_type(int ammoType)
@@ -239,7 +237,18 @@ qboolean infront(gentity_t *self, gentity_t *other)
     game_compat_fire_weapon_vector_subtract(other->currentOrigin, self->currentOrigin, dir);
     VectorNormalize(dir);
 
-    return game_compat_fire_weapon_dot_product(dir, forward) > 0.0f;
+    /* Keep the dot products and sum wide, then round once before the test.
+     * Windows accumulates Z/Y/X; Linux accumulates X/Y/Z. */
+#if EMULATE_X87
+    float dot = game_compat_fire_weapon_dot_product(dir, forward);
+#elif defined(WINDOWS_BEHAVIOR)
+    volatile float dot = ((WIDE_FLOAT)forward[2] * dir[2] + (WIDE_FLOAT)forward[1] * dir[1])
+                         + (WIDE_FLOAT)forward[0] * dir[0];
+#else
+    volatile float dot = ((WIDE_FLOAT)dir[0] * forward[0] + (WIDE_FLOAT)dir[1] * forward[1])
+                         + (WIDE_FLOAT)dir[2] * forward[2];
+#endif
+    return dot > 0.0f;
 }
 
 /* ------------------------------------------------------------------ */
