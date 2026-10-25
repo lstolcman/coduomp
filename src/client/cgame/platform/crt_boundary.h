@@ -14,9 +14,12 @@
  * they are not CoD client game source and must not be reconstructed under
  * src/client/cgame/functions/.
  *
- * Recovered game code uses ordinary host facilities where the CRT contract is
- * platform-specific and the compatibility interfaces above only where the
- * original Windows behavior is part of the recovered client contract.
+ * The original Windows CRT's observable behavior is part of the recovered
+ * client contract. Reimplement it in shared compatibility code where host
+ * facilities differ; static-runtime classification does not exempt a service
+ * from that requirement. The includes above are one part of that boundary.
+ * Host facilities are suitable only where they preserve the supported caller
+ * contract. Native floating-point limits do not waive other CRT semantics.
  */
 
 #endif /* CLIENT_CRT_BOUNDARY_H */

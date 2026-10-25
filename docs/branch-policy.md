@@ -29,6 +29,40 @@ A hardening check may reject malformed input, but it must not reject legitimate
 stock maps, mods, packages, servers, or player behavior. Treat a false positive
 as an unresolved bug in the check.
 
+### CRT compatibility boundary
+
+The original Windows CRT functions reached by recovered engine and module code
+are part of the behavior contract. Reimplement their observable semantics in
+the shared compatibility layer when host libc/libm does not preserve them.
+This includes random sequences and image/thread state ownership, parsing and
+conversion results, sorting order, character handling, formatting bytes and
+return values, and ownership or failure behavior observed by callers. A standard
+C name or matching signature does not establish compatibility.
+
+Host services may implement a boundary only when their behavior matches over
+the supported caller domain. Private heap layouts, startup machinery, locale
+tables, stream internals, exception dispatch, stack probes, and security-cookie
+implementations need not be cloned merely because they were statically linked.
+Their observable effects still matter: for example, allocation ownership,
+environment-string lifetime, and the executable's floating-point initialization.
+CRT classification identifies implementation ownership; it does not exempt a
+function from behavior recovery. Shared replacements belong in compatibility
+code, rather than being presented as original game functions.
+
+Software x87 emulation remains prohibited. Use native x87 where supported and
+the widest appropriate native C arithmetic elsewhere, preserving the actual
+rounding and truncation points. macOS arm64 cannot reproduce the hardware x87
+execution model with its native arithmetic; document the specific limitations
+instead of promising identical results. This exception does not cover other
+CRT semantics that can be reproduced. In particular, the original decimal
+parser's integer arithmetic and construction of floating-point result bits are
+CRT algorithms, not an x87 emulator, and remain part of the compatibility layer.
+
+A partial wrapper or host-libm fallback is not proof of complete CRT parity.
+Keep unsupported formats, domains, and observable side effects explicit until
+verified against the identified original Windows implementation. Required CRT
+compatibility changes belong in stock and must be merged forward into master.
+
 ## Improved boundary
 
 Improved descends from stock and contains intentional product changes:
