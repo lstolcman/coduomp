@@ -25,6 +25,8 @@
 #define BULLET_TRACE_DISTANCE 10000.0f
 #define WEAPON_SPREAD_PI 3.141592653589793  /* original double64 0x400921fb54442d18 */
 #define WEAPON_SPREAD_DEGREES 180.0         /* original double64 0x4066800000000000 */
+#define WEAPON_SPREAD_WINDOWS_PI 3.1415927f
+#define WEAPON_SPREAD_WINDOWS_INV_DEGREES 0.0055555557f
 #define DAMAGE_FLAG_RICOCHET 0x20
 #define MUZZLE_ADS_FORWARD_DISTANCE 19.0f
 #define MUZZLE_MIN_VIEW_HEIGHT 8.0f
@@ -114,6 +116,28 @@ static void game_compat_fire_weapon_spread_direction(const weapon_muzzle_t *muzz
 {
     float x;
     float y;
+#if defined(WINDOWS_BEHAVIOR) && !EMULATE_X87
+    WIDE_FLOAT radians = (WIDE_FLOAT)spread * WEAPON_SPREAD_WINDOWS_PI;
+    radians *= WEAPON_SPREAD_WINDOWS_INV_DEGREES;
+    /* Windows keeps the tangent live until the scaled radius store. */
+    volatile float radius = coduo_x87_tanl(radians) * WEAPON_PROJECTILE_SPREAD_DISTANCE;
+    gunrandom(&x, &y);
+
+    const WIDE_FLOAT lateralRight = (WIDE_FLOAT)x * radius;
+    const WIDE_FLOAT lateralUp = (WIDE_FLOAT)y * radius;
+    const WIDE_FLOAT forwardX = (WIDE_FLOAT)muzzle->forward[0] * WEAPON_PROJECTILE_SPREAD_DISTANCE;
+    const WIDE_FLOAT forwardY = (WIDE_FLOAT)muzzle->forward[1] * WEAPON_PROJECTILE_SPREAD_DISTANCE;
+    volatile float forwardZ = (WIDE_FLOAT)muzzle->forward[2] * WEAPON_PROJECTILE_SPREAD_DISTANCE;
+
+    /* The middle lane stays wide through both additions. X and Z have a
+     * binary32 boundary between the right and up contributions. */
+    volatile float rightX = lateralRight * muzzle->right[0] + forwardX;
+    const WIDE_FLOAT rightY = lateralRight * muzzle->right[1] + forwardY;
+    volatile float rightZ = lateralRight * muzzle->right[2] + forwardZ;
+    dir[0] = lateralUp * muzzle->up[0] + rightX;
+    dir[1] = lateralUp * muzzle->up[1] + rightY;
+    dir[2] = lateralUp * muzzle->up[2] + rightZ;
+#else
     double radians;
     float tangent;
     float radius;
@@ -139,10 +163,9 @@ static void game_compat_fire_weapon_spread_direction(const weapon_muzzle_t *muzz
     /* 0x7b446/0x7b46f/0x7b4a2 (and the 0x7b594 artillery copy): each dir
      * component is accumulated through three float32 stores (forward
      * stage, then right*x, then up*y), not one 80-bit chain. */
-    /* forward*DIST is a single mul (DIST=16, a power of two) stored to float —
-     * native-identical. The right*x and up*y terms are mul-then-add and are
-     * emulated; the comment's "three float32 stores" is exactly per-statement
-     * rounding. */
+    /* Multiplication by 16 is exact for the bounded direction components.
+     * Each right*x and up*y product stays wide through its addition; only
+     * the completed lane update rounds to float. */
     dir[0] = muzzle->forward[0] * WEAPON_PROJECTILE_SPREAD_DISTANCE;
     dir[1] = muzzle->forward[1] * WEAPON_PROJECTILE_SPREAD_DISTANCE;
     dir[2] = muzzle->forward[2] * WEAPON_PROJECTILE_SPREAD_DISTANCE;
@@ -158,12 +181,13 @@ static void game_compat_fire_weapon_spread_direction(const weapon_muzzle_t *muzz
             x87f_mul(x87f_load_f32(muzzle->up[i]), x87f_load_f32(y))));
     }
 #else
-    dir[0] += muzzle->right[0] * x;
-    dir[1] += muzzle->right[1] * x;
-    dir[2] += muzzle->right[2] * x;
-    dir[0] += muzzle->up[0] * y;
-    dir[1] += muzzle->up[1] * y;
-    dir[2] += muzzle->up[2] * y;
+    dir[0] = (WIDE_FLOAT)muzzle->right[0] * x + dir[0];
+    dir[1] = (WIDE_FLOAT)muzzle->right[1] * x + dir[1];
+    dir[2] = (WIDE_FLOAT)muzzle->right[2] * x + dir[2];
+    dir[0] = (WIDE_FLOAT)muzzle->up[0] * y + dir[0];
+    dir[1] = (WIDE_FLOAT)muzzle->up[1] * y + dir[1];
+    dir[2] = (WIDE_FLOAT)muzzle->up[2] * y + dir[2];
+#endif
 #endif
     VectorNormalize(dir);
 }
