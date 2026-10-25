@@ -146,6 +146,13 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_MOTION_ANIM_FRAME_SECONDS  0.05f
 #define VEH_MOTION_ANIM_PHASE_STEP     36.0f
 #define VEH_MOTION_ANIM_CENTER         127.0f
+#define VEH_MOTION_ANIM_DEGREES        30.0f
+/* Windows body conversion uses binary32 values of 30/127 and 127/30. */
+#define VEH_MOTION_ANIM_DECODE_SCALE   0.23622047901153564453125f
+#define VEH_MOTION_ANIM_ENCODE_SCALE   4.233333110809326171875f
+#define VEH_MOTION_ANIM_PI            3.1415927410125732421875f
+#define VEH_MOTION_ANIM_DEGREE_SCALE  0.0055555556900799274444580078125f
+#define VEH_MOTION_ANIM_MAX           255.0f
 #define VEH_MOTION_ANIM_SCALE          (127.0f / 30.0f)
 #define VEH_PI                         3.1415927f /* original float32 0x40490fdb */
 #define VEH_PATH_DEBUG_SEGMENT_DOT     0.9999f /* original float32 0x3f7ff972 */
@@ -1551,61 +1558,31 @@ static void game_compat_veh_update_turret_activity(vehicle_state_t *vehicleState
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-static
-#if !EMULATE_X87 && defined(__x86_64__)
-__attribute__((always_inline)) inline
-#endif
-int game_compat_veh_motion_byte_from_axis(float value)
+static int game_compat_veh_motion_byte_from_axis(WIDE_FLOAT value)
 {
-    /* 0x86864..0x8693c (both VEH_UpdateBody expansions): the original
+    /* 0x86864..0x8693c (both Linux VEH_UpdateBody expansions): the original
      * multiplies by 127 and divides by 30 as separate operations (never the
      * folded 127/30 constant), keeps the chain in 80-bit registers through
      * the float 0/255 compares, rounds it to DOUBLE for floor(), and the
-     * clamp arms are the doubles 0.0 / 255.0. */
-    double scaled;
-
-#if EMULATE_X87
-    /* value*127/30 + 127 stays in x87 width across the 0/255 compares (per
-     * 0x86864..0x8693c) and is rounded to double only for floor(). */
-    x87f x = x87f_add(
-        x87f_div(x87f_mul(x87f_load_f32(value),
-                          x87f_load_f32(VEH_MOTION_ANIM_CENTER)),
-                 x87f_load_f32(30.0f)),
-        x87f_load_f32(VEH_MOTION_ANIM_CENTER));
-    if (x87f_lt(x87f_load_f32(0.0f), x)) {
-        if (x87f_lt(x, x87f_load_f32(255.0f))) {
-            scaled = x87f_store_f64(x);
-        } else {
-            scaled = 255.0;
-        }
-    } else {
-        scaled = 0.0;
-    }
+     * clamp arms are the doubles 0.0 / 255.0. Windows uses the rounded
+     * binary32 127/30 coefficient and keeps the forward axis wide on entry. */
+    volatile double scaled;
+#if defined(WINDOWS_BEHAVIOR)
+    const WIDE_FLOAT encoded = value * VEH_MOTION_ANIM_ENCODE_SCALE + VEH_MOTION_ANIM_CENTER;
 #else
-    if (value * VEH_MOTION_ANIM_CENTER / 30.0f + VEH_MOTION_ANIM_CENTER >
-        0.0f) {
-        if (255.0f >
-            value * VEH_MOTION_ANIM_CENTER / 30.0f + VEH_MOTION_ANIM_CENTER) {
-            scaled = value * VEH_MOTION_ANIM_CENTER / 30.0f +
-                     VEH_MOTION_ANIM_CENTER;
-        } else {
-            scaled = 255.0;
-        }
-    } else {
-        scaled = 0.0;
-    }
+    const WIDE_FLOAT encoded = value * VEH_MOTION_ANIM_CENTER / VEH_MOTION_ANIM_DEGREES + VEH_MOTION_ANIM_CENTER;
 #endif
-
-#if EMULATE_X87
-    return x87f_store_i32_trunc(x87f_load_f64(floor(scaled)));
-#elif defined(__x86_64__)
-    {
-        const double rounded = floor(scaled);
-        return CODUO_X87_TRUNCATE_I32((long double)rounded);
+    if (encoded > 0.0f) {
+        if (encoded < VEH_MOTION_ANIM_MAX) {
+            scaled = (double)encoded;
+        } else {
+            scaled = VEH_MOTION_ANIM_MAX;
+        }
+    } else {
+        scaled = 0.0;
     }
-#else
+    /* The clamp also maps unordered values to zero, so conversion is in range. */
     return (int)floor(scaled);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
@@ -2772,34 +2749,19 @@ void Scr_Vehicle_Controller(gentity_t *ent, uint32_t *partBits)
 {
     vehicle_state_t *vehicleState = (vehicle_state_t *)ent->vehicle;
     const vehicleInfo_t *vehicleInfo = game_compat_veh_get_vehicle_info(vehicleState->typeIndex);
+    /* Decode signed integer lanes without an intermediate float conversion.
+     * Each angle is stored to float before the bone update. Windows uses a
+     * rounded coefficient; Linux keeps the multiply and divide separate. */
     const vec3_t bodyAngles = {
-        ((float)game_compat_veh_float_slot_int_bits(&ent->s.loopedFxForward[0]) -
-         VEH_MOTION_ANIM_CENTER) *
-            30.0f / VEH_MOTION_ANIM_CENTER,
+#if defined(WINDOWS_BEHAVIOR)
+        (float)(((WIDE_FLOAT)ent->s.vehicleBodyPitchPacked - VEH_MOTION_ANIM_CENTER) * VEH_MOTION_ANIM_DECODE_SCALE),
         0.0f,
-        ((float)game_compat_veh_float_slot_int_bits(&ent->s.loopedFxForward[2]) -
-         VEH_MOTION_ANIM_CENTER) *
-            30.0f / VEH_MOTION_ANIM_CENTER
-    };
-    const vec3_t primaryBaseAngles = {
+        (float)(((WIDE_FLOAT)ent->s.vehicleBodyRollPacked - VEH_MOTION_ANIM_CENTER) * VEH_MOTION_ANIM_DECODE_SCALE)
+#else
+        (float)(((WIDE_FLOAT)ent->s.vehicleBodyPitchPacked - VEH_MOTION_ANIM_CENTER) * VEH_MOTION_ANIM_DEGREES / VEH_MOTION_ANIM_CENTER),
         0.0f,
-        game_compat_veh_entity_primary_yaw(ent),
-        0.0f
-    };
-    const vec3_t primaryBarrelAngles = {
-        ent->s.vehicleTurret.primaryPitch,
-        0.0f,
-        0.0f
-    };
-    const vec3_t gunnerBaseAngles = {
-        0.0f,
-        game_compat_veh_entity_gunner_yaw_base(ent),
-        0.0f
-    };
-    const vec3_t gunnerBarrelAngles = {
-        ent->s.vehicleTurret.gunnerPitch,
-        0.0f,
-        0.0f
+        (float)(((WIDE_FLOAT)ent->s.vehicleBodyRollPacked - VEH_MOTION_ANIM_CENTER) * VEH_MOTION_ANIM_DEGREES / VEH_MOTION_ANIM_CENTER)
+#endif
     };
     int boneIndex;
 
@@ -2808,6 +2770,9 @@ void Scr_Vehicle_Controller(gentity_t *ent, uint32_t *partBits)
         G_DObjSetLocalBoneIndex(ent, partBits, boneIndex, vec3_origin,
                                 bodyAngles);
     }
+
+    const vec3_t primaryBaseAngles = { 0.0f, ent->s.vehicleTurret.primaryYaw, 0.0f };
+    const vec3_t primaryBarrelAngles = { ent->s.vehicleTurret.primaryPitch, 0.0f, 0.0f };
 
     boneIndex = vehicleState->primaryBaseTagIndex;
     if (boneIndex >= 0) {
@@ -2820,6 +2785,9 @@ void Scr_Vehicle_Controller(gentity_t *ent, uint32_t *partBits)
         G_DObjSetLocalBoneIndex(ent, partBits, boneIndex, vec3_origin,
                                 primaryBarrelAngles);
     }
+
+    const vec3_t gunnerBaseAngles = { 0.0f, ent->s.vehicleSecondaryBaseYaw, 0.0f };
+    const vec3_t gunnerBarrelAngles = { ent->s.vehicleTurret.gunnerPitch, 0.0f, 0.0f };
 
     if (vehicleInfo->type == VEHICLE_TYPE_4_WHEEL) {
         boneIndex = vehicleState->secondaryBaseTagIndex;
@@ -8420,40 +8388,64 @@ void VEH_UpdateGunnerAim(gentity_t *ent)
 void VEH_UpdateBody(gentity_t *ent)
 {
     vehicle_state_t *vehicleState = (vehicle_state_t *)ent->vehicle;
-    float forward = 0.0f;
-    float vertical = 0.0f;
+#if defined(WINDOWS_BEHAVIOR)
+    WIDE_FLOAT forward = 0.0f;
+#else
+    volatile float forward = 0.0f;
+#endif
+    volatile float vertical = 0.0f;
 
     if (vehicleState->throttleScale > 0.0f) {
+#if defined(WINDOWS_BEHAVIOR)
+        /* FSIN receives the live product of two float coefficients. The
+         * phase remains wide for forward motion, with a separate float copy
+         * for vertical motion. Only the vertical result is stored to float. */
+        const WIDE_FLOAT phase = coduo_x87_sinl((WIDE_FLOAT)vehicleState->brakeScale *
+            VEH_MOTION_ANIM_PI * VEH_MOTION_ANIM_DEGREE_SCALE) *
+            ((WIDE_FLOAT)vehicleState->throttleScale / vehicleState->throttleScalePrevious);
+        const volatile float verticalPhase = (float)phase;
+        const WIDE_FLOAT remainingThrottle = (WIDE_FLOAT)vehicleState->throttleScale - VEH_MOTION_ANIM_FRAME_SECONDS;
+
+        forward = phase * vehicleState->localAccel.components.forward;
+        vertical = (float)((WIDE_FLOAT)verticalPhase * vehicleState->localAccel.components.vertical);
+        vehicleState->throttleScale = (float)remainingThrottle;
+        if (remainingThrottle < 0.0f) {
+            vehicleState->throttleScale = 0.0f;
+        }
+#else
         /* 0x86790..0x867c9: the throttle ratio is rounded to its own float
          * slot; CoduoLibm_Sin() takes brakeScale * pi / 180 with DOUBLE pi
          * (0x400921fb54442d18) and double 180, rounded to double at the
          * call, and the sin result is rounded to float before the
          * multiply. */
-        const float throttleRatio = vehicleState->throttleScale /
-                                    vehicleState->throttleScalePrevious;
-        const float phase =
+        const volatile float throttleRatio = (float)((WIDE_FLOAT)vehicleState->throttleScale /
+                                                     vehicleState->throttleScalePrevious);
+        const volatile float sine =
             (float)CoduoLibm_Sin((double)(
-                (long double)vehicleState->brakeScale *
-                3.141592653589793L / 180.0L)) *
-            throttleRatio;
+                (WIDE_FLOAT)vehicleState->brakeScale *
+                (WIDE_FLOAT)3.141592653589793 / 180.0));
+        const volatile float phase = (float)((WIDE_FLOAT)sine * throttleRatio);
 
-        forward = phase * vehicleState->localAccel.components.forward;
-        vertical = phase * vehicleState->localAccel.components.vertical;
+        forward = (float)((WIDE_FLOAT)phase * vehicleState->localAccel.components.forward);
+        vertical = (float)((WIDE_FLOAT)phase * vehicleState->localAccel.components.vertical);
 
-        vehicleState->throttleScale -= VEH_MOTION_ANIM_FRAME_SECONDS;
+        vehicleState->throttleScale = (float)((WIDE_FLOAT)vehicleState->throttleScale - VEH_MOTION_ANIM_FRAME_SECONDS);
         if (vehicleState->throttleScale < 0.0f) {
             vehicleState->throttleScale = 0.0f;
         }
-        vehicleState->brakeScale += VEH_MOTION_ANIM_PHASE_STEP;
+#endif
+        vehicleState->brakeScale = (float)((WIDE_FLOAT)vehicleState->brakeScale + VEH_MOTION_ANIM_PHASE_STEP);
     }
 
+#if defined(WINDOWS_BEHAVIOR)
     forward += vehicleState->externalVelocity[0];
-    vertical += vehicleState->externalVelocity[2];
+#else
+    forward = (float)((WIDE_FLOAT)forward + vehicleState->externalVelocity[0]);
+#endif
+    vertical = (float)((WIDE_FLOAT)vertical + vehicleState->externalVelocity[2]);
 
-    game_compat_veh_set_float_slot_int_bits(&ent->s.loopedFxForward[0],
-                            game_compat_veh_motion_byte_from_axis(forward));
-    game_compat_veh_set_float_slot_int_bits(&ent->s.loopedFxForward[2],
-                            game_compat_veh_motion_byte_from_axis(vertical));
+    ent->s.vehicleBodyPitchPacked = game_compat_veh_motion_byte_from_axis(forward);
+    ent->s.vehicleBodyRollPacked = game_compat_veh_motion_byte_from_axis(vertical);
 }
 
 /* ------------------------------------------------------------------ */
