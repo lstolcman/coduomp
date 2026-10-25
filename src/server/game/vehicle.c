@@ -22,6 +22,7 @@
 #include "compat/crt/atof_compat.h"
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
+#include "compat/coduo_fp_conversion.h"
 #include "scr_vm.h"
 #include "level_locals.h"
 #include "compat/libm/coduo_libm.h"
@@ -3206,20 +3207,21 @@ void Scr_Vehicle_Think(gentity_t *ent)
 
     /*
      * Vehicle entities encode suspension travel in entity-state time2 as
-     * milliseconds-style integer units: round(suspensionTravel * 1000).
+     * milliseconds-style integer units. Retain suspensionTravel * 1000 until
+     * truncation: Windows keeps the low dword of its 64-bit CRT conversion;
+     * Linux converts directly to a signed dword.
      */
     /* 0x8cc1a: the product feeds fistp directly (no float store). */
 #if EMULATE_X87
     ent->s.time2 = x87f_store_i32_trunc(x87f_mul(
         x87f_load_f32(vehicleInfo->suspensionTravel),
         x87f_load_f32(millisecondsPerSecond)));
-#elif defined(__x86_64__)
+#elif defined(LINUX_BEHAVIOR) && CODUO_ARCH_HAS_X87
     ent->s.time2 = CODUO_X87_TRUNCATE_I32(
-        (long double)vehicleInfo->suspensionTravel *
-        (long double)millisecondsPerSecond);
+        (WIDE_FLOAT)vehicleInfo->suspensionTravel * millisecondsPerSecond);
 #else
-    ent->s.time2 =
-        (int)(vehicleInfo->suspensionTravel * millisecondsPerSecond);
+    ent->s.time2 = coduo_fp_to_i32_extended(
+        (WIDE_FLOAT)vehicleInfo->suspensionTravel * millisecondsPerSecond);
 #endif
     if (g_vehicleTrafficStressTest.integer < 0) {
         /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
