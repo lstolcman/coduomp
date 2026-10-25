@@ -554,7 +554,7 @@ static void game_compat_g_turret_vector_ma(const float *start, float scale, cons
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original G_TurretAimAtAngles (0x5bedf); no standalone original body. */
 static float *game_compat_g_turret_pitch_yaw(gentity_t *turret)
 {
-    return &turret->s.turret.pitch;
+    return turret->s.angles2;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: turret pitch carry accessor; extracted during reconstruction of 0x5bedf. */
