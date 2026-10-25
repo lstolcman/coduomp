@@ -941,7 +941,11 @@ void G_PlayerTurretPositionAndBlend(gentity_t *player, gentity_t *turret)
     matrix43_t combinedAxis;
     vec3_t deltaRotation;
     vec3_t deltaTranslation;
+#if defined(WINDOWS_BEHAVIOR)
+    WIDE_FLOAT viewDelta[3];
+#else
     vec3_t viewDelta;
+#endif
     float tagForwardOffset;
     float targetForwardOffset;
     float turretYaw;
@@ -983,12 +987,23 @@ void G_PlayerTurretPositionAndBlend(gentity_t *player, gentity_t *turret)
     turretAxis.origin[1] = turret->currentOrigin[1];
     turretAxis.origin[2] = turret->currentOrigin[2];
 
-    viewDelta[0] = player->currentOrigin[0] - turret->currentOrigin[0];
-    viewDelta[1] = player->currentOrigin[1] - turret->currentOrigin[1];
-    viewDelta[2] = player->currentOrigin[2] - turret->currentOrigin[2];
-    tagForwardOffset = viewDelta[0] * turretAxis.axis[2][0] +
-                       viewDelta[1] * turretAxis.axis[2][1] +
-                       viewDelta[2] * turretAxis.axis[2][2];
+#if defined(WINDOWS_BEHAVIOR)
+    /* Windows retains the origin differences through the Z/Y/X projection. */
+    viewDelta[0] = (WIDE_FLOAT)player->currentOrigin[0] - turretAxis.origin[0];
+    viewDelta[1] = (WIDE_FLOAT)player->currentOrigin[1] - turretAxis.origin[1];
+    viewDelta[2] = (WIDE_FLOAT)player->currentOrigin[2] - turretAxis.origin[2];
+    tagForwardOffset = (float)((viewDelta[2] * turretAxis.axis[2][2] +
+                               viewDelta[1] * turretAxis.axis[2][1]) +
+                              viewDelta[0] * turretAxis.axis[2][0]);
+#else
+    /* Linux stores the differences first, then retains its X/Y/Z dot product. */
+    viewDelta[0] = player->currentOrigin[0] - turretAxis.origin[0];
+    viewDelta[1] = player->currentOrigin[1] - turretAxis.origin[1];
+    viewDelta[2] = player->currentOrigin[2] - turretAxis.origin[2];
+    tagForwardOffset = (float)(((WIDE_FLOAT)viewDelta[0] * turretAxis.axis[2][0] +
+                               (WIDE_FLOAT)viewDelta[1] * turretAxis.axis[2][1]) +
+                              (WIDE_FLOAT)viewDelta[2] * turretAxis.axis[2][2]);
+#endif
     targetForwardOffset = tagForwardOffset -
                           weaponTagMatrix->origin[2];
 
