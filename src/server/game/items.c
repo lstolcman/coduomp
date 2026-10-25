@@ -1685,34 +1685,29 @@ int Pickup_Health(gentity_t *itemEnt, gentity_t *player)
     }
 
     oldHealth = player->health;
-    /* Stock 0x543fc: fild amount * fild maxHealth * 0.01f(DWORD), fistp trunc. */
+    /* Retain the live product until the platform's integer conversion: Windows
+     * consumes the low dword of a qword result; Linux converts to a dword. */
 #if EMULATE_X87
     player->health += x87f_store_i32_trunc(x87f_mul(
         x87f_mul(x87f_load_i32(amount), x87f_load_i32(maxHealth)),
         x87f_load_f32(0.01f)));
 #else
-    player->health += (int32_t)((long double)amount *
-                                (long double)maxHealth *
-                                (long double)0.01f);
+    player->health += coduo_fp_to_i32_extended((WIDE_FLOAT)amount * (WIDE_FLOAT)maxHealth * 0.01f);
 #endif
 
     if (healthLimit < player->health) {
         player->health = healthLimit;
     } else {
-        /* Stock 0x5447b/0x544cf: (int)(health*100) fild / fild maxHealth, fistp
-         * trunc.  The *100 is integer arithmetic before the fild. */
+        /* Multiply by 100 in integer arithmetic before the live division;
+         * preserve the same platform-selected conversion as the health gain. */
 #if EMULATE_X87
         int currentPercent = x87f_store_i32_trunc(x87f_div(
             x87f_load_i32(player->health * 100), x87f_load_i32(maxHealth)));
         int oldPercent = x87f_store_i32_trunc(x87f_div(
             x87f_load_i32(oldHealth * 100), x87f_load_i32(maxHealth)));
 #else
-        int currentPercent =
-            (int32_t)((long double)(player->health * 100) /
-                      (long double)maxHealth);
-        int oldPercent =
-            (int32_t)((long double)(oldHealth * 100) /
-                      (long double)maxHealth);
+        int currentPercent = coduo_fp_to_i32_extended((WIDE_FLOAT)(player->health * 100) / (WIDE_FLOAT)maxHealth);
+        int oldPercent = coduo_fp_to_i32_extended((WIDE_FLOAT)(oldHealth * 100) / (WIDE_FLOAT)maxHealth);
 #endif
 
         if (currentPercent < 1) {
