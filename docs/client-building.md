@@ -137,13 +137,17 @@ whole program into an x87 build. Assignment to `WIDE_FLOAT` alone does not
 widen an expression computed entirely from narrower operands; existing casts
 and explicit arithmetic boundaries determine which operations are extended.
 
-The math compatibility header redirects the standard long-double calls used
-by the project to a pinned, namespaced musl math slice, because Microsoft's
-CRT implements those calls with binary64. Reconstructed `CoduoLibm` routines
-remain in use. The adapter keeps extended values inside the project ABI;
-Windows APIs and dependencies keep their normal Microsoft ABI. The math
-kernels temporarily select a 64-bit significand and restore the caller's x87
-control word. Direct square roots retain the caller's precision.
+The math compatibility header uses native x87 instruction kernels for the
+project's extended square root, absolute value, trigonometry, logarithm,
+exponential, and positive-base power calculations. It keeps the caller's
+control word and introduces no math dependency or software emulation.
+Nonpositive power bases, nonfinite inputs, and arguments outside the native
+kernels' domains use the platform's binary64 math. Reconstructed `CoduoLibm`
+routines remain in use; their explicit rounding boundaries are unchanged.
+These kernels do not reproduce the complete original CRT's dispatch,
+exception handling, or optional SSE2 power implementation. Rendering math
+may differ on fallback paths. Windows APIs and dependencies keep their normal
+Microsoft ABI; the SDK is not a general 80-bit long-double runtime.
 
 Do not add `-ffp-eval-method=extended` or disable SSE to this profile. Tested
 Clang 19.1.7 and 22.1.8 global extended evaluation mispasses variadic doubles
