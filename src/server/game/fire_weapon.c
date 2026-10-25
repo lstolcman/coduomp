@@ -381,9 +381,9 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
     vec3_t reflected;
     WIDE_FLOAT reflectionScale;
 #if defined(WINDOWS_BEHAVIOR)
-    const int first = 2, last = 0;
+    enum { first = 2, last = 0 };
 #else
-    const int first = 0, last = 2;
+    enum { first = 0, last = 2 };
 #endif
     int meansOfDeath;
     int damageFlags = 0;
