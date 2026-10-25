@@ -3686,11 +3686,7 @@ WIDE_FLOAT Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
     float dominantDot = 0.0f;
     int dominantAxis = -1;
     WIDE_FLOAT scale;
-#if defined(WINDOWS_BEHAVIOR)
-    float storedForwardDot = 0.0f;
-#else
-    volatile float roundedScale;
-#endif
+    WIDE_FLOAT forwardDot = 0.0f;
 
     (void)attacker;
 
@@ -3702,15 +3698,16 @@ WIDE_FLOAT Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
     VectorNormalize(delta);
 
     for (int axisIndex = 0; axisIndex < 2; axisIndex++) {
-        const float dot = (float)(
-            (WIDE_FLOAT)delta[0] * (WIDE_FLOAT)axis[axisIndex][0] +
-            (WIDE_FLOAT)delta[1] * (WIDE_FLOAT)axis[axisIndex][1] +
-            (WIDE_FLOAT)delta[2] * (WIDE_FLOAT)axis[axisIndex][2]);
-#if defined(WINDOWS_BEHAVIOR)
+        const WIDE_FLOAT rawDot = ((WIDE_FLOAT)delta[0] * axis[axisIndex][0] +
+                                  (WIDE_FLOAT)delta[1] * axis[axisIndex][1]) +
+                                  (WIDE_FLOAT)delta[2] * axis[axisIndex][2];
+        const float dot = coduo_round_f32(rawDot);
         if (axisIndex == 0) {
-            storedForwardDot = dot;
-        }
+            forwardDot = rawDot;
+#if defined(WINDOWS_BEHAVIOR)
+            forwardDot = dot;
 #endif
+        }
 
         if (dominantAxis < 0 || fabsf(dominantDot) < fabsf(dot)) {
             dominantAxis = axisIndex;
@@ -3783,14 +3780,6 @@ WIDE_FLOAT Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
         } else if (dominantAxis == 1) {
             /* Windows reuses the first stored dot; Linux evaluates the sign
              * from the live expression without that binary32 narrowing. */
-#if defined(WINDOWS_BEHAVIOR)
-            const WIDE_FLOAT forwardDot = (WIDE_FLOAT)storedForwardDot;
-#else
-            const WIDE_FLOAT forwardDot =
-                (WIDE_FLOAT)delta[0] * (WIDE_FLOAT)axis[0][0] +
-                (WIDE_FLOAT)delta[1] * (WIDE_FLOAT)axis[0][1] +
-                (WIDE_FLOAT)delta[2] * (WIDE_FLOAT)axis[0][2];
-#endif
 
             directScale =
                 vehicleInfo->damageScaleSide * VEH_DAMAGE_SCALE_PERCENT;
@@ -3834,11 +3823,9 @@ WIDE_FLOAT Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
 
 return_scale:
 #if defined(LINUX_BEHAVIOR)
-    roundedScale = (float)scale;
-    return (WIDE_FLOAT)roundedScale;
-#else
-    return scale;
+    scale = coduo_round_f32(scale);
 #endif
+    return scale;
 }
 
 /* ------------------------------------------------------------------ */
@@ -4239,32 +4226,24 @@ void VEH_CheckPushClients(gentity_t *vehicle)
     /* Windows retains the X/Y minimum sums and X maximum sum through the
      * padding operation. The other three sums round to float first.
      * Linux stores all six origin+bounds sums before applying the padding. */
-#if defined(WINDOWS_BEHAVIOR)
-    const WIDE_FLOAT minX = (WIDE_FLOAT)vehicleInfo->collisionMins[0] + vehicle->currentOrigin[0];
-    const WIDE_FLOAT minY = (WIDE_FLOAT)vehicleInfo->collisionMins[1] + vehicle->currentOrigin[1];
-    mins[2] = vehicleInfo->collisionMins[2] + vehicle->currentOrigin[2];
-    const WIDE_FLOAT maxX = (WIDE_FLOAT)vehicleInfo->collisionMaxs[0] + vehicle->currentOrigin[0];
-    maxs[1] = vehicleInfo->collisionMaxs[1] + vehicle->currentOrigin[1];
-    maxs[2] = vehicleInfo->collisionMaxs[2] + vehicle->currentOrigin[2];
-
-    mins[0] = (float)(minX - kVehSafetyBuffer);
-    maxs[0] = (float)(maxX + kVehSafetyBuffer);
-    mins[1] = (float)(minY - kVehSafetyBuffer);
-    maxs[1] = maxs[1] + kVehSafetyBuffer;
-    mins[2] = mins[2] - kVehSafetyBuffer;
-    maxs[2] = maxs[2] + kVehSafetyBuffer;
-#else
-    mins[0] = vehicle->currentOrigin[0] + vehicleInfo->collisionMins[0];
-    mins[1] = vehicle->currentOrigin[1] + vehicleInfo->collisionMins[1];
-    mins[2] = vehicle->currentOrigin[2] + vehicleInfo->collisionMins[2];
-    maxs[0] = vehicle->currentOrigin[0] + vehicleInfo->collisionMaxs[0];
-    maxs[1] = vehicle->currentOrigin[1] + vehicleInfo->collisionMaxs[1];
-    maxs[2] = vehicle->currentOrigin[2] + vehicleInfo->collisionMaxs[2];
     for (int axis = 0; axis < 3; axis++) {
-        mins[axis] = mins[axis] - kVehSafetyBuffer;
-        maxs[axis] = maxs[axis] + kVehSafetyBuffer;
-    }
+        WIDE_FLOAT minimum = (WIDE_FLOAT)vehicle->currentOrigin[axis] + vehicleInfo->collisionMins[axis];
+        WIDE_FLOAT maximum = (WIDE_FLOAT)vehicle->currentOrigin[axis] + vehicleInfo->collisionMaxs[axis];
+#if defined(WINDOWS_BEHAVIOR)
+        if (axis == 2)
 #endif
+        {
+            minimum = coduo_round_f32(minimum);
+        }
+#if defined(WINDOWS_BEHAVIOR)
+        if (axis != 0)
+#endif
+        {
+            maximum = coduo_round_f32(maximum);
+        }
+        mins[axis] = minimum - kVehSafetyBuffer;
+        maxs[axis] = maximum + kVehSafetyBuffer;
+    }
 
     entityCount = trap_EntitiesInBox(mins, maxs, entityNums,
                                      VEH_CHECK_PUSH_MAX_CLIENTS,
@@ -6211,55 +6190,17 @@ void VEH_UpdateClient(gentity_t *ent)
                      * no float store; the argument rounds to DOUBLE for
                      * CoduoLibm_Sin()/CoduoLibm_Cos(), and each scaled result
                      * feeds fistp WORD directly. */
+                    /* Windows rounds time to float before both phases. The
+                     * sine/cosine scale is bounded by 127, so signed-word and
+                     * wider truncation agree on the input byte. */
+                    WIDE_FLOAT stressTime = level.time;
 #if defined(WINDOWS_BEHAVIOR)
-                    /* Windows rounds time to float before both phases and
-                     * truncates the retained scaled result through its CRT. */
-                    const volatile float stressTime = (float)level.time;
-                    const double forwardPhase = (double)((WIDE_FLOAT)stressTime * forwardTimeScale);
-                    const double rightPhase = (double)((WIDE_FLOAT)stressTime * rightTimeScale);
+                    stressTime = coduo_round_f32(stressTime);
+#endif
+                    const double forwardPhase = (double)(stressTime * forwardTimeScale);
+                    const double rightPhase = (double)(stressTime * rightTimeScale);
                     input[0] = (int8_t)coduo_fp_to_i32_extended((WIDE_FLOAT)CoduoLibm_Sin(forwardPhase) * inputScale);
                     input[1] = (int8_t)coduo_fp_to_i32_extended((WIDE_FLOAT)CoduoLibm_Cos(rightPhase) * inputScale);
-#elif EMULATE_X87
-                    const double forwardPhase = x87f_store_f64(x87f_mul(
-                        x87f_load_i32(level.time),
-                        x87f_load_f32(forwardTimeScale)));
-                    const double rightPhase = x87f_store_f64(x87f_mul(
-                        x87f_load_i32(level.time),
-                        x87f_load_f32(rightTimeScale)));
-                    input[0] = (int8_t)(int16_t)x87f_store_i32_trunc(
-                        x87f_mul(x87f_load_f64(CoduoLibm_Sin(forwardPhase)),
-                                 x87f_load_f32(inputScale)));
-                    input[1] = (int8_t)(int16_t)x87f_store_i32_trunc(
-                        x87f_mul(x87f_load_f64(CoduoLibm_Cos(rightPhase)),
-                                 x87f_load_f32(inputScale)));
-#elif defined(__x86_64__)
-                    {
-                        const double forwardPhase = (double)(
-                            (long double)level.time *
-                            (long double)forwardTimeScale);
-                        const double rightPhase = (double)(
-                            (long double)level.time *
-                            (long double)rightTimeScale);
-
-                        input[0] = (int8_t)CODUO_X87_TRUNCATE_I16(
-                            (long double)CoduoLibm_Sin(forwardPhase) *
-                            (long double)inputScale);
-                        input[1] = (int8_t)CODUO_X87_TRUNCATE_I16(
-                            (long double)CoduoLibm_Cos(rightPhase) *
-                            (long double)inputScale);
-                    }
-#else
-                    input[0] = (int8_t)(int16_t)(
-                        CoduoLibm_Sin((double)(
-                            (long double)level.time *
-                            (long double)forwardTimeScale)) *
-                        inputScale);
-                    input[1] = (int8_t)(int16_t)(
-                        CoduoLibm_Cos((double)(
-                            (long double)level.time *
-                            (long double)rightTimeScale)) *
-                        inputScale);
-#endif
                 }
             }
         } else {
@@ -6322,12 +6263,11 @@ void VEH_UpdateClient(gentity_t *ent)
             }
         }
 
-#if defined(WINDOWS_BEHAVIOR)
         /* Windows reuses this float product for heading and turret yaw;
          * Linux retains each product through its addition or subtraction. */
-        const volatile float yawDelta = (WIDE_FLOAT)vehicleState->acceleration[1] * VEH_PHYSICS_FRAME_SECONDS;
-#else
-        const WIDE_FLOAT yawDelta = (WIDE_FLOAT)vehicleState->acceleration[1] * VEH_PHYSICS_FRAME_SECONDS;
+        WIDE_FLOAT yawDelta = (WIDE_FLOAT)vehicleState->acceleration[1] * VEH_PHYSICS_FRAME_SECONDS;
+#if defined(WINDOWS_BEHAVIOR)
+        yawDelta = coduo_round_f32(yawDelta);
 #endif
         vehicleState->viewClampTargetAngles[1] =
             AngleNormalize180((float)((WIDE_FLOAT)vehicleState->previousAngles[1] + yawDelta));
@@ -6433,11 +6373,7 @@ void VEH_UpdateClient(gentity_t *ent)
 /* VERIFIED_DECOMPILER(0x7f932, 8f932_FUN_0008f932.c, VERIFY-VEHICLE-PHYSICS-MOVE-2026-06-17): DATAFLOW_VERIFIED */
 void VEH_ClipVelocity(const vec3_t in, const vec3_t normal, vec3_t out)
 {
-#if defined(WINDOWS_BEHAVIOR)
     WIDE_FLOAT backoff;
-#else
-    volatile float backoff;
-#endif
 
     /* 0x7f945..0x7f998 reaches the ground-plane shortcut only after two
      * ordered-above-or-equal branches.  Writing the other arm as `< || <`
@@ -6445,6 +6381,9 @@ void VEH_ClipVelocity(const vec3_t in, const vec3_t normal, vec3_t out)
     if (!(normal[2] >= VEH_GROUND_NORMAL_MIN_Z &&
           (WIDE_FLOAT)in[0] * in[0] + (WIDE_FLOAT)in[1] * in[1] >= (WIDE_FLOAT)in[2] * in[2])) {
         backoff = ((WIDE_FLOAT)in[0] * normal[0] + (WIDE_FLOAT)in[1] * normal[1]) + (WIDE_FLOAT)in[2] * normal[2];
+#if defined(LINUX_BEHAVIOR)
+        backoff = coduo_round_f32(backoff);
+#endif
         if (backoff < 0.0f) {
             backoff = (WIDE_FLOAT)backoff * VEH_SLIDE_OVERCLIP;
         } else {
@@ -6456,16 +6395,17 @@ void VEH_ClipVelocity(const vec3_t in, const vec3_t normal, vec3_t out)
 #endif
         }
 
-        for (int axis = 0; axis < 3; axis++) {
-#if defined(WINDOWS_BEHAVIOR)
-            /* Windows keeps the normal product through the final subtraction. */
-            out[axis] = (WIDE_FLOAT)in[axis] - normal[axis] * backoff;
-#else
-            /* 0x7fa70..0x7fa99: the product is stored to a float slot
-             * before the subtract (two roundings per component). */
-            const volatile float scaledNormal = (WIDE_FLOAT)normal[axis] * backoff;
-            out[axis] = in[axis] - scaledNormal;
+#if defined(LINUX_BEHAVIOR)
+        backoff = coduo_round_f32(backoff);
 #endif
+        for (int axis = 0; axis < 3; axis++) {
+            WIDE_FLOAT scaledNormal = (WIDE_FLOAT)normal[axis] * backoff;
+#if defined(LINUX_BEHAVIOR)
+            /* 0x7fa70..0x7fa99: store the product before the subtract.
+             * Windows retains it through the final subtraction. */
+            scaledNormal = coduo_round_f32(scaledNormal);
+#endif
+            out[axis] = (WIDE_FLOAT)in[axis] - scaledNormal;
         }
         return;
     }
@@ -7071,15 +7011,16 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
     VectorNormalize(lengthAxis);
 
     CrossProduct(sideAxis, lengthAxis, groundNormal);
+    WIDE_FLOAT baseDotX = (WIDE_FLOAT)wheelPoints[0][0] * groundNormal[0];
+    WIDE_FLOAT baseDotY = (WIDE_FLOAT)wheelPoints[0][1] * groundNormal[1];
+    WIDE_FLOAT baseDotZ = (WIDE_FLOAT)wheelPoints[0][2] * groundNormal[2];
 #if defined(WINDOWS_BEHAVIOR)
     /* Windows stores the reused X/Y products before adding them to Z. */
-    const volatile float baseDotX = (WIDE_FLOAT)wheelPoints[0][0] * groundNormal[0];
-    const volatile float baseDotY = (WIDE_FLOAT)wheelPoints[0][1] * groundNormal[1];
-    planeDistance = ((WIDE_FLOAT)wheelPoints[0][2] * groundNormal[2] + baseDotX) + baseDotY;
+    baseDotX = coduo_round_f32(baseDotX);
+    baseDotY = coduo_round_f32(baseDotY);
+    planeDistance = (baseDotZ + baseDotX) + baseDotY;
 #else
-    planeDistance = ((WIDE_FLOAT)wheelPoints[0][0] * groundNormal[0] +
-                     (WIDE_FLOAT)wheelPoints[0][1] * groundNormal[1]) +
-                    (WIDE_FLOAT)wheelPoints[0][2] * groundNormal[2];
+    planeDistance = (baseDotX + baseDotY) + baseDotZ;
 #endif
 
     for (int wheelIndex = 1; wheelIndex < wheelCount; wheelIndex++) {
@@ -7089,8 +7030,7 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
             (WIDE_FLOAT)wheelPoints[wheelIndex][2] * groundNormal[2];
 #if defined(WINDOWS_BEHAVIOR)
         /* Store each dot to float before distance subtraction. */
-        const volatile float roundedDot = wheelDot;
-        wheelDot = roundedDot;
+        wheelDot = coduo_round_f32(wheelDot);
 #endif
         /* Linux 0x819ba..0x81ab7 retains the dot through subtraction. Its
          * update recomputes the same dot minus suspensionTravel; no input
@@ -7148,15 +7088,12 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
              wheelIndex++) {
             projected[wheelIndex][0] = wheelPoints[wheelIndex][0];
             projected[wheelIndex][1] = wheelPoints[wheelIndex][1];
+            WIDE_FLOAT horizontalDot = (WIDE_FLOAT)projected[wheelIndex][0] * groundNormal[0] +
+                                       (WIDE_FLOAT)projected[wheelIndex][1] * groundNormal[1];
 #if defined(WINDOWS_BEHAVIOR)
-            const WIDE_FLOAT horizontalDot = wheelIndex == 0 ?
-                (WIDE_FLOAT)baseDotX + baseDotY :
-                (WIDE_FLOAT)projected[wheelIndex][1] * groundNormal[1] +
-                (WIDE_FLOAT)projected[wheelIndex][0] * groundNormal[0];
-#else
-            const WIDE_FLOAT horizontalDot =
-                (WIDE_FLOAT)projected[wheelIndex][0] * groundNormal[0] +
-                (WIDE_FLOAT)projected[wheelIndex][1] * groundNormal[1];
+            if (wheelIndex == 0) {
+                horizontalDot = baseDotX + baseDotY;
+            }
 #endif
             projected[wheelIndex][2] = -((horizontalDot - planeDistance) / groundNormal[2]);
         }
@@ -8461,59 +8398,49 @@ void VEH_UpdateGunnerAim(gentity_t *ent)
 void VEH_UpdateBody(gentity_t *ent)
 {
     vehicle_state_t *vehicleState = (vehicle_state_t *)ent->vehicle;
-#if defined(WINDOWS_BEHAVIOR)
     WIDE_FLOAT forward = 0.0f;
-#else
-    volatile float forward = 0.0f;
-#endif
     volatile float vertical = 0.0f;
 
     if (vehicleState->throttleScale > 0.0f) {
+        WIDE_FLOAT throttleRatio = (WIDE_FLOAT)vehicleState->throttleScale / vehicleState->throttleScalePrevious;
 #if defined(WINDOWS_BEHAVIOR)
-        /* FSIN receives the live product of two float coefficients. The
-         * phase remains wide for forward motion, with a separate float copy
-         * for vertical motion. Only the vertical result is stored to float. */
-        const WIDE_FLOAT phase = coduo_x87_sinl((WIDE_FLOAT)vehicleState->brakeScale *
-            VEH_MOTION_ANIM_PI * VEH_MOTION_ANIM_DEGREE_SCALE) *
-            ((WIDE_FLOAT)vehicleState->throttleScale / vehicleState->throttleScalePrevious);
-        const volatile float verticalPhase = (float)phase;
-        const WIDE_FLOAT remainingThrottle = (WIDE_FLOAT)vehicleState->throttleScale - VEH_MOTION_ANIM_FRAME_SECONDS;
-
+        /* FSIN receives the live product of two float coefficients. */
+        WIDE_FLOAT sine = coduo_x87_sinl((WIDE_FLOAT)vehicleState->brakeScale *
+                                       VEH_MOTION_ANIM_PI * VEH_MOTION_ANIM_DEGREE_SCALE);
+#else
+        /* 0x86790..0x867c9: ratio and sine each round to float. The sine
+         * argument uses double pi and division by 180, rounded to double
+         * at the CoduoLibm_Sin call. */
+        throttleRatio = coduo_round_f32(throttleRatio);
+        WIDE_FLOAT sine = coduo_round_f32(CoduoLibm_Sin((double)(
+            (WIDE_FLOAT)vehicleState->brakeScale * 3.141592653589793 / 180.0)));
+#endif
+        WIDE_FLOAT phase = sine * throttleRatio;
+#if defined(LINUX_BEHAVIOR)
+        phase = coduo_round_f32(phase);
+#endif
+        /* Windows retains the phase for forward motion; vertical motion uses
+         * a separate float copy. Linux has already rounded the phase. */
+        const float verticalPhase = coduo_round_f32(phase);
         forward = phase * vehicleState->localAccel.components.forward;
-        vertical = (float)((WIDE_FLOAT)verticalPhase * vehicleState->localAccel.components.vertical);
-        vehicleState->throttleScale = (float)remainingThrottle;
+#if defined(LINUX_BEHAVIOR)
+        forward = coduo_round_f32(forward);
+#endif
+        vertical = (WIDE_FLOAT)verticalPhase * vehicleState->localAccel.components.vertical;
+        WIDE_FLOAT remainingThrottle = (WIDE_FLOAT)vehicleState->throttleScale - VEH_MOTION_ANIM_FRAME_SECONDS;
+#if defined(LINUX_BEHAVIOR)
+        remainingThrottle = coduo_round_f32(remainingThrottle);
+#endif
+        vehicleState->throttleScale = remainingThrottle;
         if (remainingThrottle < 0.0f) {
             vehicleState->throttleScale = 0.0f;
         }
-#else
-        /* 0x86790..0x867c9: the throttle ratio is rounded to its own float
-         * slot; CoduoLibm_Sin() takes brakeScale * pi / 180 with DOUBLE pi
-         * (0x400921fb54442d18) and double 180, rounded to double at the
-         * call, and the sin result is rounded to float before the
-         * multiply. */
-        const volatile float throttleRatio = (float)((WIDE_FLOAT)vehicleState->throttleScale /
-                                                     vehicleState->throttleScalePrevious);
-        const volatile float sine =
-            (float)CoduoLibm_Sin((double)(
-                (WIDE_FLOAT)vehicleState->brakeScale *
-                (WIDE_FLOAT)3.141592653589793 / 180.0));
-        const volatile float phase = (float)((WIDE_FLOAT)sine * throttleRatio);
-
-        forward = (float)((WIDE_FLOAT)phase * vehicleState->localAccel.components.forward);
-        vertical = (float)((WIDE_FLOAT)phase * vehicleState->localAccel.components.vertical);
-
-        vehicleState->throttleScale = (float)((WIDE_FLOAT)vehicleState->throttleScale - VEH_MOTION_ANIM_FRAME_SECONDS);
-        if (vehicleState->throttleScale < 0.0f) {
-            vehicleState->throttleScale = 0.0f;
-        }
-#endif
         vehicleState->brakeScale = (float)((WIDE_FLOAT)vehicleState->brakeScale + VEH_MOTION_ANIM_PHASE_STEP);
     }
 
-#if defined(WINDOWS_BEHAVIOR)
     forward += vehicleState->externalVelocity[0];
-#else
-    forward = (float)((WIDE_FLOAT)forward + vehicleState->externalVelocity[0]);
+#if defined(LINUX_BEHAVIOR)
+    forward = coduo_round_f32(forward);
 #endif
     vertical = (float)((WIDE_FLOAT)vertical + vehicleState->externalVelocity[2]);
 
@@ -9958,8 +9885,7 @@ void VEH_UpdatePath(gentity_t *ent)
     for (int axis = 0; axis < 3; axis++) {
         WIDE_FLOAT delta = (WIDE_FLOAT)vehicleState->origin[axis] - vehicleState->previousOrigin[axis];
 #if defined(LINUX_BEHAVIOR)
-        const volatile float roundedDelta = delta;
-        delta = roundedDelta;
+        delta = coduo_round_f32(delta);
 #endif
         vehicleState->velocity[axis] = delta * 20.0f;
     }
@@ -10104,12 +10030,8 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
     if (vehicleInfo->maxSpeed > 0.0f) {
         vec3_t forward;
         vec3_t right;
-#if defined(WINDOWS_BEHAVIOR)
         WIDE_FLOAT direction[3];
         WIDE_FLOAT localForwardRaw;
-#else
-        vec3_t direction;
-#endif
         float localForward;
         float localRight;
         float forwardOffset;
@@ -10120,61 +10042,55 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
 
         AngleVectors(vehicleState->viewClampTargetAngles, forward, right, NULL);
 
-#if defined(WINDOWS_BEHAVIOR)
-        if (coduo_x87_sqrtl((WIDE_FLOAT)vehicleState->velocity[0] * vehicleState->velocity[0] +
-                           (WIDE_FLOAT)vehicleState->velocity[1] * vehicleState->velocity[1] +
-                           (WIDE_FLOAT)vehicleState->velocity[2] * vehicleState->velocity[2]) > 0.0f) {
-#else
+        /* Only positivity is consumed. A nonzero finite float vector's
+         * length cannot become zero when the root rounds to float. */
         if (game_compat_veh_length3(vehicleState->velocity) > 0.0f) {
-#endif
             direction[0] = -vehicleState->velocity[0];
             direction[1] = -vehicleState->velocity[1];
         } else {
-#if defined(WINDOWS_BEHAVIOR)
             direction[0] = (WIDE_FLOAT)origin[0] - vehicleState->origin[0];
             direction[1] = (WIDE_FLOAT)origin[1] - vehicleState->origin[1];
-#else
-            direction[0] = origin[0] - vehicleState->origin[0];
-            direction[1] = origin[1] - vehicleState->origin[1];
+#if defined(LINUX_BEHAVIOR)
+            direction[0] = coduo_round_f32(direction[0]);
+            direction[1] = coduo_round_f32(direction[1]);
 #endif
         }
         direction[2] = 0.0f;
 
+        WIDE_FLOAT directionSquared = direction[0] * direction[0] + direction[1] * direction[1];
 #if defined(WINDOWS_BEHAVIOR)
-        if (coduo_x87_sqrtl(direction[1] * direction[1] + direction[0] * direction[0]) < VEH_DISMOUNT_MIN_DIR_LENGTH) {
+        WIDE_FLOAT directionLength = coduo_x87_sqrtl(directionSquared);
 #else
-        if (game_compat_veh_length3(direction) < VEH_DISMOUNT_MIN_DIR_LENGTH) {
+        WIDE_FLOAT directionLength = coduo_round_f32(CoduoLibm_Sqrt((double)directionSquared));
 #endif
+        if (directionLength < VEH_DISMOUNT_MIN_DIR_LENGTH) {
             direction[0] = 1.0f;
             direction[1] = 0.0f;
         }
 
         /* Dot products retain their intermediates until the float store.
          * Windows keeps the forward dot live through scaling; Linux stores it. */
-#if defined(WINDOWS_BEHAVIOR)
-        localRight = (float)(right[1] * direction[1] + right[0] * direction[0] + right[2] * direction[2]);
-        localForwardRaw = forward[1] * direction[1] + forward[0] * direction[0] + forward[2] * direction[2];
-        rightLimit = (float)((WIDE_FLOAT)game_compat_veh_dismount_side_offset(vehicleInfo) + maxs[1] + VEH_DISMOUNT_SIDE_PAD);
-#elif EMULATE_X87
+#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
         localRight = x87f_store_f32(x87f_add(
             x87f_add(x87f_mul(x87f_load_f32(right[0]), x87f_load_f32(direction[0])),
                      x87f_mul(x87f_load_f32(right[1]), x87f_load_f32(direction[1]))),
             x87f_mul(x87f_load_f32(right[2]), x87f_load_f32(direction[2]))));
-        localForward = x87f_store_f32(x87f_add(
+        localForwardRaw = x87f_store_f32(x87f_add(
             x87f_add(x87f_mul(x87f_load_f32(forward[0]), x87f_load_f32(direction[0])),
                      x87f_mul(x87f_load_f32(forward[1]), x87f_load_f32(direction[1]))),
             x87f_mul(x87f_load_f32(forward[2]), x87f_load_f32(direction[2]))));
-        /* SideOffset + maxs[1] + PAD: 2-add chain kept 80-bit, one store -> shim */
+        /* SideOffset + maxs[1] + PAD stays wide until one float store. */
         rightLimit = x87f_store_f32(x87f_add(
             x87f_add(x87f_load_f32(game_compat_veh_dismount_side_offset(vehicleInfo)),
-                     x87f_load_f32(maxs[1])),
-            x87f_load_f32(VEH_DISMOUNT_SIDE_PAD)));
+                     x87f_load_f32(maxs[1])), x87f_load_f32(VEH_DISMOUNT_SIDE_PAD)));
 #else
-        localRight = (float)((WIDE_FLOAT)right[0] * direction[0] + (WIDE_FLOAT)right[1] * direction[1] +
-                             (WIDE_FLOAT)right[2] * direction[2]);
-        localForward = (float)((WIDE_FLOAT)forward[0] * direction[0] + (WIDE_FLOAT)forward[1] * direction[1] +
-                               (WIDE_FLOAT)forward[2] * direction[2]);
-        rightLimit = (float)((WIDE_FLOAT)game_compat_veh_dismount_side_offset(vehicleInfo) + maxs[1] + VEH_DISMOUNT_SIDE_PAD);
+        /* Z is zero; exchanging the first two products changes no finite sum. */
+        localRight = (right[0] * direction[0] + right[1] * direction[1]) + right[2] * direction[2];
+        localForwardRaw = (forward[0] * direction[0] + forward[1] * direction[1]) + forward[2] * direction[2];
+#if defined(LINUX_BEHAVIOR)
+        localForwardRaw = coduo_round_f32(localForwardRaw);
+#endif
+        rightLimit = (WIDE_FLOAT)game_compat_veh_dismount_side_offset(vehicleInfo) + maxs[1] + VEH_DISMOUNT_SIDE_PAD;
 #endif
         /* 0x89009..0x8905a: maxs[0] + max(fwd,back) is rounded to its own
          * float slot before the pad is added (pad + sum order). */
@@ -10185,52 +10101,31 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
                     vehicleInfo->dismountForwardOffset
                 ? vehicleInfo->dismountBackOffset
                 : vehicleInfo->dismountForwardOffset;
-#if defined(WINDOWS_BEHAVIOR)
-        forwardLimit = (float)((WIDE_FLOAT)longitudinalOffset + maxs[0] + VEH_DISMOUNT_FORWARD_PAD);
-#else
-        forwardLimit = maxs[0] + longitudinalOffset;
-        forwardLimit = VEH_DISMOUNT_FORWARD_PAD + forwardLimit;
+        WIDE_FLOAT forwardExtent = (WIDE_FLOAT)maxs[0] + longitudinalOffset;
+#if defined(LINUX_BEHAVIOR)
+        forwardExtent = coduo_round_f32(forwardExtent);
 #endif
+        forwardLimit = forwardExtent + VEH_DISMOUNT_FORWARD_PAD;
 
+        const WIDE_FLOAT forwardMagnitude = fabsl(localForwardRaw);
+        const WIDE_FLOAT rightMagnitude = fabsl((WIDE_FLOAT)localRight);
+        const qboolean scaleFromRight = forwardMagnitude < rightMagnitude;
+        WIDE_FLOAT denominator = scaleFromRight ? rightMagnitude : forwardMagnitude;
 #if defined(WINDOWS_BEHAVIOR)
-        {
-            const WIDE_FLOAT forwardMagnitude = fabsl(localForwardRaw);
-            volatile double forwardMagnitudeStored = (double)forwardMagnitude;
-
-            /* The comparison uses the live magnitude. Only the forward-side
-             * denominator is reloaded from its binary64 store. Neither scale
-             * quotient rounds to float before multiplying the two components. */
-            if (forwardMagnitude < fabsl((WIDE_FLOAT)localRight)) {
-                const WIDE_FLOAT scale = (WIDE_FLOAT)rightLimit / fabsl((WIDE_FLOAT)localRight);
-
-                localRight = (float)((WIDE_FLOAT)localRight * scale);
-                localForward = (float)(localForwardRaw * scale);
-                if (localForward < 0.0f) {
-                    if (localForward > -maxs[0]) {
-                        localForward = -maxs[0];
-                    }
-                } else if (localForward < maxs[0]) {
-                    localForward = maxs[0];
-                }
-            } else {
-                const WIDE_FLOAT scale = (WIDE_FLOAT)forwardLimit / forwardMagnitudeStored;
-
-                localRight = (float)((WIDE_FLOAT)localRight * scale);
-                localForward = (float)(localForwardRaw * scale);
-            }
+        /* Compare the live magnitude; only the forward-side denominator is
+         * reloaded from binary64. Windows retains both scale quotients. */
+        if (!scaleFromRight) {
+            volatile double storedMagnitude = denominator;
+            denominator = storedMagnitude;
         }
-#else
-        if (fabsf(localForward) < fabsf(localRight)) {
-            /* single divide (fabsf is exact) -> shim; *= scale is single mul (native) */
-#if EMULATE_X87
-            const float scale = x87f_store_f32(x87f_div(
-                x87f_load_f32(rightLimit), x87f_load_f32(fabsf(localRight))));
-#else
-            const float scale = rightLimit / fabsf(localRight);
 #endif
-
-            localRight *= scale;
-            localForward *= scale;
+        WIDE_FLOAT scale = (WIDE_FLOAT)(scaleFromRight ? rightLimit : forwardLimit) / denominator;
+#if defined(LINUX_BEHAVIOR)
+        scale = coduo_round_f32(scale);
+#endif
+        localRight = (WIDE_FLOAT)localRight * scale;
+        localForward = localForwardRaw * scale;
+        if (scaleFromRight) {
             if (localForward < 0.0f) {
                 if (localForward > -maxs[0]) {
                     localForward = -maxs[0];
@@ -10238,18 +10133,7 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
             } else if (localForward < maxs[0]) {
                 localForward = maxs[0];
             }
-        } else {
-#if EMULATE_X87
-            const float scale = x87f_store_f32(x87f_div(
-                x87f_load_f32(forwardLimit), x87f_load_f32(fabsf(localForward))));
-#else
-            const float scale = forwardLimit / fabsf(localForward);
-#endif
-
-            localRight *= scale;
-            localForward *= scale;
         }
-#endif
 
         rightOffset = game_compat_veh_clamp_float(localRight, -rightLimit, rightLimit);
         forwardOffset =
@@ -10272,32 +10156,22 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
             outOrigin[2] = vehicleState->origin[2] + outOrigin[2];
             /* Windows adds both directional products before the origin and
              * stores once. Linux accumulates each product in a separate store. */
-#if defined(WINDOWS_BEHAVIOR)
             for (int i = 0; i < 3; i++) {
-                outOrigin[i] = (float)(((WIDE_FLOAT)forward[i] * forwardOffset +
-                                       (WIDE_FLOAT)right[i] * rightOffset) + outOrigin[i]);
-            }
-#elif EMULATE_X87
-            for (int i = 0; i < 3; i++) {
-                outOrigin[i] = x87f_store_f32(x87f_add(
-                    x87f_load_f32(outOrigin[i]),
-                    x87f_mul(x87f_load_f32(forward[i]),
-                             x87f_load_f32(forwardOffset))));
-            }
-            for (int i = 0; i < 3; i++) {
-                outOrigin[i] = x87f_store_f32(x87f_add(
-                    x87f_load_f32(outOrigin[i]),
-                    x87f_mul(x87f_load_f32(right[i]),
-                             x87f_load_f32(rightOffset))));
-            }
+#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
+                outOrigin[i] = x87f_store_f32(x87f_add(x87f_load_f32(outOrigin[i]),
+                    x87f_mul(x87f_load_f32(forward[i]), x87f_load_f32(forwardOffset))));
+                outOrigin[i] = x87f_store_f32(x87f_add(x87f_load_f32(outOrigin[i]),
+                    x87f_mul(x87f_load_f32(right[i]), x87f_load_f32(rightOffset))));
 #else
-            outOrigin[0] = (float)((WIDE_FLOAT)outOrigin[0] + (WIDE_FLOAT)forward[0] * forwardOffset);
-            outOrigin[1] = (float)((WIDE_FLOAT)outOrigin[1] + (WIDE_FLOAT)forward[1] * forwardOffset);
-            outOrigin[2] = (float)((WIDE_FLOAT)outOrigin[2] + (WIDE_FLOAT)forward[2] * forwardOffset);
-            outOrigin[0] = (float)((WIDE_FLOAT)outOrigin[0] + (WIDE_FLOAT)right[0] * rightOffset);
-            outOrigin[1] = (float)((WIDE_FLOAT)outOrigin[1] + (WIDE_FLOAT)right[1] * rightOffset);
-            outOrigin[2] = (float)((WIDE_FLOAT)outOrigin[2] + (WIDE_FLOAT)right[2] * rightOffset);
+                WIDE_FLOAT forwardPart = (WIDE_FLOAT)forward[i] * forwardOffset;
+                WIDE_FLOAT rightPart = (WIDE_FLOAT)right[i] * rightOffset;
+#if defined(WINDOWS_BEHAVIOR)
+                outOrigin[i] = (forwardPart + rightPart) + outOrigin[i];
+#else
+                outOrigin[i] = coduo_round_f32((WIDE_FLOAT)outOrigin[i] + forwardPart) + rightPart;
 #endif
+#endif
+            }
 
             base[0] = outOrigin[0];
             base[1] = outOrigin[1];

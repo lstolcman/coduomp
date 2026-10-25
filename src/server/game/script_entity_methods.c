@@ -81,10 +81,9 @@ static qboolean game_compat_script_entity_contents_bounds_touch(const vec3_t aMi
     bMins[0] = b->currentOrigin[0] + b->mins[0];
     bMins[1] = b->currentOrigin[1] + b->mins[1];
     bMins[2] = b->currentOrigin[2] + b->mins[2];
-#if defined(WINDOWS_BEHAVIOR)
-    WIDE_FLOAT bMaxX = (WIDE_FLOAT)b->maxs[0] + (WIDE_FLOAT)b->currentOrigin[0];
-#else
-    float bMaxX = b->currentOrigin[0] + b->maxs[0];
+    WIDE_FLOAT bMaxX = (WIDE_FLOAT)b->currentOrigin[0] + b->maxs[0];
+#if defined(LINUX_BEHAVIOR)
+    bMaxX = coduo_round_f32(bMaxX);
 #endif
     float bMaxY = b->currentOrigin[1] + b->maxs[1];
     float bMaxZ = b->currentOrigin[2] + b->maxs[2];
@@ -582,33 +581,26 @@ void ScrCmd_VerifyPosition(uint32_t scriptObject)
          * addition until its bottom adjustment. All other products and sums
          * retain their binary32 stores.
          */
-#if defined(WINDOWS_BEHAVIOR)
         WIDE_FLOAT scaledMinX = (WIDE_FLOAT)mins[0] * VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         WIDE_FLOAT scaledMinY = (WIDE_FLOAT)mins[1] * VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
-#else
-        mins[0] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
-        mins[1] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
+#if defined(LINUX_BEHAVIOR)
+        scaledMinX = coduo_round_f32(scaledMinX);
+        scaledMinY = coduo_round_f32(scaledMinY);
 #endif
         mins[2] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         maxs[0] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         maxs[1] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         maxs[2] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
-#if defined(WINDOWS_BEHAVIOR)
-        mins[0] = (float)(scaledMinX + (WIDE_FLOAT)ent->currentOrigin[0]);
-        mins[1] = (float)(scaledMinY + (WIDE_FLOAT)ent->currentOrigin[1]);
-#else
-        mins[0] += ent->currentOrigin[0];
-        mins[1] += ent->currentOrigin[1];
-        mins[2] += ent->currentOrigin[2];
+        mins[0] = scaledMinX + ent->currentOrigin[0];
+        mins[1] = scaledMinY + ent->currentOrigin[1];
+        WIDE_FLOAT minimumZ = (WIDE_FLOAT)mins[2] + ent->currentOrigin[2];
+#if defined(LINUX_BEHAVIOR)
+        minimumZ = coduo_round_f32(minimumZ);
 #endif
         maxs[0] += ent->currentOrigin[0];
         maxs[1] += ent->currentOrigin[1];
         maxs[2] += ent->currentOrigin[2];
-#if defined(WINDOWS_BEHAVIOR)
-        mins[2] = (float)(((WIDE_FLOAT)mins[2] + (WIDE_FLOAT)ent->currentOrigin[2]) - VERIFYPOSITION_VEHICLE_BOTTOM_ADJUST);
-#else
-        mins[2] -= VERIFYPOSITION_VEHICLE_BOTTOM_ADJUST;
-#endif
+        mins[2] = minimumZ - VERIFYPOSITION_VEHICLE_BOTTOM_ADJUST;
 
         count = trap_EntitiesInBox(mins, maxs, entityNumbers,
                                    VERIFYPOSITION_MAX_ENTITIES,

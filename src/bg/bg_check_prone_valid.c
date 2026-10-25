@@ -333,15 +333,12 @@ int BG_CheckProneValid(int clientNum, const vec3_t origin, float radius,
     /* 0x3000767a..0x30007950: when the forward trace was shortened, reject an
      * excessive drop and try the normalized, raised connecting segment. */
     if (blockedForward != qfalse) {
-#if defined(WINDOWS_BEHAVIOR)
         /* Keep the live drop through both sides of the slope comparison. */
         WIDE_FLOAT slopeDrop =
             (WIDE_FLOAT)groundTraceDepth * trace.fraction + BG_PRONE_TRACE_RADIUS;
-#else
+#if defined(LINUX_BEHAVIOR)
         /* The Linux path stores and reloads this intermediate as binary32. */
-        float slopeDrop = (float)(
-            (long double)groundTraceDepth * (long double)trace.fraction +
-            BG_PRONE_TRACE_RADIUS);
+        slopeDrop = coduo_round_f32(slopeDrop);
 #endif
 
         if ((long double)frontClearance - (long double)slopeDrop <

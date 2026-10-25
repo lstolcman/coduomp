@@ -37,39 +37,32 @@
  * Each output is stored as binary32.  The first three columns retain a
  * three-product x87 chain through the store; the translation column adds the
  * left row's fourth component to that same unspilled chain.
- * The Windows game body at RVA 0x177f0 has the same stores but a different
- * product order. Keep those target-specific orders and use WIDE_FLOAT until
- * the output assignment so native non-x87 evaluation does not round each
- * intermediate to binary32. Stores remain progressive when buffers overlap.
+ * The Windows game body at RVA 0x177f0 has the same output stores. Use
+ * WIDE_FLOAT until the output assignment so native non-x87 evaluation does
+ * not round each intermediate to binary32. Stores remain progressive when
+ * buffers overlap. Windows folds the last two rows in reverse product order;
+ * cancellation can change their stored result, so select that order without
+ * duplicating the multiplication body.
  */
 void MatrixMultiply34(const float left[3][4], const float right[3][4],
                       float output[3][4])
 {
-#if defined(WINDOWS_BEHAVIOR)
-    output[0][0] = MATRIX34_DOT3(left[0][0], right[0][0], left[0][1], right[1][0], left[0][2], right[2][0]);
-    output[0][1] = MATRIX34_DOT3(left[0][1], right[1][1], right[0][1], left[0][0], right[2][1], left[0][2]);
-    output[0][2] = MATRIX34_DOT3(left[0][1], right[1][2], right[0][2], left[0][0], right[2][2], left[0][2]);
-    output[0][3] = MATRIX34_DOT4(left[0][1], right[1][3], right[0][3], left[0][0], right[2][3], left[0][2], left[0][3]);
-    output[1][0] = MATRIX34_DOT3(left[1][2], right[2][0], left[1][1], right[1][0], left[1][0], right[0][0]);
-    output[1][1] = MATRIX34_DOT3(left[1][2], right[2][1], left[1][1], right[1][1], left[1][0], right[0][1]);
-    output[1][2] = MATRIX34_DOT3(left[1][2], right[2][2], left[1][1], right[1][2], left[1][0], right[0][2]);
-    output[1][3] = MATRIX34_DOT4(right[2][3], left[1][2], left[1][1], right[1][3], left[1][0], right[0][3], left[1][3]);
-    output[2][0] = MATRIX34_DOT3(left[2][2], right[2][0], left[2][1], right[1][0], right[0][0], left[2][0]);
-    output[2][1] = MATRIX34_DOT3(left[2][2], right[2][1], left[2][1], right[1][1], right[0][1], left[2][0]);
-    output[2][2] = MATRIX34_DOT3(left[2][2], right[2][2], left[2][1], right[1][2], right[0][2], left[2][0]);
-    output[2][3] = MATRIX34_DOT4(left[2][2], right[2][3], left[2][1], right[1][3], right[0][3], left[2][0], left[2][3]);
-#else
     for (int row = 0; row < 3; ++row) {
-        output[row][0] = MATRIX34_DOT3(
-            left[row][0], right[0][0], left[row][1], right[1][0], left[row][2], right[2][0]);
-        output[row][1] = MATRIX34_DOT3(
-            left[row][0], right[0][1], left[row][1], right[1][1], left[row][2], right[2][1]);
-        output[row][2] = MATRIX34_DOT3(
-            left[row][0], right[0][2], left[row][1], right[1][2], left[row][2], right[2][2]);
-        output[row][3] = MATRIX34_DOT4(
-            left[row][0], right[0][3], left[row][1], right[1][3], left[row][2], right[2][3], left[row][3]);
-    }
+#if defined(WINDOWS_BEHAVIOR)
+        const int first = row == 0 ? 0 : 2;
+        const int last = row == 0 ? 2 : 0;
+#else
+        const int first = 0, last = 2;
 #endif
+        output[row][0] = MATRIX34_DOT3(
+            left[row][first], right[first][0], left[row][1], right[1][0], left[row][last], right[last][0]);
+        output[row][1] = MATRIX34_DOT3(
+            left[row][first], right[first][1], left[row][1], right[1][1], left[row][last], right[last][1]);
+        output[row][2] = MATRIX34_DOT3(
+            left[row][first], right[first][2], left[row][1], right[1][2], left[row][last], right[last][2]);
+        output[row][3] = MATRIX34_DOT4(
+            left[row][first], right[first][3], left[row][1], right[1][3], left[row][last], right[last][3], left[row][3]);
+    }
 }
 
 #undef MATRIX34_DOT3
