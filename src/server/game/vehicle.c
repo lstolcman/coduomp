@@ -117,6 +117,7 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_SLIDE_MAX_BUMPS            4
 #define VEH_SLIDE_MAX_CLIP_PLANES      5
 #define VEH_SLIDE_OVERCLIP             1.01f
+#define VEH_SLIDE_OVERCLIP_RECIPROCAL  0.990099f
 #define VEH_SLIDE_CLIP_EPSILON         0.1f
 #define VEH_SLIDE_RECOLLIDE_DOT        0.99f
 #define VEH_STEP_TOUCH_COUNT           4
@@ -6415,25 +6416,39 @@ void VEH_UpdateClient(gentity_t *ent)
 /* VERIFIED_DECOMPILER(0x7f932, 8f932_FUN_0008f932.c, VERIFY-VEHICLE-PHYSICS-MOVE-2026-06-17): DATAFLOW_VERIFIED */
 void VEH_ClipVelocity(const vec3_t in, const vec3_t normal, vec3_t out)
 {
-    float backoff;
+#if defined(WINDOWS_BEHAVIOR)
+    WIDE_FLOAT backoff;
+#else
+    volatile float backoff;
+#endif
 
     /* 0x7f945..0x7f998 reaches the ground-plane shortcut only after two
      * ordered-above-or-equal branches.  Writing the other arm as `< || <`
      * incorrectly selects the shortcut when either comparison is unordered. */
     if (!(normal[2] >= VEH_GROUND_NORMAL_MIN_Z &&
-          in[0] * in[0] + in[1] * in[1] >= in[2] * in[2])) {
-        backoff = in[0] * normal[0] + in[1] * normal[1] + in[2] * normal[2];
+          (WIDE_FLOAT)in[0] * in[0] + (WIDE_FLOAT)in[1] * in[1] >= (WIDE_FLOAT)in[2] * in[2])) {
+        backoff = ((WIDE_FLOAT)in[0] * normal[0] + (WIDE_FLOAT)in[1] * normal[1]) + (WIDE_FLOAT)in[2] * normal[2];
         if (backoff < 0.0f) {
-            backoff *= VEH_SLIDE_OVERCLIP;
+            backoff = (WIDE_FLOAT)backoff * VEH_SLIDE_OVERCLIP;
         } else {
-            backoff /= VEH_SLIDE_OVERCLIP;
+#if defined(WINDOWS_BEHAVIOR)
+            /* Windows multiplies by the float-rounded reciprocal and retains the result. */
+            backoff *= VEH_SLIDE_OVERCLIP_RECIPROCAL;
+#else
+            backoff = (WIDE_FLOAT)backoff / VEH_SLIDE_OVERCLIP;
+#endif
         }
 
         for (int axis = 0; axis < 3; axis++) {
+#if defined(WINDOWS_BEHAVIOR)
+            /* Windows keeps the normal product through the final subtraction. */
+            out[axis] = (WIDE_FLOAT)in[axis] - normal[axis] * backoff;
+#else
             /* 0x7fa70..0x7fa99: the product is stored to a float slot
              * before the subtract (two roundings per component). */
-            const float scaledNormal = normal[axis] * backoff;
+            const volatile float scaledNormal = (WIDE_FLOAT)normal[axis] * backoff;
             out[axis] = in[axis] - scaledNormal;
+#endif
         }
         return;
     }
@@ -6441,7 +6456,7 @@ void VEH_ClipVelocity(const vec3_t in, const vec3_t normal, vec3_t out)
     /* 0x7f9c2: machine stores out[2] BEFORE out[0]/out[1].  Callers pass
      * the same array as in and out, so this order is load-bearing: out[2]
      * must be computed from the still-unclobbered in[0]/in[1]. */
-    out[2] = -in[0] * normal[0] - in[1] * normal[1];
+    out[2] = -(WIDE_FLOAT)in[0] * normal[0] - (WIDE_FLOAT)in[1] * normal[1];
     out[0] = in[0] * normal[2];
     out[1] = in[1] * normal[2];
 }
@@ -6878,9 +6893,17 @@ void VEH_GroundMove(gentity_t *ent)
     VEH_ClipVelocity(vehicleState->velocity, vehLastGroundTrace.normal,
                      vehicleState->velocity);
 
-    if (vehicleState->velocity[0] * originalVelocity[0] +
-        vehicleState->velocity[1] * originalVelocity[1] +
-        vehicleState->velocity[2] * originalVelocity[2] > 0.0f) {
+    /* Both profiles retain the dot product; Windows adds X/Z/Y, Linux X/Y/Z. */
+#if defined(WINDOWS_BEHAVIOR)
+    const WIDE_FLOAT velocityDot = ((WIDE_FLOAT)vehicleState->velocity[0] * originalVelocity[0] +
+                                   (WIDE_FLOAT)vehicleState->velocity[2] * originalVelocity[2]) +
+                                  (WIDE_FLOAT)vehicleState->velocity[1] * originalVelocity[1];
+#else
+    const WIDE_FLOAT velocityDot = ((WIDE_FLOAT)vehicleState->velocity[0] * originalVelocity[0] +
+                                   (WIDE_FLOAT)vehicleState->velocity[1] * originalVelocity[1]) +
+                                  (WIDE_FLOAT)vehicleState->velocity[2] * originalVelocity[2];
+#endif
+    if (velocityDot > 0.0f) {
         VectorNormalize(vehicleState->velocity);
         vehicleState->velocity[0] *= speed;
         vehicleState->velocity[1] *= speed;
