@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "animation/dobj.h"
+#include <animation/dobj.h>
 #include "animation/xmodel.h"
 #include "qcommon/dobj_types.h"
 #include "qcommon/file_data.h"

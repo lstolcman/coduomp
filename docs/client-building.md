@@ -119,23 +119,47 @@ intermediate results can differ from the original game. Configuration emits
 a warning on this target. The x64 build uses Miniaudio, matching the Makefile
 architecture policy, and does not need `MSS32_DLL`.
 
-The Windows CMake build currently rejects clang-cl. Clang 19.1.7 and 22.1.8
-can emit x87 instructions on x64 with `-mlong-double-80` and
-`-ffp-eval-method=extended`, but the tested combination passes extended-value
-pointers to variadic calls that expect `double` and rejects ordinary float
-initializer lists in C++. Disabling SSE to use `-mfpmath=387` instead changes
-floating-point argument registers and breaks the Windows x64 calling convention.
-These modes are not a supported replacement for the presets above. An 80-bit
-type or an x87 instruction alone does not establish a usable compiler profile.
+For **64-bit Windows with native x87 in the existing explicit extended
+expressions**, prefer Clang 22 or newer in clang-cl mode. Install LLVM and
+Visual Studio's Clang tools support, then select the `ClangCL` toolset:
 
-The presets keep separate build directories at `.workbench/build/msvc` and
-`.workbench/build/msvc-x64`; never change the architecture of an existing
+```sh
+cmake --preset clang-cl-x64
+cmake --build --preset clang-cl-x64 --parallel 2
+```
+
+The selected toolset must actually resolve to Clang 22 or newer; CMake checks
+the compiler version. This profile uses `/fp:strict`, `-mlong-double-80`,
+`-ffp-eval-method=source`, and `-ffp-contract=off`. Existing `WIDE_FLOAT`,
+`long double`, and native x87 helpers use hardware x87 (`EMULATE_X87=0`).
+Ordinary `float`/`double` expressions still use SSE, so this does not turn the
+whole program into an x87 build. Assignment to `WIDE_FLOAT` alone does not
+widen an expression computed entirely from narrower operands; existing casts
+and explicit arithmetic boundaries determine which operations are extended.
+
+The math compatibility header redirects the standard long-double calls used
+by the project to a pinned, namespaced musl math slice, because Microsoft's
+CRT implements those calls with binary64. Reconstructed `CoduoLibm` routines
+remain in use. The adapter keeps extended values inside the project ABI;
+Windows APIs and dependencies keep their normal Microsoft ABI. The math
+kernels temporarily select a 64-bit significand and restore the caller's x87
+control word. Direct square roots retain the caller's precision.
+
+Do not add `-ffp-eval-method=extended` or disable SSE to this profile. Tested
+Clang 19.1.7 and 22.1.8 global extended evaluation mispasses variadic doubles
+and rejects ordinary C++ float initializer lists; disabling SSE breaks the
+Windows x64 argument convention. Source-type evaluation avoids those failures.
+This profile has been built with the native Linux clang-cl driver and
+Microsoft SDK/linker through Wine; native Visual Studio IDE execution and
+runtime arithmetic parity remain unverified.
+
+The presets keep separate build directories at `.workbench/build/<preset-name>`; never change the architecture of an existing
 build directory. Without presets, specify `-A Win32` or `-A x64` explicitly
 for a Visual Studio generator, whose own default follows the host architecture.
 For Ninja or NMake, use the matching x86 or x64 developer command prompt and
 pass `-DCMAKE_BUILD_TYPE=Release` or `Debug` instead of `-A`. In Visual Studio's
-CMake interface, select `MSVC x86 (default)` or `MSVC x64 (floating-point
-differences)` from the configure-preset selector.
+CMake interface, select the desired MSVC or clang-cl entry from the
+configure-preset selector.
 
 Outputs are `bin/<configuration>/CoDUOMP.exe` and the cgame, UI, and game DLLs
 under `bin/<configuration>/uo/`, relative to the build directory. Keep the
@@ -149,9 +173,9 @@ host-math fallbacks for some transcendental functions. Selecting x86 therefore
 does not yet mean that all software emulation has been removed or that the
 whole program matches retail arithmetic.
 
-The default `CODUO_FP_FAITHFUL=auto` permits both architectures and reports
+The default `CODUO_FP_FAITHFUL=auto` permits all three presets and reports
 these limits; `relaxed` remains accepted for existing build commands. `strict`
-rejects the current MSVC implementation because whole-program parity remains
+rejects these Windows CMake profiles because whole-program parity remains
 unverified. A separate `relaxed` acknowledgement is not needed to configure
 the x64 preset; choosing it emits the architecture warning above.
 

@@ -1,7 +1,7 @@
 #ifndef SHARED_SERVER_DOBJ_H
 #define SHARED_SERVER_DOBJ_H
 
-#include "animation/dobj.h"
+#include <animation/dobj.h>
 
 #include <stdint.h>
 

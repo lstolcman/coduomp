@@ -2,18 +2,22 @@
 # Common build settings
 #-----------------------------------------------------------------
 
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+set(CODUOMP_CLANG_CL FALSE)
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+   AND CMAKE_C_SIMULATE_ID STREQUAL "MSVC" AND CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC"
+   AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    if(CMAKE_C_COMPILER_VERSION VERSION_LESS 22 OR CMAKE_CXX_COMPILER_VERSION VERSION_LESS 22)
+        message(FATAL_ERROR "The clang-cl x64 profile requires Clang 22 or newer.")
+    endif()
+    set(CODUOMP_CLANG_CL TRUE)
+    # Keep ordinary float/double calls on the Windows ABI. Global extended
+    # evaluation mispasses variadic doubles in the tested Clang releases.
+    set(CODUOMP_EXTENDED_FLAGS /fp:strict /clang:-mlong-double-80
+        /clang:-ffp-eval-method=source /clang:-ffp-contract=off)
+elseif(NOT CMAKE_C_COMPILER_ID STREQUAL "MSVC" OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" OR MSVC_VERSION LESS 1939)
     message(FATAL_ERROR
-        "CoDUOMP: clang-cl is not supported by this Windows CMake build yet. "
-        "The tested x64 native-x87 options break variadic argument passing or "
-        "the Windows x64 floating-point calling convention. "
-        "Use the msvc preset for x86 or msvc-x64 with its documented arithmetic limits. "
-        "See docs/client-building.md.")
-endif()
-if(NOT CMAKE_C_COMPILER_ID STREQUAL "MSVC" OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" OR MSVC_VERSION LESS 1939)
-	message(FATAL_ERROR
-		"CoDUOMP: this CMake project requires MSVC 19.39 or newer with C11 and __typeof__ support. "
-		"Use the Makefile targets for GCC/Clang builds.")
+        "This CMake project requires MSVC 19.39+ or clang-cl 22+ for x64. "
+        "Use the Makefile targets for other toolchains.")
 endif()
 
 # Language levels used by the Makefile targets (C11/C17).
@@ -77,6 +81,15 @@ function(coduomp_apply_common target)
     target_compile_definitions(${target} PRIVATE
         _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE
         _WINSOCK_DEPRECATED_NO_WARNINGS)
+    if(CODUOMP_CLANG_CL)
+        foreach(_flag IN LISTS CODUOMP_EXTENDED_FLAGS)
+            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C,CXX>:${_flag}>")
+        endforeach()
+        target_compile_options(${target} PRIVATE
+            "$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.>")
+        target_include_directories(${target} BEFORE PRIVATE "${CMAKE_SOURCE_DIR}/src/compat/clangcl")
+        target_link_libraries(${target} PRIVATE coduomp_extended_math)
+    endif()
     target_link_libraries(${target} PRIVATE coduomp_softfloat)
 endfunction()
 
