@@ -197,9 +197,21 @@ static void game_compat_fire_weapon_add_projectile_inherited_velocity(gentity_t 
                                                       gentity_t *shooter,
                                                       const float *dir)
 {
+#if defined(WINDOWS_BEHAVIOR) && !EMULATE_X87
+    /* The Windows dot product accumulates Z/Y/X and stays live through all
+     * three velocity updates. Linux stores its X/Y/Z sum as float first. */
+    const WIDE_FLOAT push = ((WIDE_FLOAT)dir[2] * shooter->client->ps.velocity[2]
+                            + (WIDE_FLOAT)dir[1] * shooter->client->ps.velocity[1])
+                            + (WIDE_FLOAT)dir[0] * shooter->client->ps.velocity[0];
+#elif !EMULATE_X87
+    volatile float push = ((WIDE_FLOAT)shooter->client->ps.velocity[0] * dir[0]
+                           + (WIDE_FLOAT)shooter->client->ps.velocity[1] * dir[1])
+                           + (WIDE_FLOAT)shooter->client->ps.velocity[2] * dir[2];
+#else
     float push;
 
     push = game_compat_fire_weapon_dot_product(shooter->client->ps.velocity, dir);
+#endif
 #if EMULATE_X87
     for (int i = 0; i < 3; i++) {
         projectile->s.pos.trDelta[i] = x87f_store_f32(x87f_add(
@@ -207,9 +219,9 @@ static void game_compat_fire_weapon_add_projectile_inherited_velocity(gentity_t 
             x87f_mul(x87f_load_f32(dir[i]), x87f_load_f32(push))));
     }
 #else
-    projectile->s.pos.trDelta[0] += dir[0] * push;
-    projectile->s.pos.trDelta[1] += dir[1] * push;
-    projectile->s.pos.trDelta[2] += dir[2] * push;
+    projectile->s.pos.trDelta[0] = (WIDE_FLOAT)dir[0] * push + projectile->s.pos.trDelta[0];
+    projectile->s.pos.trDelta[1] = (WIDE_FLOAT)dir[1] * push + projectile->s.pos.trDelta[1];
+    projectile->s.pos.trDelta[2] = (WIDE_FLOAT)dir[2] * push + projectile->s.pos.trDelta[2];
 #endif
 }
 
@@ -392,7 +404,11 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
     gentity_t *damageInflictor;
     vec3_t dir;
     vec3_t reflected;
-    float reflectionScale;
+#if defined(WINDOWS_BEHAVIOR) && !EMULATE_X87
+    WIDE_FLOAT reflectionScale;
+#else
+    volatile float reflectionScale;
+#endif
     int meansOfDeath;
     int damageFlags = 0;
     qboolean hit = qfalse;
@@ -460,19 +476,23 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
                          x87f_load_f32(reflectionScale))));
         }
 #else
-        reflectionScale =
-            (float)(((long double)dir[0] * (long double)trace.normal[0] +
-                     (long double)dir[1] * (long double)trace.normal[1] +
-                     (long double)dir[2] * (long double)trace.normal[2]) *
-                    (long double)-2.0f);
-        reflected[0] = dir[0] + trace.normal[0] * reflectionScale;
-        reflected[1] = dir[1] + trace.normal[1] * reflectionScale;
-        reflected[2] = dir[2] + trace.normal[2] * reflectionScale;
+        /* Windows retains the Z/Y/X dot product and reflection scale. Linux
+         * accumulates X/Y/Z and rounds the scaled result before reflection. */
+#if defined(WINDOWS_BEHAVIOR)
+        reflectionScale = (((WIDE_FLOAT)trace.normal[2] * dir[2] + (WIDE_FLOAT)trace.normal[1] * dir[1])
+                           + (WIDE_FLOAT)trace.normal[0] * dir[0]) * -2.0f;
+#else
+        reflectionScale = (((WIDE_FLOAT)dir[0] * trace.normal[0] + (WIDE_FLOAT)dir[1] * trace.normal[1])
+                           + (WIDE_FLOAT)dir[2] * trace.normal[2]) * -2.0f;
+#endif
+        reflected[0] = (WIDE_FLOAT)trace.normal[0] * reflectionScale + dir[0];
+        reflected[1] = (WIDE_FLOAT)trace.normal[1] * reflectionScale + dir[1];
+        reflected[2] = (WIDE_FLOAT)trace.normal[2] * reflectionScale + dir[2];
 #endif
 
         if ((trace.surfaceFlags & SURF_SKY) == 0 &&
             traceEnt->client == NULL) {
-            if (hitEnt == attacker || trace.partName != 0) {
+            if (hitEnt == attacker || trace.partGroup != 0) {
                 gentity_t *event = G_TempEntity(trace.endpos, EV_BULLET_HIT);
 
                 event->s.tempEffectId = DirToByte(trace.normal);
@@ -508,15 +528,20 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
         hit = qtrue;
     }
 
-    if ((trace.contents & 0x10) != 0) {
-        vec3_t waterDir;
-        float normalDot;
-        float step;
+    if ((trace.contents & CONTENTS_GLASS) != 0) {
+        vec3_t penetrationDir;
+#if defined(WINDOWS_BEHAVIOR) && !EMULATE_X87
+        WIDE_FLOAT normalDot;
+        WIDE_FLOAT step;
+#else
+        volatile float normalDot;
+        volatile float step;
+#endif
 
-        game_compat_fire_weapon_vector_subtract(end, start, waterDir);
-        VectorNormalize(waterDir);
-        normalDot = -game_compat_fire_weapon_dot_product(waterDir, trace.normal);
+        game_compat_fire_weapon_vector_subtract(end, start, penetrationDir);
+        VectorNormalize(penetrationDir);
 #if EMULATE_X87
+        normalDot = -game_compat_fire_weapon_dot_product(penetrationDir, trace.normal);
         step = normalDot >= 0.125f
                    ? x87f_store_f32(x87f_div(x87f_load_f32(0.25f),
                                              x87f_load_f32(normalDot)))
@@ -524,13 +549,23 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
         for (int i = 0; i < 3; i++) {
             start[i] = x87f_store_f32(x87f_add(
                 x87f_load_f32(trace.endpos[i]),
-                x87f_mul(x87f_load_f32(waterDir[i]), x87f_load_f32(step))));
+                x87f_mul(x87f_load_f32(penetrationDir[i]), x87f_load_f32(step))));
         }
 #else
-        step = normalDot >= 0.125f ? 0.25f / normalDot : 0.0f;
-        start[0] = trace.endpos[0] + waterDir[0] * step;
-        start[1] = trace.endpos[1] + waterDir[1] * step;
-        start[2] = trace.endpos[2] + waterDir[2] * step;
+        /* The Windows projection and quotient stay live. Linux stores the
+         * dot product before negation and stores the quotient before use. */
+#if defined(WINDOWS_BEHAVIOR)
+        normalDot = -(((WIDE_FLOAT)penetrationDir[2] * trace.normal[2] + (WIDE_FLOAT)penetrationDir[1] * trace.normal[1])
+                      + (WIDE_FLOAT)penetrationDir[0] * trace.normal[0]);
+#else
+        normalDot = ((WIDE_FLOAT)trace.normal[0] * penetrationDir[0] + (WIDE_FLOAT)trace.normal[1] * penetrationDir[1])
+                    + (WIDE_FLOAT)trace.normal[2] * penetrationDir[2];
+        normalDot = -normalDot;
+#endif
+        step = normalDot >= 0.125f ? 0.25f / (WIDE_FLOAT)normalDot : 0.0f;
+        start[0] = (WIDE_FLOAT)penetrationDir[0] * step + trace.endpos[0];
+        start[1] = (WIDE_FLOAT)penetrationDir[1] * step + trace.endpos[1];
+        start[2] = (WIDE_FLOAT)penetrationDir[2] * step + trace.endpos[2];
 #endif
 
         hit = (qboolean)(hit | Bullet_Fire_Extended(hitEnt, attacker, start, end,
@@ -553,6 +588,11 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
                        weaponInfo->damageFalloffMinRange,
                        weaponInfo->damageFalloffMaxRange));
     /* 0x7b125: bare fild of damage, no float32 rounding of the int. */
+#if defined(WINDOWS_BEHAVIOR)
+    volatile float penetrationDamage = (WIDE_FLOAT)damage;
+#else
+    const WIDE_FLOAT penetrationDamage = damage;
+#endif
     if (damage <= 0.0f) {
         return hit;
     }
@@ -567,15 +607,14 @@ qboolean Bullet_Fire_Extended(gentity_t *hitEnt, gentity_t *attacker, float *sta
     G_Damage(traceEnt, damageInflictor, attacker, muzzle->forward, trace.endpos, damage,
              damageFlags, meansOfDeath, trace.partGroup);
 
-    /* NO shim on damage*0.5: 0.5 is a power of two so (long double)damage*0.5
-     * is exact (damage/2) in both 64-bit and 80-bit, and the (int32_t) cast
-     * truncates that exact value identically (rule 6). */
+    /* Halving is exact, but its input differs by platform: Windows retains a
+     * float conversion made before G_Damage; Linux converts the integer wide.
+     * The positive half is in int32_t range before truncation. */
     if (traceEnt->client != NULL &&
         (damageFlags & DAMAGE_FLAG_RICOCHET) != 0 &&
-        (long double)damage * (long double)0.5f > 0.0L) {
+        (WIDE_FLOAT)penetrationDamage * 0.5f > 0.0L) {
         hit = (qboolean)(hit | Bullet_Fire_Extended(traceEnt, attacker, trace.endpos, end,
-                                                    (int32_t)((long double)damage *
-                                                              (long double)0.5f),
+                                                    (int32_t)((WIDE_FLOAT)penetrationDamage * 0.5f),
                                                     coduo_int32_from_bits(
                                                         (uint32_t)recursionDepth +
                                                         UINT32_C(1)),
@@ -598,14 +637,18 @@ gentity_t *weapon_grenadelauncher_fire(gentity_t *ent, int weapon,
     vec3_t dir;
     gentity_t *grenade;
 
-    /* 0x7b2df-0x7b32b: native x87 builds consume the integer speeds through
-     * fild (without a float32 integer-conversion boundary), and the vertical
-     * speed is added after dir[2] has been stored. Non-x87 exact emulation is
-     * intentionally outside this audit's no-new-emulation policy. */
-    dir[0] = muzzle->forward[0] * weaponInfo->missileSpeed;
-    dir[1] = muzzle->forward[1] * weaponInfo->missileSpeed;
-    dir[2] = muzzle->forward[2] * weaponInfo->missileSpeed;
-    dir[2] += weaponInfo->missileVerticalSpeed;
+    /* 0x7b2df-0x7b32b: Linux consumes integer speeds without a float integer-
+     * conversion boundary and stores the Z product before the upward boost.
+     * Windows keeps that product live. Native wide evaluation preserves the
+     * integer inputs on non-x87 platforms without software emulation. */
+    dir[0] = (WIDE_FLOAT)muzzle->forward[0] * weaponInfo->missileSpeed;
+    dir[1] = (WIDE_FLOAT)muzzle->forward[1] * weaponInfo->missileSpeed;
+#if defined(WINDOWS_BEHAVIOR)
+    dir[2] = (WIDE_FLOAT)muzzle->forward[2] * weaponInfo->missileSpeed + weaponInfo->missileVerticalSpeed;
+#else
+    volatile float verticalProduct = (WIDE_FLOAT)muzzle->forward[2] * weaponInfo->missileSpeed;
+    dir[2] = (WIDE_FLOAT)verticalProduct + weaponInfo->missileVerticalSpeed;
+#endif
 
     grenade = fire_grenade(ent, muzzle->origin, dir, weapon);
     VectorNormalize(dir);
