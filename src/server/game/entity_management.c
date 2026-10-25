@@ -543,9 +543,10 @@ static void game_compat_g_turret_vector_subtract(const float *a, const float *b,
 static void game_compat_g_turret_vector_ma(const float *start, float scale, const float *dir,
                              float *out)
 {
-    out[0] = start[0] + dir[0] * scale;
-    out[1] = start[1] + dir[1] * scale;
-    out[2] = start[2] + dir[2] * scale;
+    /* Keep each product wide through the addition; round at the output store. */
+    out[0] = (float)((WIDE_FLOAT)dir[0] * (WIDE_FLOAT)scale + (WIDE_FLOAT)start[0]);
+    out[1] = (float)((WIDE_FLOAT)dir[1] * (WIDE_FLOAT)scale + (WIDE_FLOAT)start[1]);
+    out[2] = (float)((WIDE_FLOAT)dir[2] * (WIDE_FLOAT)scale + (WIDE_FLOAT)start[2]);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: turret pitch/yaw pair accessor; extracted during reconstruction of 0x5bedf. */
