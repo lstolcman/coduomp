@@ -53,6 +53,7 @@
 #define ITEM_SPAWNFLAG_NO_DROP_TO_FLOOR 0x00000001u
 #define ITEM_SPAWNFLAG_WEAPON_RESPAWN 0x00000008u
 #define ITEM_BOUNCE_RETRACE_Z 128.0f
+#define ITEM_BOUNCE_REFLECTION_SCALE -2.0f
 #define ITEM_BOUNCE_STOP_Z 40.0f
 #define ITEM_BOUNCE_SETTLE_MIN_Z 0.5f
 #define ITEM_BOUNCE_SETTLE_RANDOM_Z 0.5f
@@ -1407,29 +1408,33 @@ int Pickup_Weapon(gentity_t *itemEnt, gentity_t *player, int *event,
 /* VERIFIED_DECOMPILER(0x5644a, 6644a_G_BounceItem.c, VERIFY-P1-ITEMS2-2026-06-17): DATAFLOW_VERIFIED - bounce time, trajectory delta reflection, startsolid retrace, settle-vs-bounce branch, ground entity, angles, and link side effect checked against current decompiler output. */
 void G_BounceItem(gentity_t *ent, trace_t *trace)
 {
-    /* Stock 0x56481: (fild)(time-previousTime) * fraction, fistp-direct trunc. */
+    /* Windows rounds elapsed milliseconds to float before multiplying and
+     * consumes the low dword of a qword conversion. Linux retains the integer
+     * load through multiplication and truncates directly to a dword. */
 #if EMULATE_X87
     int bounceTime =
         x87f_store_i32_trunc(x87f_mul(
             x87f_load_i32(level.time - level.previousTime),
             x87f_load_f32(trace->fraction))) +
         level.previousTime;
+#elif defined(WINDOWS_BEHAVIOR)
+    volatile float elapsed = (float)(level.time - level.previousTime);
+    int bounceTime = coduo_fp_to_i32_extended((WIDE_FLOAT)elapsed * trace->fraction) + level.previousTime;
 #else
     int bounceTime =
-        (int32_t)((long double)(level.time - level.previousTime) *
-                  (long double)trace->fraction) +
+        coduo_fp_to_i32_extended((WIDE_FLOAT)(level.time - level.previousTime) * trace->fraction) +
         level.previousTime;
 #endif
     vec3_t velocity;
-    float dot;
+    volatile float dot;
     float *delta = ent->s.pos.trDelta;
 
     BG_EvaluateTrajectoryDelta(&ent->s.pos, bounceTime, velocity);
 
-    /* Original i386 G_BounceItem 0x564ef..0x5657f stores the reflected
-     * delta to float first (dot * -2.0f * normal + velocity), then scales
-     * by bounceFactor as a second float store per component.  The velocity.normal
-     * dot (0x564d0) is 3-mul/2-add kept 80-bit, stored to float. */
+    /* Retain each dot-product term until the float result: Windows sums X/Z/Y,
+     * Linux X/Y/Z. Windows also rounds the reflection scale to float; Linux
+     * keeps that multiplication live through the reflected component. Each
+     * component rounds before its separate bounce-factor multiplication. */
 #if EMULATE_X87
     dot = x87f_store_f32(x87f_add(x87f_add(
         x87f_mul(x87f_load_f32(velocity[0]), x87f_load_f32(trace->normal[0])),
@@ -1442,12 +1447,19 @@ void G_BounceItem(gentity_t *ent, trace_t *trace)
             x87f_load_f32(velocity[k])));
     }
 #else
-    dot = velocity[0] * trace->normal[0] +
-          velocity[1] * trace->normal[1] +
-          velocity[2] * trace->normal[2];
-    delta[0] = dot * -2.0f * trace->normal[0] + velocity[0];
-    delta[1] = dot * -2.0f * trace->normal[1] + velocity[1];
-    delta[2] = dot * -2.0f * trace->normal[2] + velocity[2];
+#if defined(WINDOWS_BEHAVIOR)
+    volatile float reflectionScale;
+    dot = ((WIDE_FLOAT)velocity[0] * trace->normal[0] + (WIDE_FLOAT)velocity[2] * trace->normal[2]) +
+          (WIDE_FLOAT)velocity[1] * trace->normal[1];
+#else
+    WIDE_FLOAT reflectionScale;
+    dot = ((WIDE_FLOAT)velocity[0] * trace->normal[0] + (WIDE_FLOAT)velocity[1] * trace->normal[1]) +
+          (WIDE_FLOAT)velocity[2] * trace->normal[2];
+#endif
+    reflectionScale = (WIDE_FLOAT)dot * ITEM_BOUNCE_REFLECTION_SCALE;
+    delta[0] = (WIDE_FLOAT)reflectionScale * trace->normal[0] + velocity[0];
+    delta[1] = (WIDE_FLOAT)reflectionScale * trace->normal[1] + velocity[1];
+    delta[2] = (WIDE_FLOAT)reflectionScale * trace->normal[2] + velocity[2];
 #endif
     delta[0] *= ent->bounceFactor;
     delta[1] *= ent->bounceFactor;
