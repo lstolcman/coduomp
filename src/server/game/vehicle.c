@@ -2061,6 +2061,16 @@ void G_ParseScrVehicleInfo(void)
     for (int vehicleIndex = 0; vehicleIndex < g_vehicleInfoCount;
          vehicleIndex++) {
         vehicleInfo_t *vehicleInfo = &g_vehicleInfoTable[vehicleIndex];
+        /* These are separate byte fields; index their pointers, not one member. */
+        uint8_t *soundAliases[VEH_INFO_SOUND_ALIAS_COUNT] = {
+            &vehicleInfo->idleBlendSound0,
+            &vehicleInfo->idleBlendSound1,
+            &vehicleInfo->runBlendSound0,
+            &vehicleInfo->runBlendSound1,
+            &vehicleInfo->primaryActiveSound,
+            &vehicleInfo->primaryStopSound,
+            &vehicleInfo->collisionSound
+        };
 
         vehicleInfo->acceleration *= VEH_INFO_SPEED_SCALE;
         vehicleInfo->pathSpeed *= VEH_INFO_SPEED_SCALE;
@@ -2079,10 +2089,9 @@ void G_ParseScrVehicleInfo(void)
             const char *soundName = vehicleInfo->soundNames[soundIndex];
 
             if (soundName[0] == '\0') {
-                ((uint8_t *)(void *)&vehicleInfo->idleBlendSound0)[soundIndex] = 0;
+                *soundAliases[soundIndex] = 0;
             } else {
-                ((uint8_t *)(void *)&vehicleInfo->idleBlendSound0)[soundIndex] =
-                    G_SoundAliasIndex(soundName);
+                *soundAliases[soundIndex] = G_SoundAliasIndex(soundName);
             }
         }
 
