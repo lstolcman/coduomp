@@ -696,7 +696,8 @@ gentity_t *Drop_Item(gentity_t *ent, gitem_t *item, float angleOffset,
         velocity[0] *= DROPPED_ITEM_THROW_SPEED;
         velocity[1] *= DROPPED_ITEM_THROW_SPEED;
         velocity[2] *= DROPPED_ITEM_THROW_SPEED;
-        /* randSigned*RANDOM + THROW_UP kept 80-bit, + velocity[2], one store. */
+        /* Retain the random product and both additions until the float store.
+         * Windows adds velocity before THROW_UP; Linux adds it afterward. */
 #if EMULATE_X87
         velocity[2] = x87f_store_f32(x87f_add(
             x87f_add(x87f_mul(
@@ -704,11 +705,10 @@ gentity_t *Drop_Item(gentity_t *ent, gitem_t *item, float angleOffset,
                               x87f_load_f32(DROPPED_ITEM_THROW_UP_RANDOM)),
                      x87f_load_f32(DROPPED_ITEM_THROW_UP)),
             x87f_load_f32(velocity[2])));
+#elif defined(WINDOWS_BEHAVIOR)
+        velocity[2] = ((WIDE_FLOAT)coduo_server_rand_signed_unit() * DROPPED_ITEM_THROW_UP_RANDOM + velocity[2]) + DROPPED_ITEM_THROW_UP;
 #else
-        velocity[2] +=
-            (long double)coduo_server_rand_signed_unit() *
-                DROPPED_ITEM_THROW_UP_RANDOM +
-            DROPPED_ITEM_THROW_UP;
+        velocity[2] = ((WIDE_FLOAT)coduo_server_rand_signed_unit() * DROPPED_ITEM_THROW_UP_RANDOM + DROPPED_ITEM_THROW_UP) + velocity[2];
 #endif
     } else {
         velocity[0] = 0.0f;
@@ -718,18 +718,15 @@ gentity_t *Drop_Item(gentity_t *ent, gitem_t *item, float angleOffset,
 
     origin[0] = ent->currentOrigin[0];
     origin[1] = ent->currentOrigin[1];
-    /* (maxs[2]-mins[2])*0.5 kept 80-bit, + currentOrigin[2], one store. */
+    /* Keep the bounds difference and half-height wide until adding the origin
+     * and storing the completed coordinate as float. */
 #if EMULATE_X87
     origin[2] = x87f_store_f32(x87f_add(
         x87f_mul(x87f_sub(x87f_load_f32(ent->maxs[2]), x87f_load_f32(ent->mins[2])),
                  x87f_load_f32(0.5f)),
         x87f_load_f32(ent->currentOrigin[2])));
 #else
-    origin[2] =
-        ent->currentOrigin[2] +
-        (ent->maxs[2] -
-         ent->mins[2]) *
-            0.5f;
+    origin[2] = ((WIDE_FLOAT)ent->maxs[2] - ent->mins[2]) * 0.5f + ent->currentOrigin[2];
 #endif
 
     return LaunchItem(item, origin, velocity, ent->s.number);
@@ -832,14 +829,24 @@ static void game_compat_drop_weapon_place_at_tag(gentity_t *source, gentity_t *d
 {
     DObjSkelMat tagMatrix;
     vec3_t tagAngles;
+    vec3_t angularVelocity;
 
     if (G_DObjGetWorldTagMatrix(source, tagName, &tagMatrix) != 0) {
         trace_t trace;
         vec3_t start;
 
-        /* Original i386 Drop_Weapon 0x556fc..0x557b3 rounds each stage to
-         * float per component: mins+maxs stored, then *0.5f stored, then
-         * +currentOrigin stored. Keep the three-pass store structure. */
+        /* Windows rounds X after halving and Z before halving; Y stays wide
+         * through the origin addition. The volatile locals retain those two
+         * intermediate float stores when the compiler keeps excess precision.
+         * Linux rounds every component after each of the three stages. */
+#if defined(WINDOWS_BEHAVIOR)
+        volatile float halfX = (float)(((WIDE_FLOAT)source->maxs[0] + source->mins[0]) * 0.5f);
+        volatile float sumZ = (float)((WIDE_FLOAT)source->maxs[2] + source->mins[2]);
+
+        start[0] = (WIDE_FLOAT)halfX + source->currentOrigin[0];
+        start[1] = ((WIDE_FLOAT)source->maxs[1] + source->mins[1]) * 0.5f + source->currentOrigin[1];
+        start[2] = (WIDE_FLOAT)sumZ * 0.5f + source->currentOrigin[2];
+#else
         start[0] = source->mins[0] + source->maxs[0];
         start[1] = source->mins[1] + source->maxs[1];
         start[2] = source->mins[2] + source->maxs[2];
@@ -849,6 +856,7 @@ static void game_compat_drop_weapon_place_at_tag(gentity_t *source, gentity_t *d
         start[0] += source->currentOrigin[0];
         start[1] += source->currentOrigin[1];
         start[2] += source->currentOrigin[2];
+#endif
 
         trap_TraceCapsule(&trace, start,
                           dropped->mins,
@@ -876,31 +884,27 @@ static void game_compat_drop_weapon_place_at_tag(gentity_t *source, gentity_t *d
 
     G_SetAngle(dropped, source->currentAngles);
 
-    dropped->s.apos.trType =
-        TR_LINEAR;
-    dropped->s.apos.trTime = level.time;
-    /* randSigned * const, one float store per component -> shim. */
+    /* Round all three random products to float before publishing the trajectory. */
 #if EMULATE_X87
-    dropped->s.apos.trDelta[0] = x87f_store_f32(x87f_mul(
+    angularVelocity[0] = x87f_store_f32(x87f_mul(
         x87f_load_f64(coduo_server_rand_signed_unit()),
         x87f_load_f32(DROPPED_WEAPON_TAG_YAW_RANDOM)));
-    dropped->s.apos.trDelta[1] = x87f_store_f32(x87f_mul(
+    angularVelocity[1] = x87f_store_f32(x87f_mul(
         x87f_load_f64(coduo_server_rand_signed_unit()),
         x87f_load_f32(DROPPED_WEAPON_TAG_PITCH_RANDOM)));
-    dropped->s.apos.trDelta[2] = x87f_store_f32(x87f_mul(
+    angularVelocity[2] = x87f_store_f32(x87f_mul(
         x87f_load_f64(coduo_server_rand_signed_unit()),
         x87f_load_f32(DROPPED_WEAPON_TAG_ROLL_RANDOM)));
 #else
-    dropped->s.apos.trDelta[0] =
-        (long double)coduo_server_rand_signed_unit() *
-        DROPPED_WEAPON_TAG_YAW_RANDOM;
-    dropped->s.apos.trDelta[1] =
-        (long double)coduo_server_rand_signed_unit() *
-        DROPPED_WEAPON_TAG_PITCH_RANDOM;
-    dropped->s.apos.trDelta[2] =
-        (long double)coduo_server_rand_signed_unit() *
-        DROPPED_WEAPON_TAG_ROLL_RANDOM;
+    angularVelocity[0] = (WIDE_FLOAT)coduo_server_rand_signed_unit() * DROPPED_WEAPON_TAG_YAW_RANDOM;
+    angularVelocity[1] = (WIDE_FLOAT)coduo_server_rand_signed_unit() * DROPPED_WEAPON_TAG_PITCH_RANDOM;
+    angularVelocity[2] = (WIDE_FLOAT)coduo_server_rand_signed_unit() * DROPPED_WEAPON_TAG_ROLL_RANDOM;
 #endif
+    dropped->s.apos.trType = TR_LINEAR;
+    dropped->s.apos.trTime = level.time;
+    dropped->s.apos.trDelta[0] = angularVelocity[0];
+    dropped->s.apos.trDelta[1] = angularVelocity[1];
+    dropped->s.apos.trDelta[2] = angularVelocity[2];
 }
 
 /* VERIFIED_DECOMPILER(0x552e6, 652e6_Drop_Weapon.c, VERIFY-P1-ITEMS-2026-06-17): DATAFLOW_VERIFIED - ownership weapon check, dropDisabled/clipRequired branches, ammo/clip transfer or synthetic ammo, dropped counts, tag-placement helper behavior, and return checked against current decompiler output. */
