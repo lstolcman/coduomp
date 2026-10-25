@@ -1,7 +1,6 @@
 #include "q_math.h"
 
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_math_sqrt.h"
 #include "compat/coduo_x87_eval.h"
 
 #include <math.h>
@@ -123,7 +122,7 @@ float _VectorLength(const vec3_t vector)
          (long double)vector[1] * (long double)vector[1]) +
         (long double)vector[2] * (long double)vector[2]);
 #endif
-    return (float)coduomp_math_sqrt(squaredLength);
+    return (float)sqrt(squaredLength);
 }
 
 /*
@@ -200,7 +199,7 @@ float VectorDistance(const vec3_t first, const vec3_t second)
          (double)differenceY * (double)differenceY) +
         (double)differenceX * (double)differenceX;
 
-    return (float)coduomp_math_sqrt(squaredDistance);
+    return (float)sqrt(squaredDistance);
 #endif
 }
 
@@ -234,7 +233,7 @@ float VectorDistance2D(const vec3_t first, const vec3_t second)
         (long double)differenceX * (long double)differenceX +
         (long double)differenceY * (long double)differenceY);
 
-    return (float)coduomp_math_sqrt(squaredDistance);
+    return (float)sqrt(squaredDistance);
 }
 
 #if defined(__i386__) && defined(__GNUC__) && !defined(__clang__)

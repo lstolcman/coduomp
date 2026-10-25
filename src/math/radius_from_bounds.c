@@ -1,7 +1,5 @@
 #include "q_math.h"
 
-#include "compat/coduo_math_sqrt.h"
-
 #include <math.h>
 
 
