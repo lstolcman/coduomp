@@ -77,7 +77,7 @@
 #define TURRET_STOP_USE_EVENT_ALT 1
 #define TURRET_STOP_USE_EVENT_GUNNER 2
 #define TURRET_POSITION_BLEND_MSEC 1000.0f
-#define TURRET_TRACE_CONTENTS 0x02000001
+#define TURRET_TRACE_CONTENTS MASK_PLAYERSOLID
 #define TURRET_MAX_COUNT MAX_TURRETS
 #define TURRET_DEFAULT_HEALTH 100
 #define TURRET_STATE_INITIAL_FLAGS 3u
@@ -1059,13 +1059,14 @@ void G_PlayerTurretPositionAndBlend(gentity_t *player, gentity_t *turret)
     client->ps.psOrigin[1] = combinedAxis.origin[1];
     client->ps.psOrigin[2] = combinedAxis.origin[2];
 
+    /* Trace from turret height toward the proposed player position. */
     traceStart[0] = client->ps.psOrigin[0];
     traceStart[1] = client->ps.psOrigin[1];
-    traceStart[2] = client->ps.psOrigin[2];
+    traceStart[2] = turret->currentOrigin[2];
     traceEnd[0] = client->ps.psOrigin[0];
     traceEnd[1] = client->ps.psOrigin[1];
-    traceEnd[2] = turret->currentOrigin[2];
-    trap_Trace(&trace, traceStart, vec3_origin, vec3_origin, traceEnd,
+    traceEnd[2] = client->ps.psOrigin[2];
+    trap_Trace(&trace, traceStart, NULL, NULL, traceEnd,
                player->s.number, TURRET_TRACE_CONTENTS);
     if (trace.fraction < 1.0f) {
         client->ps.psOrigin[2] = trace.endpos[2];
