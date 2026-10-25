@@ -10030,7 +10030,12 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
     if (vehicleInfo->maxSpeed > 0.0f) {
         vec3_t forward;
         vec3_t right;
+#if defined(WINDOWS_BEHAVIOR)
+        WIDE_FLOAT direction[3];
+        WIDE_FLOAT localForwardRaw;
+#else
         vec3_t direction;
+#endif
         float localForward;
         float localRight;
         float forwardOffset;
@@ -10041,23 +10046,42 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
 
         AngleVectors(vehicleState->viewClampTargetAngles, forward, right, NULL);
 
+#if defined(WINDOWS_BEHAVIOR)
+        if (coduo_x87_sqrtl((WIDE_FLOAT)vehicleState->velocity[0] * vehicleState->velocity[0] +
+                           (WIDE_FLOAT)vehicleState->velocity[1] * vehicleState->velocity[1] +
+                           (WIDE_FLOAT)vehicleState->velocity[2] * vehicleState->velocity[2]) > 0.0f) {
+#else
         if (game_compat_veh_length3(vehicleState->velocity) > 0.0f) {
+#endif
             direction[0] = -vehicleState->velocity[0];
             direction[1] = -vehicleState->velocity[1];
         } else {
+#if defined(WINDOWS_BEHAVIOR)
+            direction[0] = (WIDE_FLOAT)origin[0] - vehicleState->origin[0];
+            direction[1] = (WIDE_FLOAT)origin[1] - vehicleState->origin[1];
+#else
             direction[0] = origin[0] - vehicleState->origin[0];
             direction[1] = origin[1] - vehicleState->origin[1];
+#endif
         }
         direction[2] = 0.0f;
 
+#if defined(WINDOWS_BEHAVIOR)
+        if (coduo_x87_sqrtl(direction[1] * direction[1] + direction[0] * direction[0]) < VEH_DISMOUNT_MIN_DIR_LENGTH) {
+#else
         if (game_compat_veh_length3(direction) < VEH_DISMOUNT_MIN_DIR_LENGTH) {
+#endif
             direction[0] = 1.0f;
             direction[1] = 0.0f;
         }
 
-        /* right/forward . direction dots: 3-mul/2-add chains kept 80-bit until
-         * the store -> shim. */
-#if EMULATE_X87
+        /* Dot products retain their intermediates until the float store.
+         * Windows keeps the forward dot live through scaling; Linux stores it. */
+#if defined(WINDOWS_BEHAVIOR)
+        localRight = (float)(right[1] * direction[1] + right[0] * direction[0] + right[2] * direction[2]);
+        localForwardRaw = forward[1] * direction[1] + forward[0] * direction[0] + forward[2] * direction[2];
+        rightLimit = (float)((WIDE_FLOAT)game_compat_veh_dismount_side_offset(vehicleInfo) + maxs[1] + VEH_DISMOUNT_SIDE_PAD);
+#elif EMULATE_X87
         localRight = x87f_store_f32(x87f_add(
             x87f_add(x87f_mul(x87f_load_f32(right[0]), x87f_load_f32(direction[0])),
                      x87f_mul(x87f_load_f32(right[1]), x87f_load_f32(direction[1]))),
@@ -10072,14 +10096,11 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
                      x87f_load_f32(maxs[1])),
             x87f_load_f32(VEH_DISMOUNT_SIDE_PAD)));
 #else
-        localRight = right[0] * direction[0] + right[1] * direction[1] +
-                     right[2] * direction[2];
-        localForward = forward[0] * direction[0] +
-                       forward[1] * direction[1] +
-                       forward[2] * direction[2];
-        rightLimit =
-            game_compat_veh_dismount_side_offset(vehicleInfo) + maxs[1] +
-            VEH_DISMOUNT_SIDE_PAD;
+        localRight = (float)((WIDE_FLOAT)right[0] * direction[0] + (WIDE_FLOAT)right[1] * direction[1] +
+                             (WIDE_FLOAT)right[2] * direction[2]);
+        localForward = (float)((WIDE_FLOAT)forward[0] * direction[0] + (WIDE_FLOAT)forward[1] * direction[1] +
+                               (WIDE_FLOAT)forward[2] * direction[2]);
+        rightLimit = (float)((WIDE_FLOAT)game_compat_veh_dismount_side_offset(vehicleInfo) + maxs[1] + VEH_DISMOUNT_SIDE_PAD);
 #endif
         /* 0x89009..0x8905a: maxs[0] + max(fwd,back) is rounded to its own
          * float slot before the pad is added (pad + sum order). */
@@ -10090,9 +10111,41 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
                     vehicleInfo->dismountForwardOffset
                 ? vehicleInfo->dismountBackOffset
                 : vehicleInfo->dismountForwardOffset;
+#if defined(WINDOWS_BEHAVIOR)
+        forwardLimit = (float)((WIDE_FLOAT)longitudinalOffset + maxs[0] + VEH_DISMOUNT_FORWARD_PAD);
+#else
         forwardLimit = maxs[0] + longitudinalOffset;
         forwardLimit = VEH_DISMOUNT_FORWARD_PAD + forwardLimit;
+#endif
 
+#if defined(WINDOWS_BEHAVIOR)
+        {
+            const WIDE_FLOAT forwardMagnitude = fabsl(localForwardRaw);
+            volatile double forwardMagnitudeStored = (double)forwardMagnitude;
+
+            /* The comparison uses the live magnitude. Only the forward-side
+             * denominator is reloaded from its binary64 store. Neither scale
+             * quotient rounds to float before multiplying the two components. */
+            if (forwardMagnitude < fabsl((WIDE_FLOAT)localRight)) {
+                const WIDE_FLOAT scale = (WIDE_FLOAT)rightLimit / fabsl((WIDE_FLOAT)localRight);
+
+                localRight = (float)((WIDE_FLOAT)localRight * scale);
+                localForward = (float)(localForwardRaw * scale);
+                if (localForward < 0.0f) {
+                    if (localForward > -maxs[0]) {
+                        localForward = -maxs[0];
+                    }
+                } else if (localForward < maxs[0]) {
+                    localForward = maxs[0];
+                }
+            } else {
+                const WIDE_FLOAT scale = (WIDE_FLOAT)forwardLimit / forwardMagnitudeStored;
+
+                localRight = (float)((WIDE_FLOAT)localRight * scale);
+                localForward = (float)(localForwardRaw * scale);
+            }
+        }
+#else
         if (fabsf(localForward) < fabsf(localRight)) {
             /* single divide (fabsf is exact) -> shim; *= scale is single mul (native) */
 #if EMULATE_X87
@@ -10122,6 +10175,7 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
             localRight *= scale;
             localForward *= scale;
         }
+#endif
 
         rightOffset = game_compat_veh_clamp_float(localRight, -rightLimit, rightLimit);
         forwardOffset =
@@ -10142,9 +10196,14 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
             outOrigin[0] = vehicleState->origin[0] + outOrigin[0];
             outOrigin[1] = vehicleState->origin[1] + outOrigin[1];
             outOrigin[2] = vehicleState->origin[2] + outOrigin[2];
-            /* outOrigin += forward*forwardOffset then += right*rightOffset:
-             * mul then add-into, 80-bit, one store per accumulate -> shim. */
-#if EMULATE_X87
+            /* Windows adds both directional products before the origin and
+             * stores once. Linux accumulates each product in a separate store. */
+#if defined(WINDOWS_BEHAVIOR)
+            for (int i = 0; i < 3; i++) {
+                outOrigin[i] = (float)(((WIDE_FLOAT)forward[i] * forwardOffset +
+                                       (WIDE_FLOAT)right[i] * rightOffset) + outOrigin[i]);
+            }
+#elif EMULATE_X87
             for (int i = 0; i < 3; i++) {
                 outOrigin[i] = x87f_store_f32(x87f_add(
                     x87f_load_f32(outOrigin[i]),
@@ -10158,12 +10217,12 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
                              x87f_load_f32(rightOffset))));
             }
 #else
-            outOrigin[0] += forward[0] * forwardOffset;
-            outOrigin[1] += forward[1] * forwardOffset;
-            outOrigin[2] += forward[2] * forwardOffset;
-            outOrigin[0] += right[0] * rightOffset;
-            outOrigin[1] += right[1] * rightOffset;
-            outOrigin[2] += right[2] * rightOffset;
+            outOrigin[0] = (float)((WIDE_FLOAT)outOrigin[0] + (WIDE_FLOAT)forward[0] * forwardOffset);
+            outOrigin[1] = (float)((WIDE_FLOAT)outOrigin[1] + (WIDE_FLOAT)forward[1] * forwardOffset);
+            outOrigin[2] = (float)((WIDE_FLOAT)outOrigin[2] + (WIDE_FLOAT)forward[2] * forwardOffset);
+            outOrigin[0] = (float)((WIDE_FLOAT)outOrigin[0] + (WIDE_FLOAT)right[0] * rightOffset);
+            outOrigin[1] = (float)((WIDE_FLOAT)outOrigin[1] + (WIDE_FLOAT)right[1] * rightOffset);
+            outOrigin[2] = (float)((WIDE_FLOAT)outOrigin[2] + (WIDE_FLOAT)right[2] * rightOffset);
 #endif
 
             base[0] = outOrigin[0];
@@ -10197,7 +10256,7 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
                                 trace.fraction < 1.0f) {
                                 gentity_t *passenger =
                                     &g_entities[passEntityNum];
-                                gclient_t *client = passenger->client;
+                                gclient_t *client = &level.clients[passEntityNum];
                                 vec3_t losMins;
                                 vec3_t losMaxs;
                                 vec3_t losStart;
@@ -10257,11 +10316,15 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
         Com_Printf("VEH_UnlinkPlayer: Warning - no [tag_detach] on vehicle\n");
         outOrigin[0] = vehicleEnt->currentOrigin[0];
         outOrigin[1] = vehicleEnt->currentOrigin[1];
-        /* 0x8984b..0x8985d: grouped as (collisionMaxs[2] + pad) + origin. */
-        outOrigin[2] =
-            vehicleInfo->collisionMaxs[2] +
-            VEH_DISMOUNT_FALLBACK_Z_PAD +
-            vehicleEnt->currentOrigin[2];
+        /* Windows groups (origin + collisionMaxs[2]) + pad. Linux
+         * 0x8984b..0x8985d groups (collisionMaxs[2] + pad) + origin. */
+#if defined(WINDOWS_BEHAVIOR)
+        outOrigin[2] = (float)(((WIDE_FLOAT)vehicleEnt->currentOrigin[2] + vehicleInfo->collisionMaxs[2]) +
+                               VEH_DISMOUNT_FALLBACK_Z_PAD);
+#else
+        outOrigin[2] = (float)(((WIDE_FLOAT)vehicleInfo->collisionMaxs[2] + VEH_DISMOUNT_FALLBACK_Z_PAD) +
+                               vehicleEnt->currentOrigin[2]);
+#endif
     } else {
         DObjSkelMat detachMatrix;
 
