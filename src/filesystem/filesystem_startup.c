@@ -2,6 +2,7 @@
 #include "filesystem_services.h"
 
 #include "qcommon/com_startup_commands.h"
+#include "qcommon/com_sprintf.h"
 #include "qcommon/q_command.h"
 #include "qcommon/q_string.h"
 
