@@ -1774,25 +1774,29 @@ void turret_use(gentity_t *turret, gentity_t *other, gentity_t *activator)
 /* ------------------------------------------------------------------ */
 
 /* NOT_FROM_ORIGINAL_SOURCE: turret pool allocation loop; extracted during reconstruction of 0x5cc27. */
-/* VERIFIED_DECOMPILER(0x5cc27, 6cc27_G_SpawnTurret.c, VERIFY-ENTITY-MGMT-TURRET-2026-06-17): DATAFLOW_VERIFIED; 32-slot pool scan, 0x48-byte clear, inUse set, return pointer, and max-turret Com_Error match. */
+/* The pool scan retains its last entry across the error callback, then clears and activates that entry if the callback returns. */
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original G_SpawnTurret (0x5cc27); no standalone original body. */
 static turret_state_t *game_compat_g_alloc_turret_state(void)
 {
+    turret_state_t *state = NULL;
     int slot;
 
     for (slot = 0; slot < TURRET_MAX_COUNT; slot++) {
-        if (g_turretStates[slot].inUse == 0) {
-            memset(&g_turretStates[slot], 0, sizeof(g_turretStates[slot]));
-            g_turretStates[slot].inUse = 1;
-            return &g_turretStates[slot];
+        state = &g_turretStates[slot];
+        if (state->inUse == 0) {
+            break;
         }
     }
 
-    Com_Error(1,
-              COM_ERROR_MARKER
-              "G_SpawnTurret: max number of turrets (%d) exceeded",
-              TURRET_MAX_COUNT);
-    return NULL;
+    if (slot == TURRET_MAX_COUNT) {
+        Com_Error(ERR_DROP,
+                  COM_ERROR_MARKER
+                  "G_SpawnTurret: max number of turrets (%d) exceeded",
+                  TURRET_MAX_COUNT);
+    }
+    memset(state, 0, sizeof(*state));
+    state->inUse = 1;
+    return state;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: optional turret sound alias resolver; extracted during reconstruction of 0x5cc27. */
