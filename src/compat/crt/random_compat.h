@@ -12,7 +12,7 @@ extern "C" {
  *
  * These boundaries describe the numeric domain expected by recovered code.
  * Client-only code uses coduo_crt_* directly. Shared server code uses the
- * coduo_server_* aliases share that same image-local Windows CRT contract.
+ * coduo_server_* aliases to share that same image-local Windows CRT contract.
  */
 #define CODUO_CRT_RAND_INITIAL_SEED UINT32_C(1)
 

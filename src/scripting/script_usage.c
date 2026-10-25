@@ -126,8 +126,8 @@ float Scr_GetEntryUsage(script_variable_type_t type,
 
 /* Linux coduo_lnxded 0x080a944f returns the sum as raw st(0) with no float
  * store.  The long-double carrier preserves that unspilled x87 result for the
- * non-emulated Linux build; Windows likewise performs the expression without
- * an intervening binary32 spill. */
+ * native evaluation. Windows likewise performs the expression without an
+ * intervening binary32 spill and defines the maintained behavior. */
 long double
 Scr_GetEntryUsageForNode(script_variable_node_t *node)
 {
