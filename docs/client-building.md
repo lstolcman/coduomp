@@ -119,6 +119,15 @@ intermediate results can differ from the original game. Configuration emits
 a warning on this target. The x64 build uses Miniaudio, matching the Makefile
 architecture policy, and does not need `MSS32_DLL`.
 
+The Windows CMake build currently rejects clang-cl. Clang 19.1.7 and 22.1.8
+can emit x87 instructions on x64 with `-mlong-double-80` and
+`-ffp-eval-method=extended`, but the tested combination passes extended-value
+pointers to variadic calls that expect `double` and rejects ordinary float
+initializer lists in C++. Disabling SSE to use `-mfpmath=387` instead changes
+floating-point argument registers and breaks the Windows x64 calling convention.
+These modes are not a supported replacement for the presets above. An 80-bit
+type or an x87 instruction alone does not establish a usable compiler profile.
+
 The presets keep separate build directories at `.workbench/build/msvc` and
 `.workbench/build/msvc-x64`; never change the architecture of an existing
 build directory. Without presets, specify `-A Win32` or `-A x64` explicitly
