@@ -7,10 +7,12 @@
 /*
  * NOT_FROM_ORIGINAL_SOURCE
  *
- * Preserve Visual C++ 7.1 _vsnprintf: return -1 on truncation, write exactly
- * count output bytes without a terminator, and otherwise return the formatted
- * length. The one-byte-wider temporary preserves the final output byte that
- * host vsnprintf would otherwise replace with its terminator.
+ * Preserve Visual C++ 7.1 _vsnprintf: an exact fit returns count without a
+ * terminator; longer output writes count bytes and returns -1. Shorter output
+ * is terminated and returns its length. The attempted final terminator does
+ * not change the formatter's saved return value, including empty output with
+ * count == 0. The one-byte-wider temporary preserves the final output byte
+ * that host vsnprintf would otherwise replace with its terminator.
  */
 int coduo_crt_vsnprintf(char *destination, size_t count,
                         const char *format, va_list arguments)
@@ -40,14 +42,14 @@ int coduo_crt_vsnprintf(char *destination, size_t count,
             return -1;
         }
         va_copy(formatArguments, arguments);
-        if (vsnprintf(outputPrefix, count + 1, format,
-                      formatArguments) >= 0) {
+        required = vsnprintf(outputPrefix, count + 1, format, formatArguments);
+        if (required >= 0) {
             memcpy(destination, outputPrefix, count);
         }
         va_end(formatArguments);
         free(outputPrefix);
     }
-    return -1;
+    return required >= 0 && (size_t)required == count ? required : -1;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: variadic legacy-MSVC formatting entry. */
