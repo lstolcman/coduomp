@@ -68,9 +68,11 @@ if(CODUOMP_BUILD_MODULES)
 	# long double is binary64 even when x86 compiler arithmetic uses x87.
 	target_compile_definitions(uo_game_mp_x86 PRIVATE
 		WINDOWS_BEHAVIOR
-		EMULATE_X87=${CODUOMP_EMULATE_X87}
-		GAME_REQUIRE_X87_LONG_DOUBLE=0
-		GAME_ALLOW_NON_EQUIVALENT_LONG_DOUBLE=1)
+		EMULATE_X87=${CODUOMP_EMULATE_X87})
+    if(NOT CODUOMP_CLANG_CL)
+        target_compile_definitions(uo_game_mp_x86 PRIVATE
+            GAME_REQUIRE_X87_LONG_DOUBLE=0 GAME_ALLOW_NON_EQUIVALENT_LONG_DOUBLE=1)
+    endif()
 	target_include_directories(uo_game_mp_x86 PRIVATE
 		"${CMAKE_SOURCE_DIR}/src/server/game/bindings"
 		"${CMAKE_SOURCE_DIR}/src/qcommon/bindings/default"

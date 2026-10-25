@@ -20,6 +20,14 @@
       "description": "64-bit MSVC build. Compiler-generated arithmetic uses SSE2 or newer instructions and may differ from the original x87 arithmetic.",
       "inherits": "msvc",
       "architecture": "x64"
+    },
+    {
+      "name": "clang-cl-x64",
+      "displayName": "Clang-cl x64 (explicit native x87)",
+      "description": "Preferred x64 compiler for existing WIDE_FLOAT/long double x87 paths; ordinary float/double arithmetic remains SSE. Requires Clang 22+.",
+      "inherits": "msvc",
+      "architecture": "x64",
+      "toolset": "ClangCL"
     }
   ],
   "buildPresets": [
@@ -31,6 +39,11 @@
     {
       "name": "msvc-x64",
       "configurePreset": "msvc-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "clang-cl-x64",
+      "configurePreset": "clang-cl-x64",
       "configuration": "Release"
     }
   ]

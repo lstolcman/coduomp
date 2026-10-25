@@ -8,9 +8,10 @@ if(NOT CODUO_FP_FAITHFUL MATCHES "^(auto|strict|relaxed)$")
 endif()
 if(CODUO_FP_FAITHFUL STREQUAL "strict")
     message(FATAL_ERROR
-        "The current MSVC source paths have not established whole-program "
+        "The current Windows CMake source paths have not established whole-program "
         "floating-point parity. MSVC x86 supports x87 arithmetic, but selected "
         "sites still use software x87 and host transcendental fallbacks. "
+        "Clang-cl uses x87 only for explicit extended expressions. "
         "Use the default auto policy or relaxed to build with these limits.")
 endif()
 string(TOUPPER "${MSVC_C_ARCHITECTURE_ID}" _msvc_arch)
@@ -21,10 +22,33 @@ elseif(_msvc_arch STREQUAL "X64")
     set(CODUOMP_ARCH x64)
     set(CODUOMP_32BIT_X86 FALSE)
 else()
-    message(FATAL_ERROR "This MSVC build supports only x86 and x64.")
+    message(FATAL_ERROR "This Windows CMake build supports only x86 and x64.")
 endif()
 set(CODUOMP_EMULATE_X87 1)
-if(CODUOMP_32BIT_X86)
+if(CODUOMP_CLANG_CL)
+    if(CODUOMP_32BIT_X86)
+        message(FATAL_ERROR "Use MSVC for x86; the clang-cl profile supports only x64.")
+    endif()
+    include(CheckCSourceCompiles)
+    include(CheckCXXSourceCompiles)
+    include(CMakePushCheckState)
+    cmake_push_check_state(RESET)
+    string(JOIN " " CMAKE_REQUIRED_FLAGS ${CODUOMP_EXTENDED_FLAGS})
+    set(_wide_contract "#include <float.h>
+#if !defined(_M_X64) || LDBL_MANT_DIG != 64 || LDBL_MAX_EXP != 16384 || FLT_EVAL_METHOD != 0
+#error Incorrect extended type or expression evaluation mode
+#endif
+int main(void) { typedef char carrier[(sizeof(long double) == 16) ? 1 : -1]; return 0; }")
+    check_c_source_compiles("${_wide_contract}" CODUOMP_C_EXTENDED_ABI)
+    check_cxx_source_compiles("${_wide_contract}" CODUOMP_CXX_EXTENDED_ABI)
+    cmake_pop_check_state()
+    if(NOT CODUOMP_C_EXTENDED_ABI OR NOT CODUOMP_CXX_EXTENDED_ABI)
+        message(FATAL_ERROR "clang-cl requires x64, 80-bit long double, and source-type evaluation in C and C++.")
+    endif()
+    set(CODUOMP_EMULATE_X87 0)
+    set(CODUOMP_FLOAT_MODEL "native x87 for explicit WIDE_FLOAT/long double; SSE for ordinary float/double")
+    message(STATUS "clang-cl x64 preserves the Windows calling ABI and uses the existing explicit x87 source paths.")
+elseif(CODUOMP_32BIT_X86)
     set(CODUOMP_FLOAT_MODEL "x87 compiler arithmetic (/arch:IA32); software x87 at selected source sites")
     message(STATUS "MSVC x86 is the default preset because it supports native x87 arithmetic.")
 else()
@@ -36,7 +60,7 @@ else()
         "Use the msvc preset (Win32) for x87 compiler arithmetic. "
         "See docs/client-building.md for the architecture and fidelity limits.")
 endif()
-message(STATUS "Whole-program floating-point parity remains unverified on both MSVC targets.")
+message(STATUS "Whole-program floating-point parity remains unverified on these Windows CMake targets.")
 
 # System libraries required by the client executable. The static SDL2, libjpeg,
 # libcurl and minizip builds used by the Makefiles need these as well.

@@ -1,4 +1,4 @@
-# MSVC client and module build. Makefile targets remain authoritative on other
+# MSVC and clang-cl client and module build. Makefile targets remain authoritative on other
 # toolchains; source ownership comes from their shared build-mk manifests.
 #
 # See docs/client-building.md for x86 Miles input and architecture selection.
@@ -37,10 +37,11 @@ include(cmake/CoduompManifest.cmake)
 include(cmake/CoduompCommon.cmake)
 include(cmake/CoduompPlatform.cmake)
 include(cmake/CoduompSoftFloat.cmake)
+include(cmake/CoduompExtendedMath.cmake)
 include(cmake/CoduompBundledLibs.cmake)
 include(cmake/CoduompDependencies.cmake)
 include(cmake/CoduompAudio.cmake)
 include(cmake/CoduompSources.cmake)
 include(cmake/CoduompTargets.cmake)
-message(STATUS "MSVC ${CODUOMP_ARCH}; ${CODUOMP_FLOAT_MODEL}")
+message(STATUS "${CMAKE_C_COMPILER_ID} ${CODUOMP_ARCH}; ${CODUOMP_FLOAT_MODEL}")
 message(STATUS "Output: ${CODUOMP_BIN_ROOT}/<config>")
