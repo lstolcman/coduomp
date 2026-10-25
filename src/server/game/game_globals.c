@@ -15,7 +15,6 @@ level_locals_t level = { 0 };
 bgs_t bgs = { 0 };
 gentity_t g_entities[MAX_GENTITIES] = { 0 };
 gclient_t g_clients[MAX_CLIENTS] = { 0 };
-gitem_t bg_itemlist[BG_ITEMLIST_SLOT_COUNT] = { 0 };
 bg_t bg = { 0 };
 
 vec3_t playerMins = { -15.0f, -15.0f, 0.0f };

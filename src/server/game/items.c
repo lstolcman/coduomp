@@ -25,11 +25,6 @@
 #include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
 
-typedef struct bg_stock_item_seed_entry_s {
-    int itemIndex;
-    gitem_t item;
-} bg_stock_item_seed_entry_t;
-
 #define DROPPED_WEAPON_SLOT_COUNT 32
 #define DROPPED_WEAPON_MIN_SLOTS 1
 #define ITEM_RESPAWN_PACKED_STATE (0x407c0000u | 0x00000008u)
@@ -120,214 +115,159 @@ static int game_compat_item_index_from_def(const gitem_t *item)
     return (int)(item - bg_itemlist);
 }
 
-static const char *const bg_stockWeaponItemClassnames[] = {
-    "emptyitem_\"w01\"",
-    "emptyitem_\"w02\"",
-    "emptyitem_\"w03\"",
-    "emptyitem_\"w04\"",
-    "emptyitem_\"w05\"",
-    "emptyitem_\"w06\"",
-    "emptyitem_\"w07\"",
-    "emptyitem_\"w08\"",
-    "emptyitem_\"w09\"",
-    "emptyitem_\"w10\"",
-    "emptyitem_\"w11\"",
-    "emptyitem_\"w12\"",
-    "emptyitem_\"w13\"",
-    "emptyitem_\"w14\"",
-    "emptyitem_\"w15\"",
-    "emptyitem_\"w16\"",
-    "emptyitem_\"w17\"",
-    "emptyitem_\"w18\"",
-    "emptyitem_\"w19\"",
-    "emptyitem_\"w20\"",
-    "emptyitem_\"w21\"",
-    "emptyitem_\"w22\"",
-    "emptyitem_\"w23\"",
-    "emptyitem_\"w24\"",
-    "emptyitem_\"w25\"",
-    "emptyitem_\"w26\"",
-    "emptyitem_\"w27\"",
-    "emptyitem_\"w28\"",
-    "emptyitem_\"w29\"",
-    "emptyitem_\"w30\"",
-    "emptyitem_\"w31\"",
-    "emptyitem_\"w32\"",
-    "emptyitem_\"w33\"",
-    "emptyitem_\"w34\"",
-    "emptyitem_\"w35\"",
-    "emptyitem_\"w36\"",
-    "emptyitem_\"w37\"",
-    "emptyitem_\"w38\"",
-    "emptyitem_\"w39\"",
-    "emptyitem_\"w40\"",
-    "emptyitem_\"w41\"",
-    "emptyitem_\"w42\"",
-    "emptyitem_\"w43\"",
-    "emptyitem_\"w44\"",
-    "emptyitem_\"w45\"",
-    "emptyitem_\"w46\"",
-    "emptyitem_\"w47\"",
-    "emptyitem_\"w48\"",
-    "emptyitem_\"w49\"",
-    "emptyitem_\"w50\"",
-    "emptyitem_\"w51\"",
-    "emptyitem_\"w52\"",
-    "emptyitem_\"w53\"",
-    "emptyitem_\"w54\"",
-    "emptyitem_\"w55\"",
-    "emptyitem_\"w56\"",
-    "emptyitem_\"w57\"",
-    "emptyitem_\"w58\"",
-    "emptyitem_\"w59\"",
-    "emptyitem_\"w60\"",
-    "emptyitem_\"w61\"",
-    "emptyitem_\"w62\"",
-    "emptyitem_\"w63\"",
-    "emptyitem_\"w64\"",
-    "emptyitem_\"w65\"",
-    "emptyitem_\"w66\"",
-    "emptyitem_\"w67\"",
-    "emptyitem_\"w68\"",
-    "emptyitem_\"w69\"",
-    "emptyitem_\"w70\"",
-    "emptyitem_\"w71\"",
-    "emptyitem_\"w72\"",
-    "emptyitem_\"w73\"",
-    "emptyitem_\"w74\"",
-    "emptyitem_\"w75\"",
-    "emptyitem_\"w76\"",
-    "emptyitem_\"w77\"",
-    "emptyitem_\"w78\"",
-    "emptyitem_\"w79\"",
-    "emptyitem_\"w80\"",
-    "emptyitem_\"w81\"",
-    "emptyitem_\"w82\"",
-    "emptyitem_\"w83\"",
-    "emptyitem_\"w84\"",
-    "emptyitem_\"w85\"",
-    "emptyitem_\"w86\"",
-    "emptyitem_\"w87\"",
-    "emptyitem_\"w88\"",
-    "emptyitem_\"w89\"",
-    "emptyitem_\"w90\"",
-    "emptyitem_\"w91\"",
-    "emptyitem_\"w92\"",
-    "emptyitem_\"w93\"",
-    "emptyitem_\"w94\"",
-    "emptyitem_\"w95\"",
-    "emptyitem_\"w96\"",
-    "emptyitem_\"w97\"",
-    "emptyitem_\"w98\"",
-    "emptyitem_\"w99\"",
-    "emptyitem_\"w100\"",
-    "emptyitem_\"w101\"",
-    "emptyitem_\"w102\"",
-    "emptyitem_\"w103\"",
-    "emptyitem_\"w104\"",
-    "emptyitem_\"w105\"",
-    "emptyitem_\"w106\"",
-    "emptyitem_\"w107\"",
-    "emptyitem_\"w108\"",
-    "emptyitem_\"w109\"",
-    "emptyitem_\"w110\"",
-    "emptyitem_\"w111\"",
-    "emptyitem_\"w112\"",
-    "emptyitem_\"w113\"",
-    "emptyitem_\"w114\"",
-    "emptyitem_\"w115\"",
-    "emptyitem_\"w116\"",
-    "emptyitem_\"w117\"",
-    "emptyitem_\"w118\"",
-    "emptyitem_\"w119\"",
-    "emptyitem_\"w120\"",
-    "emptyitem_\"w121\"",
-    "emptyitem_\"w122\"",
-    "emptyitem_\"w123\"",
-    "emptyitem_\"w124\"",
-    "emptyitem_\"w125\"",
-    "emptyitem_\"w126\"",
-    "emptyitem_\"w127\"",
-    "emptyitem_\"w128\"",
-};
-
-static const bg_stock_item_seed_entry_t bg_stockFixedItemSeeds[] = {
-    { 129,
-      { "item_ammo_stielhandgranate_open", "grenade_pickup",
+/* Item definitions have module lifetime. Weapon setup fills the active
+ * weapon rows and resolves ammo bindings without resetting retained rows. */
+#define BG_EMPTY_WEAPON_ITEM(name) { name, "", "", "", "", "", "", 0, IT_BAD, 0, 0, 0 }
+gitem_t bg_itemlist[BG_ITEMLIST_SLOT_COUNT] = {
+    { 0 },
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w01\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w02\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w03\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w04\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w05\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w06\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w07\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w08\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w09\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w10\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w11\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w12\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w13\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w14\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w15\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w16\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w17\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w18\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w19\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w20\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w21\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w22\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w23\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w24\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w25\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w26\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w27\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w28\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w29\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w30\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w31\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w32\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w33\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w34\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w35\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w36\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w37\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w38\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w39\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w40\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w41\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w42\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w43\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w44\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w45\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w46\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w47\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w48\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w49\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w50\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w51\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w52\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w53\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w54\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w55\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w56\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w57\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w58\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w59\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w60\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w61\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w62\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w63\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w64\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w65\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w66\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w67\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w68\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w69\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w70\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w71\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w72\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w73\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w74\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w75\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w76\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w77\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w78\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w79\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w80\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w81\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w82\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w83\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w84\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w85\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w86\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w87\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w88\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w89\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w90\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w91\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w92\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w93\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w94\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w95\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w96\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w97\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w98\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w99\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w100\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w101\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w102\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w103\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w104\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w105\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w106\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w107\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w108\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w109\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w110\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w111\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w112\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w113\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w114\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w115\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w116\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w117\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w118\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w119\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w120\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w121\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w122\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w123\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w124\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w125\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w126\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w127\""),
+    BG_EMPTY_WEAPON_ITEM("emptyitem_\"w128\""),
+    { "item_ammo_stielhandgranate_open", "grenade_pickup",
         "xmodel/ammo_stielhandgranate1", NULL,
         "gfx/icons/hud@steilhandgrenate", "gfx/icons/hud@steilhandgrenate",
-        "Stielhandgranate_mp Ammo Open", 10, IT_AMMO, -1, -1, -1 } },
-    { 130,
-      { "item_ammo_stielhandgranate_closed", "grenade_pickup",
+        "Stielhandgranate_mp Ammo Open", 10, IT_AMMO, -1, -1, -1 },
+    { "item_ammo_stielhandgranate_closed", "grenade_pickup",
         "xmodel/ammo_stielhandgranate2", NULL,
         "gfx/icons/hud@steilhandgrenate", "gfx/icons/hud@steilhandgrenate",
-        "Stielhandgranate_mp Ammo Closed", 10, IT_AMMO, -1, -1, -1 } },
-    { 131,
-      { "item_health_small", "health_pickup_small", "xmodel/health_small", NULL,
+        "Stielhandgranate_mp Ammo Closed", 10, IT_AMMO, -1, -1, -1 },
+    { "item_health_small", "health_pickup_small", "xmodel/health_small", NULL,
         "icons/iconh_small", NULL, "Small Health", 10, IT_HEALTH, 0, 0,
-        0 } },
-    { 132,
-      { "item_health", "health_pickup_medium", "xmodel/health_medium", NULL,
+        0 },
+    { "item_health", "health_pickup_medium", "xmodel/health_medium", NULL,
         "icons/iconh_med", NULL, "Med Health", 25, IT_HEALTH, 0, 0,
-        0 } },
-    { 133,
-      { "item_health_large", "health_pickup_large", "xmodel/health_large",
+        0 },
+    { "item_health_large", "health_pickup_large", "xmodel/health_large",
         NULL, "icons/iconh_large", NULL, "Large Health", 50,
-        IT_HEALTH, 0, 0, 0 } },
+        IT_HEALTH, 0, 0, 0 },
+    { 0 }
 };
-
-/* NOT_FROM_ORIGINAL_SOURCE: local stock item table seeding helper; no standalone generated entry. */
-static void game_compat_bg_write_stock_item_seed(int itemIndex,
-                                  const gitem_t *seed)
-{
-    gitem_t *item = game_compat_item_def_for_index(itemIndex);
-
-    item->classname = seed->classname;
-    item->pickupSound = seed->pickupSound;
-    item->worldModel = seed->worldModel;
-    item->iconModel = seed->iconModel;
-    item->hudIcon = seed->hudIcon;
-    item->ammoIcon = seed->ammoIcon;
-    item->pickupName = seed->pickupName;
-    item->quantity = seed->quantity;
-    item->type = seed->type;
-    item->weapon = seed->weapon;
-    item->ammoIndex = seed->ammoIndex;
-    item->clipIndex = seed->clipIndex;
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: local stock item table seeding helper; no standalone generated entry. */
-static void game_compat_bg_init_stock_item_list(void)
-{
-    memset(bg_itemlist, 0, sizeof(bg_itemlist[0]) * (ITEM_INDEX_MAX + 2));
-
-    for (int itemIndex = 1; itemIndex <= 128; itemIndex++) {
-        gitem_t seed = {
-            bg_stockWeaponItemClassnames[itemIndex - 1],
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            0,
-            IT_BAD,
-            0,
-            0,
-            0
-        };
-
-        game_compat_bg_write_stock_item_seed(itemIndex, &seed);
-    }
-
-    for (size_t seedIndex = 0;
-         seedIndex < sizeof(bg_stockFixedItemSeeds) /
-                         sizeof(bg_stockFixedItemSeeds[0]);
-         seedIndex++) {
-        game_compat_bg_write_stock_item_seed(bg_stockFixedItemSeeds[seedIndex].itemIndex,
-                              &bg_stockFixedItemSeeds[seedIndex].item);
-    }
-}
+#undef BG_EMPTY_WEAPON_ITEM
 
 /* VERIFIED_DECOMPILER(0x1fba8, 2fba8_BG_PlayerTouchesItem.c, VERIFY-WAVE3-ITEM-TOUCH-VISIBILITY-2026-06-17): DATAFLOW_VERIFIED - trajectory evaluation, XY/Z touch ranges, and boolean return checked against current decompiler output. */
 int BG_PlayerTouchesItem(gclient_t *client, gentity_t *itemEnt, int time)
@@ -2176,7 +2116,7 @@ int compare_weaponfile_names(const void *a, const void *b)
     return Q_stricmp(*left, *right);
 }
 
-/* VERIFIED_DECOMPILER(0x31693, 41693_BG_SetupWeaponInfo.c, VERIFY-PACKET-WEAPON-INFO-SETUP-2026-06-17): DATAFLOW_VERIFIED - debug banners, weapon-info memory acquisition, ammo/clip table initialization, weapon-file list loading/cap checks, filename pointer collection/sort/configstring setup, load-vs-already-loaded paths, setup call order, and final banner checked against current decompiler output; game_compat_bg_init_stock_item_list is NOT_FROM_ORIGINAL_SOURCE seeding for recovered bg_itemlist static data and has no standalone original call. */
+/* VERIFIED_DECOMPILER(0x31693, 41693_BG_SetupWeaponInfo.c, VERIFY-PACKET-WEAPON-INFO-SETUP-2026-06-17): DATAFLOW_VERIFIED - debug banners, weapon-info memory acquisition, ammo/clip table initialization, weapon-file list loading/cap checks, filename pointer collection/sort/configstring setup, load-vs-already-loaded paths, setup call order, and final banner checked against current decompiler output; the item definitions retain module lifetime across setup calls. */
 void BG_SetupWeaponInfo(void)
 {
     char weaponFileConfigstring[WEAPON_FILE_MAX_STRING_CHARS];
@@ -2186,8 +2126,6 @@ void BG_SetupWeaponInfo(void)
 
     Com_DPrintf("----------------------\n");
     Com_DPrintf("Game: BG_SetupWeaponInfo\n");
-
-    game_compat_bg_init_stock_item_list();
 
     bg_weaponInfos =
         trap_GetWeaponInfoMemory(
