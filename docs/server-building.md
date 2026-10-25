@@ -104,7 +104,7 @@ default. Select any row's preset for both commands:
 
 ```sh
 cmake --preset msvc
-cmake --build --preset msvc --parallel 2
+cmake --build --preset msvc --config Debug --parallel 2
 ```
 
 For a server-only build, disable the client and its optional modules. The
@@ -112,19 +112,35 @@ server still builds its required game DLL; only zlib is fetched as a dependency:
 
 ```sh
 cmake --preset msvc -DCODUOMP_BUILD_CLIENT=OFF -DCODUOMP_BUILD_MODULES=OFF
-cmake --build --preset msvc --target coduo_dedicated_recovered --parallel 2
+cmake --build --preset msvc --config Debug --target coduo_dedicated_recovered --parallel 2
 ```
 
-Outputs are `.workbench/build/<preset>/bin/Release/coduo_dedicated_recovered.exe`
-and `bin/Release/uo/uo_game_mp_x86.dll` in that same build directory. The DLL
+Outputs are `.workbench/build/<preset>/bin/Debug/coduo_dedicated_recovered.exe`
+and `bin/Debug/uo/uo_game_mp_x86.dll` in that same build directory. The DLL
 filename is the same on x86 and x64; the engine and DLL must have matching
 architectures. Selecting the server target builds both files.
 
-`BUNDLED_LIBS=OFF` with `CODUOMP_DEP_PREFIX` selects architecture-matched MSVC
-libraries instead. A server-only configuration then resolves only zlib.
-`CODUOMP_BUILD_SERVER=OFF` retains a client/module-only configuration.
-`CODUOMP_DISABLE_SERVER_AUTH=ON` disables external CD-key authorization.
-Its default preserves the branch's Makefile authorization setting. The Windows
+Configure-time options are passed at the `cmake --preset` step as
+`-D<name>=<value>`:
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `CODUOMP_BUILD_SERVER` | `ON` | Build `coduo_dedicated_recovered.exe`. |
+| `CODUOMP_BUILD_CLIENT` | `ON` | Build `CoDUOMP.exe` in the same build. |
+| `CODUOMP_BUILD_MODULES` | `ON` | Build the cgame, UI and listen-server modules. |
+| `BUNDLED_LIBS` | `ON` | Fetch and build the third-party libraries in `libs/`. |
+| `CODUOMP_DEP_PREFIX` | empty | Prefix holding `include/` and `lib/` for prebuilt dependencies when `BUNDLED_LIBS=OFF`. |
+| `CODUOMP_STATIC_VCRT` | `ON` | Link the MSVC runtime statically (`/MT`). |
+| `CODUOMP_DISABLE_SERVER_AUTH` | `ON` | Skip external CD-key authorization for joining clients; the Makefile default is `AUTH=0`. |
+
+A server that authenticates joining clients:
+
+```sh
+cmake --preset msvc -DCODUOMP_DISABLE_SERVER_AUTH=OFF
+cmake --build --preset msvc --config Debug --target coduo_dedicated_recovered --parallel 2
+```
+
+The default preserves the branch's Makefile authorization setting. The Windows
 CMake server uses the disabled PunkBuster provider; the recovered dynamic
 PunkBuster loader currently requires POSIX services.
 
