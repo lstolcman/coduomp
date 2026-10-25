@@ -2067,14 +2067,11 @@ void G_ParseScrVehicleInfo(void)
         vehicleInfo->maxSpeed *= VEH_INFO_SPEED_SCALE;
         vehicleInfo->pathSpeedDenom *= VEH_INFO_SPEED_SCALE;
 
-        {
-            float *collisionBounds = vehicleInfo->collisionMins;
-
-            for (int axis = 0; axis < 6; axis++) {
-                collisionBounds[axis] =
-                    vehicleInfo->collisionBoundsSource[axis] *
-                    VEH_INFO_HALF_SCALE;
-            }
+        for (int axis = 0; axis < 3; axis++) {
+            vehicleInfo->collisionMins[axis] = vehicleInfo->collisionBoundsSource[axis] * VEH_INFO_HALF_SCALE;
+        }
+        for (int axis = 0; axis < 3; axis++) {
+            vehicleInfo->collisionMaxs[axis] = vehicleInfo->collisionBoundsSource[axis + 3] * VEH_INFO_HALF_SCALE;
         }
 
         for (int soundIndex = 0; soundIndex < VEH_INFO_SOUND_ALIAS_COUNT;
@@ -4227,8 +4224,24 @@ void VEH_CheckPushClients(gentity_t *vehicle)
     int entityNums[VEH_CHECK_PUSH_MAX_CLIENTS];
     int entityCount;
 
-    /* 0x8d7cb..0x8d8a7: the origin+bounds sums are stored first (unrolled),
-     * then the pad is applied in a second rounded store per component. */
+    /* Windows retains the X/Y minimum sums and X maximum sum through the
+     * padding operation. The other three sums round to float first.
+     * Linux stores all six origin+bounds sums before applying the padding. */
+#if defined(WINDOWS_BEHAVIOR)
+    const WIDE_FLOAT minX = (WIDE_FLOAT)vehicleInfo->collisionMins[0] + vehicle->currentOrigin[0];
+    const WIDE_FLOAT minY = (WIDE_FLOAT)vehicleInfo->collisionMins[1] + vehicle->currentOrigin[1];
+    mins[2] = vehicleInfo->collisionMins[2] + vehicle->currentOrigin[2];
+    const WIDE_FLOAT maxX = (WIDE_FLOAT)vehicleInfo->collisionMaxs[0] + vehicle->currentOrigin[0];
+    maxs[1] = vehicleInfo->collisionMaxs[1] + vehicle->currentOrigin[1];
+    maxs[2] = vehicleInfo->collisionMaxs[2] + vehicle->currentOrigin[2];
+
+    mins[0] = (float)(minX - kVehSafetyBuffer);
+    maxs[0] = (float)(maxX + kVehSafetyBuffer);
+    mins[1] = (float)(minY - kVehSafetyBuffer);
+    maxs[1] = maxs[1] + kVehSafetyBuffer;
+    mins[2] = mins[2] - kVehSafetyBuffer;
+    maxs[2] = maxs[2] + kVehSafetyBuffer;
+#else
     mins[0] = vehicle->currentOrigin[0] + vehicleInfo->collisionMins[0];
     mins[1] = vehicle->currentOrigin[1] + vehicleInfo->collisionMins[1];
     mins[2] = vehicle->currentOrigin[2] + vehicleInfo->collisionMins[2];
@@ -4239,6 +4252,7 @@ void VEH_CheckPushClients(gentity_t *vehicle)
         mins[axis] = mins[axis] - kVehSafetyBuffer;
         maxs[axis] = maxs[axis] + kVehSafetyBuffer;
     }
+#endif
 
     entityCount = trap_EntitiesInBox(mins, maxs, entityNums,
                                      VEH_CHECK_PUSH_MAX_CLIENTS,
