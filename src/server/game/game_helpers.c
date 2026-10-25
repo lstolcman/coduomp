@@ -20,7 +20,6 @@
 #include "qcommon/info.h"
 #include "compat/crt/qsort_compat.h"
 #include "level_locals.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #define EVENT_RING_MASK 3
 #define ACTIVATE_MAX_CANDIDATES 1024
@@ -86,22 +85,11 @@ static void game_compat_g_vector_subtract3(const float *lhs, const float *rhs, f
  * consumes the stored float, so the return must retain that rounding point. */
 static float game_compat_g_dot_product3(const float *lhs, const float *rhs)
 {
-#if defined(WINDOWS_BEHAVIOR)
     const int first = 2, last = 0;
-#else
-    const int first = 0, last = 2;
-#endif
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(x87f_add(
-        x87f_mul(x87f_load_f32(lhs[first]), x87f_load_f32(rhs[first])),
-        x87f_mul(x87f_load_f32(lhs[1]), x87f_load_f32(rhs[1]))),
-        x87f_mul(x87f_load_f32(lhs[last]), x87f_load_f32(rhs[last]))));
-#else
     volatile float result = ((WIDE_FLOAT)lhs[first] * (WIDE_FLOAT)rhs[first]
                           + (WIDE_FLOAT)lhs[1] * (WIDE_FLOAT)rhs[1])
                           + (WIDE_FLOAT)lhs[last] * (WIDE_FLOAT)rhs[last];
     return result;
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local entity bounds-center helper. */
@@ -257,26 +245,10 @@ void Com_DPrintf(const char *format, ...)
 /* VERIFIED_DECOMPILER(0x56a7d, 66a7d_FUN_00066a7d.c, VERIFY-GAME-HELPERS-PARSE-INFO-2026-06-17): DATAFLOW_VERIFIED; Linux float-plus-half integer conversion. */
 int Game_RoundAmmoCount(float value)
 {
-#if defined(WINDOWS_BEHAVIOR)
     /* Windows adds a double bias and converts in the current rounding mode.
      * Ammo generation keeps the result in int32_t range on either long ABI. */
     static const double roundingBias = 0x1p-30;
-#if EMULATE_X87
-    return x87f_store_i32(x87f_add(x87f_load_f32(value), x87f_load_f64(roundingBias)));
-#else
     return (int32_t)lrintl((long double)value + roundingBias);
-#endif
-#else
-    /* 0x56a8f-0x56aac: the +0.5f sum is truncated straight from the x87
-     * register (fistp direct), with no float32 rounding of the sum -> shim. */
-#if EMULATE_X87
-    return x87f_store_i32_trunc(
-        x87f_add(x87f_load_f32(value), x87f_load_f32(0.5f)));
-#else
-    return game_compat_int32_from_long_double_trunc(
-        (long double)value + (long double)0.5f);
-#endif
-#endif
 }
 
 /* 0x56e4a FUN_00066e4a */
@@ -287,13 +259,8 @@ int G_CompareActivateEntScores(const void *lhs, const void *rhs)
     const activate_candidate_t *b = (const activate_candidate_t *)rhs;
 
     /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-#if EMULATE_X87
-    return x87f_store_i32_trunc(
-        x87f_sub(x87f_load_f32(a->score), x87f_load_f32(b->score)));
-#else
     return game_compat_int32_from_long_double_trunc(
         (long double)a->score - (long double)b->score);
-#endif
 }
 
 /* ------------------------------------------------------------------ */
@@ -348,18 +315,9 @@ int G_GetActivateEnt(gentity_t *ent, activate_candidate_t *candidates)
 
             /* Stock 0x570xx..0x5712a: forward[k]*DIST kept 80-bit, + muzzle[k],
              * one store -> shim (mul+add). */
-#if EMULATE_X87
-            for (int k = 0; k < 3; k++) {
-                center[k] = x87f_store_f32(x87f_add(
-                    x87f_mul(x87f_load_f32(forward[k]),
-                             x87f_load_f32(ACTIVATE_MAX_DISTANCE)),
-                    x87f_load_f32(muzzle[k])));
-            }
-#else
             center[0] = muzzle[0] + forward[0] * ACTIVATE_MAX_DISTANCE;
             center[1] = muzzle[1] + forward[1] * ACTIVATE_MAX_DISTANCE;
             center[2] = muzzle[2] + forward[2] * ACTIVATE_MAX_DISTANCE;
-#endif
             trap_Trace(&trace, muzzle, vec3_origin, vec3_origin, center,
                        client->ps.psClientNum, ACTIVATE_VEHICLE_TRACE_MASK);
             if (trace.entityNum != candidate->s.number) {
@@ -379,16 +337,8 @@ int G_GetActivateEnt(gentity_t *ent, activate_candidate_t *candidates)
 
         /* Stock 0x5727e..0x572a0: 1.0 - (dot-MIN)/(1.0-MIN), the divide kept
          * 80-bit through the outer subtract, one store -> shim. */
-#if EMULATE_X87
-        baseScore = x87f_store_f32(x87f_sub(
-            x87f_load_f32(1.0f),
-            x87f_div(
-                x87f_sub(x87f_load_f32(dot), x87f_load_f32(ACTIVATE_MIN_DOT)),
-                x87f_sub(x87f_load_f32(1.0f), x87f_load_f32(ACTIVATE_MIN_DOT)))));
-#else
         baseScore = (WIDE_FLOAT)1.0f - ((WIDE_FLOAT)dot - (WIDE_FLOAT)ACTIVATE_MIN_DOT) /
                     ((WIDE_FLOAT)1.0f - (WIDE_FLOAT)ACTIVATE_MIN_DOT);
-#endif
         /* 0x572a0/0x572c2: the falloff factor is stored to a float32 slot
          * before the distance-scale multiply, which rounds again. */
         baseScore *= ACTIVATE_MAX_DISTANCE + ACTIVATE_MAX_DISTANCE;
@@ -514,17 +464,9 @@ void G_CheckForCursorHints(gentity_t *ent)
         AngleVectors(yawAngles, forward, NULL, NULL);
         /* Stock 0x577ca..0x577e0: forward[k]*15.0 kept 80-bit, + currentOrigin[k],
          * one store -> shim (mul+add). */
-#if EMULATE_X87
-        for (int k = 0; k < 3; k++) {
-            mountPoint[k] = x87f_store_f32(x87f_add(
-                x87f_mul(x87f_load_f32(forward[k]), x87f_load_f32(15.0f)),
-                x87f_load_f32(ent->currentOrigin[k])));
-        }
-#else
         mountPoint[0] = (WIDE_FLOAT)ent->currentOrigin[0] + (WIDE_FLOAT)forward[0] * 15.0f;
         mountPoint[1] = (WIDE_FLOAT)ent->currentOrigin[1] + (WIDE_FLOAT)forward[1] * 15.0f;
         mountPoint[2] = ent->currentOrigin[2] + forward[2] * 15.0f;
-#endif
         /* 0x577e6-0x577f4: the +1.0f lift is a second float32 store on
          * the already-rounded mountPoint[2] (single add -> native). Windows
          * retains the preceding sum, but this yaw-only direction has Z == 0,
@@ -690,17 +632,9 @@ void G_CheckForPreventFriendlyFire(gentity_t *ent)
 
     /* Stock 0x57d25..0x57d64: forward[k]*8192.0 kept 80-bit, + origin[k],
      * one store -> shim (mul+add). */
-#if EMULATE_X87
-    for (int k = 0; k < 3; k++) {
-        end[k] = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_load_f32(muzzle.forward[k]), x87f_load_f32(8192.0f)),
-            x87f_load_f32(muzzle.origin[k])));
-    }
-#else
     end[0] = muzzle.origin[0] + muzzle.forward[0] * 8192.0f;
     end[1] = muzzle.origin[1] + muzzle.forward[1] * 8192.0f;
     end[2] = muzzle.origin[2] + muzzle.forward[2] * 8192.0f;
-#endif
 
     trap_LocationalTrace(&trace, muzzle.origin, end, ent->s.number,
                          PREVENT_FRIENDLY_FIRE_MASK, priorityMap);

@@ -1,6 +1,5 @@
 #include "collision_queries.h"
 
-#include "compat/coduo_x87emu.h"
 #include "qcommon/q_shared_types.h"
 
 #include <stddef.h>
@@ -164,33 +163,11 @@ uint32_t CM_SignbitsForNormal(const vec3_t normal)
  * and reloads it before the branch.  Keep this genuine result-affecting split
  * at the whole-function boundary.
  */
-#if defined(WINDOWS_BEHAVIOR)
 int32_t CM_PointLeafnum_r(const vec3_t point, int32_t nodeNum)
 {
     while (nodeNum >= 0) {
         const collisionNode_t *const node = &cm_nodes[nodeNum];
         const cplane_t *const plane = node->plane;
-#if EMULATE_X87
-        x87f distance;
-        if (plane->type < 3) {
-            distance = x87f_sub(x87f_load_f32(point[plane->type]),
-                                x87f_load_f32(plane->dist));
-        } else {
-            distance = x87f_sub(
-                x87f_add(
-                    x87f_add(
-                        x87f_mul(x87f_load_f32(plane->normal[2]),
-                                 x87f_load_f32(point[2])),
-                        x87f_mul(x87f_load_f32(plane->normal[1]),
-                                 x87f_load_f32(point[1]))),
-                    x87f_mul(x87f_load_f32(plane->normal[0]),
-                             x87f_load_f32(point[0]))),
-                x87f_load_f32(plane->dist));
-        }
-        nodeNum = x87f_lt(distance, x87f_load_f32(0.0f))
-                      ? node->children[1]
-                      : node->children[0];
-#else
         long double distance;
         if (plane->type < 3) {
             distance = (long double)point[plane->type] -
@@ -208,51 +185,9 @@ int32_t CM_PointLeafnum_r(const vec3_t point, int32_t nodeNum)
         nodeNum = distance < 0.0L
                       ? node->children[1]
                       : node->children[0];
-#endif
     }
     return -1 - nodeNum;
 }
-#else
-int32_t CM_PointLeafnum_r(const vec3_t point, int32_t nodeNum)
-{
-    while (nodeNum >= 0) {
-        const collisionNode_t *const node = &cm_nodes[nodeNum];
-        const cplane_t *const plane = node->plane;
-        float distance;
-#if EMULATE_X87
-        x87f computed;
-        if (plane->type < 3) {
-            computed = x87f_sub(x87f_load_f32(point[plane->type]),
-                                x87f_load_f32(plane->dist));
-        } else {
-            computed = x87f_sub(
-                x87f_add(
-                    x87f_add(
-                        x87f_mul(x87f_load_f32(plane->normal[0]),
-                                 x87f_load_f32(point[0])),
-                        x87f_mul(x87f_load_f32(plane->normal[1]),
-                                 x87f_load_f32(point[1]))),
-                    x87f_mul(x87f_load_f32(plane->normal[2]),
-                             x87f_load_f32(point[2]))),
-                x87f_load_f32(plane->dist));
-        }
-        distance = x87f_store_f32(computed);
-#else
-        if (plane->type < 3) {
-            distance = point[plane->type] - plane->dist;
-        } else {
-            distance = ((plane->normal[0] * point[0]) +
-                        (plane->normal[1] * point[1])) +
-                       (plane->normal[2] * point[2]) - plane->dist;
-        }
-#endif
-        nodeNum = distance < 0.0f
-                      ? node->children[1]
-                      : node->children[0];
-    }
-    return -1 - nodeNum;
-}
-#endif
 
 int32_t CM_PointLeafnum(const vec3_t point)
 {

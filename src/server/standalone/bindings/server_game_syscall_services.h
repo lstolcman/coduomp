@@ -3,7 +3,6 @@
 
 #include "coduo_engine_structs.h"
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 #include "collision/collision_server_entity.h"
 #include "collision/collision_server_trace.h"
 #include "qcommon/com_time.h"

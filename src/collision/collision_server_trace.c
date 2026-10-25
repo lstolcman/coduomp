@@ -101,7 +101,6 @@ void SV_Trace(trace_t *trace, const vec3_t start,
     }
 
     cmClipMoveWork_t work;
-#if defined(WINDOWS_BEHAVIOR)
     /* CoDUOMP.exe 0x00467d2f..0x00467f91 retains selected PC=53
      * intermediates; the X half-size and Y/Z center paths are not the same
      * sequence of binary32 spills used by the dedicated binary. */
@@ -137,22 +136,6 @@ void SV_Trace(trace_t *trace, const vec3_t start,
     work.end[0] = end[0] + centerX;
     work.end[1] = (float)((long double)end[1] + centerYRaw);
     work.end[2] = (float)((long double)end[2] + centerZRaw);
-#else
-    /* coduo_lnxded 0x0809b20c..0x0809b3d4 stores every raw extent and
-     * center sum to binary32 before halving it. */
-    for (int32_t axis = 0; axis < 3; ++axis) {
-        float halfSize = traceMaxs[axis] - traceMins[axis];
-        float offset = traceMaxs[axis] + traceMins[axis];
-
-        halfSize *= 0.5f;
-        offset *= 0.5f;
-        work.mins[axis] = -halfSize;
-        work.maxs[axis] = halfSize;
-        work.expandedHalfSize[axis] = halfSize + 1.0f;
-        work.start[axis] = start[axis] + offset;
-        work.end[axis] = end[axis] + offset;
-    }
-#endif
 
     work.bestTrace = worldTrace;
     work.passEntityNum = passEntityNum;
@@ -171,7 +154,6 @@ void SV_Trace(trace_t *trace, const vec3_t start,
     if (work.bestTrace.fraction < worldTrace.fraction) {
         /* Windows retains the X/Y deltas; Z and all Linux deltas are rounded
          * to binary32 before interpolation. */
-#if defined(WINDOWS_BEHAVIOR)
         const long double deltaX = (long double)end[0] - (long double)start[0];
         const long double deltaY = (long double)end[1] - (long double)start[1];
         const float deltaZ = end[2] - start[2];
@@ -180,19 +162,6 @@ void SV_Trace(trace_t *trace, const vec3_t start,
         work.bestTrace.endpos[1] = (float)(
             deltaY * (long double)work.bestTrace.fraction + (long double)start[1]);
         work.bestTrace.endpos[2] = start[2] + deltaZ * work.bestTrace.fraction;
-#else
-        const vec3_t delta = {
-            end[0] - start[0],
-            end[1] - start[1],
-            end[2] - start[2]
-        };
-        work.bestTrace.endpos[0] =
-            start[0] + delta[0] * work.bestTrace.fraction;
-        work.bestTrace.endpos[1] =
-            start[1] + delta[1] * work.bestTrace.fraction;
-        work.bestTrace.endpos[2] =
-            start[2] + delta[2] * work.bestTrace.fraction;
-#endif
     }
 
     *trace = work.bestTrace;
@@ -266,7 +235,6 @@ void SV_SightTrace(int32_t *traceResult, const vec3_t start,
     }
 
     cmClipSightTraceWork_t work;
-#if defined(WINDOWS_BEHAVIOR)
     const long double halfXRaw =
         ((long double)traceMaxs[0] - (long double)traceMins[0]) * 0.5L;
     const float halfX = (float)halfXRaw;
@@ -299,20 +267,6 @@ void SV_SightTrace(int32_t *traceResult, const vec3_t start,
     work.end[0] = end[0] + centerX;
     work.end[1] = (float)((long double)end[1] + centerYRaw);
     work.end[2] = (float)((long double)end[2] + centerZRaw);
-#else
-    for (int32_t axis = 0; axis < 3; ++axis) {
-        float halfSize = traceMaxs[axis] - traceMins[axis];
-        float offset = traceMaxs[axis] + traceMins[axis];
-
-        halfSize *= 0.5f;
-        offset *= 0.5f;
-        work.mins[axis] = -halfSize;
-        work.maxs[axis] = halfSize;
-        work.expandedHalfSize[axis] = halfSize + 1.0f;
-        work.start[axis] = start[axis] + offset;
-        work.end[axis] = end[axis] + offset;
-    }
-#endif
 
     work.passEntityNum = passEntityNum;
     work.passOwnerNum = passOwnerNum;

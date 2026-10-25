@@ -7,11 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "q_localized_float.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /*
  * Complete localized-float helper pair:
@@ -41,7 +36,6 @@
  * output itself, including its two rounding stages and one-byte locale radix.
  */
 
-#if defined(WINDOWS_BEHAVIOR)
 enum {
     Q_LEGACY_LIMB_BITS = 16,
     Q_LEGACY_MANTISSA_LIMBS = 5,
@@ -526,36 +520,3 @@ void Q_LocalizedFloatToString(float value, char *buffer,
         }
     }
 }
-#else
-int32_t Q_GetDecimalDelimiter(language_t language)
-{
-    (void)language;
-    return '.';
-}
-
-void Q_LocalizedFloatToString(float value, char *buffer,
-                              uint32_t bufferSize, int32_t precision,
-                              language_t language)
-{
-    /* NOT_FROM_ORIGINAL_SOURCE: a zero-sized output has no writable
-     * terminator slot. */
-    if (bufferSize == 0) {
-        return;
-    }
-    snprintf(buffer, (size_t)(bufferSize - 1u), "%.*f", precision,
-             (double)value);
-    buffer[bufferSize - 1u] = '\0';
-
-    const int32_t delimiter = Q_GetDecimalDelimiter(language);
-    if (delimiter == '.') {
-        return;
-    }
-
-    for (uint32_t index = 0; index < bufferSize; ++index) {
-        if (buffer[index] == '.') {
-            buffer[index] = (char)delimiter;
-            return;
-        }
-    }
-}
-#endif

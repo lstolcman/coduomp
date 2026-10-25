@@ -8,7 +8,7 @@
  *
  * Client-only original call sites use coduo_crt_qsort and therefore always
  * use the statically linked MSVC behavior. Shared server code uses coduo_qsort,
- * selected by WINDOWS_BEHAVIOR or LINUX_BEHAVIOR.
+ * which follows the same ordering contract on every host.
  */
 void coduo_crt_qsort(void *base, size_t count, size_t width,
                      int (*compare)(const void *, const void *));

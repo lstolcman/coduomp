@@ -1,7 +1,5 @@
 #include "bg_pmove.h"
 
-#include "compat/coduo_x87emu.h"
-
 #include <math.h>
 #include <stdint.h>
 
@@ -18,7 +16,7 @@
  * The Linux game module retains the same decisions at RVAs 0x00060ffa and
  * 0x00061335.  Its unoptimized body spills more temporaries, but does not
  * define a different result.  The explicit x87 path preserves the original
- * load/multiply/subtract/store chain when an x87-compatible host is emulated.
+ * load/multiply/subtract/store chain using native wide intermediates.
  */
 
 void PM_FootstepEvent(int32_t oldBobCycle, int32_t newBobCycle,
@@ -51,21 +49,12 @@ void PM_FootstepEvent(int32_t oldBobCycle, int32_t newBobCycle,
                     maxs[2] = 8.0f;
                 }
 
-#if EMULATE_X87
-                for (int32_t lane = 0; lane < 3; ++lane) {
-                    end[lane] = x87f_store_f32(x87f_sub(
-                        x87f_load_f32(pm->ps->psOrigin[lane]),
-                        x87f_mul(x87f_load_f32(pm->ps->ladderNormal[lane]),
-                                 x87f_load_f32(31.0f))));
-                }
-#else
                 end[0] = pm->ps->psOrigin[0] -
                          pm->ps->ladderNormal[0] * 31.0f;
                 end[1] = pm->ps->psOrigin[1] -
                          pm->ps->ladderNormal[1] * 31.0f;
                 end[2] = pm->ps->psOrigin[2] -
                          pm->ps->ladderNormal[2] * 31.0f;
-#endif
 
                 PM_trace(&trace, pm->ps->psOrigin, mins, maxs, end,
                          pm->ps->psClientNum,

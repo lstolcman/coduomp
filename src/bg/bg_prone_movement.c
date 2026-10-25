@@ -1,7 +1,6 @@
 #include "bg_pmove.h"
 
 #include "bg_player_state.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <stddef.h>
@@ -49,36 +48,7 @@ int32_t BG_CheckProneTurned(playerState_t *ps, float yaw,
     float checkYaw;
     float proneLength;
 
-#if EMULATE_X87
-    fraction = x87f_store_f32(x87f_div(
-        x87f_abs(x87f_load_f32(delta)), x87f_load_f32(240.0f)));
-#if defined(WINDOWS_BEHAVIOR)
-    {
-        const float complement = x87f_store_f32(x87f_sub(
-            x87f_load_f32(1.0f), x87f_load_f32(fraction)));
-        checkYaw = AngleNormalize360Accurate(x87f_store_f32(x87f_sub(
-            x87f_load_f32(yaw),
-            x87f_mul(x87f_load_f32(complement),
-                     x87f_load_f32(delta)))));
-        proneLength = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_load_f32(complement), x87f_load_f32(60.0f)),
-            x87f_mul(x87f_load_f32(fraction), x87f_load_f32(45.0f))));
-    }
-#else
-    {
-        const x87f complement = x87f_sub(
-            x87f_load_f32(1.0f), x87f_load_f32(fraction));
-        checkYaw = AngleNormalize360Accurate(x87f_store_f32(x87f_sub(
-            x87f_load_f32(yaw),
-            x87f_mul(complement, x87f_load_f32(delta)))));
-        proneLength = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_load_f32(fraction), x87f_load_f32(45.0f)),
-            x87f_mul(complement, x87f_load_f32(60.0f))));
-    }
-#endif
-#else
     fraction = (float)((long double)PM_FloatAbs(delta) / 240.0L);
-#if defined(WINDOWS_BEHAVIOR)
     {
         const volatile float complement =
             (float)(1.0L - (long double)fraction);
@@ -89,16 +59,6 @@ int32_t BG_CheckProneTurned(playerState_t *ps, float yaw,
             (long double)complement * 60.0L +
             (long double)fraction * 45.0L);
     }
-#else
-    {
-        const long double complement = 1.0L - (long double)fraction;
-        checkYaw = AngleNormalize360Accurate((float)(
-            (long double)yaw - complement * (long double)delta));
-        proneLength = (float)(
-            (long double)fraction * 45.0L + complement * 60.0L);
-    }
-#endif
-#endif
 
     return BG_CheckProne(
         ps->psClientNum, ps->psOrigin, ps->playerMaxs[0], 30.0f,
@@ -149,46 +109,11 @@ void PM_UpdatePronePitch(void)
             AngleDelta(targetPitch, pm->ps->proneDirectionPitch);
 
         if (delta != 0.0f) {
-#if EMULATE_X87
-            x87f maxStep = x87f_mul(
-                x87f_load_f32(pml.frametime), x87f_load_f32(70.0f));
-#if defined(WINDOWS_BEHAVIOR)
-            maxStep = x87f_load_f32(x87f_store_f32(maxStep));
-#endif
-            if (x87f_lt(maxStep,
-                        x87f_abs(x87f_load_f32(delta)))) {
-#if defined(WINDOWS_BEHAVIOR)
-                const x87f updateStep = maxStep;
-#else
-                const x87f updateStep = x87f_mul(
-                    x87f_load_f32(pml.frametime),
-                    x87f_load_f32(70.0f));
-#endif
-                pm->ps->proneDirectionPitch = x87f_store_f32(x87f_add(
-                    x87f_load_f32(pm->ps->proneDirectionPitch),
-                    x87f_mul(x87f_load_i32(PM_FloatSign(delta)),
-                             updateStep)));
-            } else {
-                pm->ps->proneDirectionPitch = x87f_store_f32(x87f_add(
-                    x87f_load_f32(pm->ps->proneDirectionPitch),
-                    x87f_load_f32(delta)));
-            }
-#else
-#if defined(WINDOWS_BEHAVIOR)
             const volatile float maxStep =
                 (float)((long double)pml.frametime * 70.0L);
-#else
-            const long double maxStep =
-                (long double)pml.frametime * 70.0L;
-#endif
             if ((long double)PM_FloatAbs(delta) >
                 (long double)maxStep) {
-#if defined(WINDOWS_BEHAVIOR)
                 const long double updateStep = (long double)maxStep;
-#else
-                const long double updateStep =
-                    (long double)pml.frametime * 70.0L;
-#endif
                 pm->ps->proneDirectionPitch = (float)(
                     (long double)pm->ps->proneDirectionPitch +
                     (long double)PM_FloatSign(delta) *
@@ -198,7 +123,6 @@ void PM_UpdatePronePitch(void)
                     (long double)pm->ps->proneDirectionPitch +
                     (long double)delta);
             }
-#endif
             pm->ps->proneDirectionPitch = AngleNormalize180Accurate(
                 pm->ps->proneDirectionPitch);
         }
@@ -214,46 +138,11 @@ void PM_UpdatePronePitch(void)
             AngleDelta(targetPitch, pm->ps->proneTorsoPitch);
 
         if (delta != 0.0f) {
-#if EMULATE_X87
-            x87f maxStep = x87f_mul(
-                x87f_load_f32(pml.frametime), x87f_load_f32(70.0f));
-#if defined(WINDOWS_BEHAVIOR)
-            maxStep = x87f_load_f32(x87f_store_f32(maxStep));
-#endif
-            if (x87f_lt(maxStep,
-                        x87f_abs(x87f_load_f32(delta)))) {
-#if defined(WINDOWS_BEHAVIOR)
-                const x87f updateStep = maxStep;
-#else
-                const x87f updateStep = x87f_mul(
-                    x87f_load_f32(pml.frametime),
-                    x87f_load_f32(70.0f));
-#endif
-                pm->ps->proneTorsoPitch = x87f_store_f32(x87f_add(
-                    x87f_load_f32(pm->ps->proneTorsoPitch),
-                    x87f_mul(x87f_load_i32(PM_FloatSign(delta)),
-                             updateStep)));
-            } else {
-                pm->ps->proneTorsoPitch = x87f_store_f32(x87f_add(
-                    x87f_load_f32(pm->ps->proneTorsoPitch),
-                    x87f_load_f32(delta)));
-            }
-#else
-#if defined(WINDOWS_BEHAVIOR)
             const volatile float maxStep =
                 (float)((long double)pml.frametime * 70.0L);
-#else
-            const long double maxStep =
-                (long double)pml.frametime * 70.0L;
-#endif
             if ((long double)PM_FloatAbs(delta) >
                 (long double)maxStep) {
-#if defined(WINDOWS_BEHAVIOR)
                 const long double updateStep = (long double)maxStep;
-#else
-                const long double updateStep =
-                    (long double)pml.frametime * 70.0L;
-#endif
                 pm->ps->proneTorsoPitch = (float)(
                     (long double)pm->ps->proneTorsoPitch +
                     (long double)PM_FloatSign(delta) *
@@ -263,7 +152,6 @@ void PM_UpdatePronePitch(void)
                     (long double)pm->ps->proneTorsoPitch +
                     (long double)delta);
             }
-#endif
             pm->ps->proneTorsoPitch = AngleNormalize180Accurate(
                 pm->ps->proneTorsoPitch);
         }

@@ -61,12 +61,7 @@ qboolean Scr_LoadAnimTreeInternal(const char *animTreeName,
                                   uint16_t treeHandle);
 void Scr_LoadAnimTreeAtIndex(int32_t treeIndex,
                              script_anim_tree_alloc_t allocCallback);
-#if defined(WINDOWS_BEHAVIOR)
 XAnim *CODUO_SCRIPT_CDECL Scr_FindAnimTree(const char *filename);
-#else
-script_anim_tree_ref_t CODUO_SCRIPT_CDECL
-Scr_FindAnimTree(const char *filename);
-#endif
 void CODUO_SCRIPT_CDECL Scr_FindAnim(const char *treeName,
                                     const char *animName,
                                     scr_anim_t *animRef);

@@ -1,7 +1,6 @@
 #include "server_game_syscalls.h"
 
 #include "collision/collision_area.h"
-#include "compat/coduo_x87emu.h"
 #include "qcommon/q_bits.h"
 #include "server_game_bridge.h"
 #include "server_game_lifecycle.h"
@@ -408,18 +407,7 @@ intptr_t SV_GameSystemCalls(intptr_t *arguments)
         return XAnimIsPrimitive(tree, SV_INT(2));
     }
     case SYSCALL_XANIM_GET_LENGTH:
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-        return x87f_store_i32_trunc(x87f_mul(
-            x87f_load_f32(sv_xanimMilliseconds),
-            x87f_load_f64(XAnimGetLength(
-                SV_PTR(XAnim, 1), SV_INT(2)))));
-#else
-        return x87f_store_i32_trunc(x87f_mul(
-            x87f_load_f32(sv_xanimMilliseconds),
-            XAnimGetLength(SV_PTR(XAnim, 1), SV_INT(2))));
-#endif
-#elif defined(CODUO_X87_TRUNCATE_I32)
+#if   defined(CODUO_X87_TRUNCATE_I32)
         return CODUO_X87_SCALE_F32_TRUNCATE_I32(
             XAnimGetLength(SV_PTR(XAnim, 1), SV_INT(2)),
             sv_xanimMilliseconds);
@@ -430,17 +418,7 @@ intptr_t SV_GameSystemCalls(intptr_t *arguments)
 #endif
     case SYSCALL_XANIM_GET_LENGTH_SECONDS: {
         XAnim *tree = Scr_GetAnims((uint32_t)SV_ARG(1));
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-        return FloatAsInt(x87f_store_f32(
-            x87f_load_f64(XAnimGetLength(tree, SV_INT(2)))));
-#else
-        return FloatAsInt(x87f_store_f32(
-            XAnimGetLength(tree, SV_INT(2))));
-#endif
-#else
         return FloatAsInt((float)XAnimGetLength(tree, SV_INT(2)));
-#endif
     }
     case SYSCALL_XANIM_SET_COMPLETE_GOAL_WEIGHT:
         XAnimSetCompleteGoalWeight(

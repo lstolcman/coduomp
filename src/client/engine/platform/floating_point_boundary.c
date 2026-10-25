@@ -5,7 +5,7 @@
 #include <float.h>
 #include <stdint.h>
 
-#if UINTPTR_MAX == UINT64_MAX
+#if !defined(_WIN32) || UINTPTR_MAX == UINT64_MAX
 enum {
     CODUOMP_X87_PRECISION_MASK = 0x0300,
     CODUOMP_X87_DOUBLE_PRECISION = 0x0200
@@ -23,14 +23,14 @@ enum {
  * mode at its startup boundary. */
 void coduomp_restore_retail_x87_precision(void)
 {
-#if UINTPTR_MAX == UINT32_MAX
+#if defined(_WIN32) && UINTPTR_MAX == UINT32_MAX
     (void)_controlfp(_PC_53, _MCW_PC);
 #else
     uint16_t controlWord;
 
-    /* NOT_FROM_ORIGINAL_SOURCE: x86-64 MinGW and clang-cl can emit x87
-     * operations, but the 64-bit CRT does not expose a reliable precision-control
-     * path. Apply the same 53-bit x87 control-word state directly for these ports. */
+    /* NOT_FROM_ORIGINAL_SOURCE: GNU-compatible x86 ports can emit x87
+     * operations without a Microsoft CRT precision-control path. Apply the
+     * same 53-bit x87 control-word state directly on these hosts. */
     __asm__ volatile ("fnstcw %0" : "=m" (controlWord));
     controlWord = (uint16_t)((controlWord & (uint16_t)~CODUOMP_X87_PRECISION_MASK) |
                              CODUOMP_X87_DOUBLE_PRECISION);

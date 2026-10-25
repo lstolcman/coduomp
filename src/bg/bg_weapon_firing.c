@@ -6,7 +6,6 @@
 #include "compat/coduo_int32_bits.h"
 #include "compat/coduo_native_x87.h"
 #include "compat/coduo_x87_eval.h"
-#include "compat/coduo_x87emu.h"
 #include "qcommon/q_bits.h"
 
 #include <stdint.h>
@@ -134,39 +133,11 @@ void PM_Weapon_StartFiring(qboolean delayExpired)
             const float adsFraction = ps->adsFraction;
 
             /* The product remains live through the original integer conversion. */
-#if EMULATE_X87
-            const x87f delay = x87f_mul(
-                x87f_div(x87f_load_f32(one), x87f_load_f32(rate)),
-                x87f_sub(x87f_load_f32(one),
-                         x87f_load_f32(adsFraction)));
-#if defined(WINDOWS_BEHAVIOR) && EMULATE_X87_BACKEND == EMU_X87_SOFTFLOAT
-            /* The qword conversion's integer-indefinite/minimum result is
-             * returned before the correction toward zero. */
-            const int64_t nearestDelay =
-                extF80_to_i64(delay, softfloat_round_near_even, false);
-            const int64_t integerDelay = nearestDelay == INT64_MIN
-                ? INT64_MIN : x87f_store_i64_trunc(delay);
-            ps->weaponDelay = coduo_int32_from_bits((uint32_t)(uint64_t)integerDelay);
-#elif defined(WINDOWS_BEHAVIOR)
-            ps->weaponDelay = coduo_fp_to_i32_extended((long double)delay);
-#else
-            ps->weaponDelay = x87f_store_i32_trunc(delay);
-#endif
-#elif defined(WINDOWS_BEHAVIOR) || !CODUO_ARCH_HAS_X87
             /* Preserve the live quotient and product through the platform's
              * integer conversion; a float reciprocal can change the delay. */
             ps->weaponDelay = coduo_fp_to_i32_extended(
                 ((WIDE_FLOAT)one / (WIDE_FLOAT)rate) *
                 ((WIDE_FLOAT)one - (WIDE_FLOAT)adsFraction));
-#elif defined(__x86_64__) && \
-      (defined(__GNUC__) || defined(__clang__))
-            ps->weaponDelay = CODUO_X87_TRUNCATE_I32(
-                ((long double)one / (long double)rate) *
-                ((long double)one - (long double)adsFraction));
-#else
-            ps->weaponDelay =
-                (int32_t)((one / rate) * (one - adsFraction));
-#endif
         }
 
         BG_AnimScriptEvent(ps, ANIM_EVENT_FIRE_WEAPON, qfalse, qtrue);
@@ -242,31 +213,18 @@ void PM_Weapon_AddFiringAimSpreadScale(void)
 {
     playerState_t *ps = pm->ps;
 
-#if defined(WINDOWS_BEHAVIOR)
     /* The Windows gate compares the stored encoding without floating arithmetic. */
     uint32_t adsFractionBits;
     memcpy(&adsFractionBits, &ps->adsFraction, sizeof(adsFractionBits));
     if (adsFractionBits == PM_WEAPON_FULL_ADS_FRACTION_BITS) {
         return;
     }
-#else
-    if (ps->adsFraction == 1.0f) {
-        return;
-    }
-#endif
 
     /* Both original x87 bodies retain multiply/add through the binary32 store. */
-#if EMULATE_X87
-    ps->aimSpreadScale = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(pml.weaponInfo->fireAimSpreadScale),
-                 x87f_load_f32(PM_AIM_SPREAD_SCALE_MAX)),
-        x87f_load_f32(ps->aimSpreadScale)));
-#else
     ps->aimSpreadScale = (float)(
         (long double)pml.weaponInfo->fireAimSpreadScale *
             (long double)PM_AIM_SPREAD_SCALE_MAX +
         (long double)ps->aimSpreadScale);
-#endif
     if (ps->aimSpreadScale > PM_AIM_SPREAD_SCALE_MAX) {
         ps->aimSpreadScale = PM_AIM_SPREAD_SCALE_MAX;
     }

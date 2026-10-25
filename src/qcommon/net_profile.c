@@ -3,7 +3,6 @@
 
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -21,11 +20,7 @@ static const float net_profileMillisecondsToSeconds =
 
 void Com_Printf(const char *format, ...);
 void Sys_OutOfMemory(void);
-#if defined(WINDOWS_BEHAVIOR)
 uint32_t Sys_Milliseconds(void);
-#else
-int32_t Sys_Milliseconds(void);
-#endif
 
 extern cvar_t *cl_running;
 extern cvar_t *sv_running;
@@ -43,9 +38,8 @@ extern cvar_t *sv_running;
  * The retained binaries agree on allocation ownership, ring transitions,
  * sample aging, display strings, update timing, and byte-rate formula.  The
  * final rate expression remains live in x87 through its integer conversion.
- * WINDOWS_BEHAVIOR selects PC=53 and the low dword of `_ftol2`'s signed-qword
- * result; LINUX_BEHAVIOR selects PC=64 and the direct signed-dword FISTP.
- * EMULATE_X87 is independently usable for either target behavior.
+ * The Windows contract uses PC=53 and the low dword of `_ftol2`'s signed-qword
+ * result. Native wide arithmetic retains the expression until conversion.
  */
 
 /*
@@ -218,24 +212,10 @@ void NetProf_UpdateStatistics(netProfileStream_t *profile)
         if (elapsedMilliseconds < 1 || sampleCount == 0 || totalBytes == 0) {
             profile->bytesPerSecond = 0;
         } else {
-#if EMULATE_X87
-            const x87f rate = x87f_div(
-                x87f_load_i32(totalBytes),
-                x87f_mul(x87f_load_i32(elapsedMilliseconds),
-                         x87f_load_f32(net_profileMillisecondsToSeconds)));
-#if defined(WINDOWS_BEHAVIOR)
-            const int64_t converted = x87f_store_i64_trunc(rate);
-            profile->bytesPerSecond = coduo_int32_from_bits(
-                (uint32_t)(uint64_t)converted);
-#else
-            profile->bytesPerSecond = x87f_store_i32_trunc(rate);
-#endif
-#else
             profile->bytesPerSecond = coduo_fp_to_i32_extended(
                 (long double)totalBytes /
                 ((long double)elapsedMilliseconds *
                  (long double)net_profileMillisecondsToSeconds));
-#endif
         }
         profile->lastRateCalcTime = (int32_t)Sys_Milliseconds();
     }

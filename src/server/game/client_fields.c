@@ -7,7 +7,6 @@
 
 #include <stdint.h>
 
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "recovered_game.h"
 #include "game_globals.h"
 #include "game_functions.h"
@@ -374,16 +373,10 @@ void ClientScr_SetArchiveTime(gclient_t *client, gclient_t *self,
     (void)field;
 
     /* 0x44024..0x44041: the product feeds truncating fistp directly. */
-#if EMULATE_X87
-    client->archiveTime = x87f_store_i32_trunc(x87f_mul(
-        x87f_load_f32(Scr_GetFloat(0)),
-        x87f_load_f32(CLIENT_FIELD_ARCHIVE_MILLISECONDS)));
-#else
     client->archiveTime =
         game_compat_int32_from_long_double_trunc(
             (long double)Scr_GetFloat(0) *
             (long double)CLIENT_FIELD_ARCHIVE_MILLISECONDS);
-#endif
 }
 
 /* VERIFIED_DECOMPILER(0x44051, 54051_FUN_00054051.c, VERIFY-CLIENT-FIELDS-PACKET-2026-06-17): DATAFLOW_VERIFIED */

@@ -14,7 +14,6 @@
 #include "scr_vm.h"
 #include "g_syscalls.h"
 #include "game_functions.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_x87_eval.h"
 
 #define RELIABLE_SERVER_COMMAND 1
@@ -542,16 +541,9 @@ void PlayerCmd_getFractionStartAmmo(uint32_t entityNum)
 
     /* 0x465f6..0x46608: fild reserve, fild start, fdivp, one float rounding
      * at the result store — neither integer is rounded to float first. */
-#if EMULATE_X87
-    Scr_AddFloat(x87f_store_f32(
-        x87f_div(x87f_load_i32(
-                     ent->client->ps.ammo[weaponInfo->ammoIndex]),
-                 x87f_load_i32(weaponInfo->startAmmo))));
-#else
     Scr_AddFloat((float)((long double)
                              ent->client->ps.ammo[weaponInfo->ammoIndex] /
                          (long double)weaponInfo->startAmmo));
-#endif
 }
 
 /* VERIFIED_DECOMPILER(0x4662a, 5662a_PlayerCmd_getFractionMaxAmmo.c, VERIFY-SCRIPT-PLAYER-CMDS-2026-06-17): DATAFLOW_VERIFIED; unowned/maxAmmo<=0 one result, reserve zero, and reserve/max ratio checked. */
@@ -595,16 +587,8 @@ void PlayerCmd_getFractionMaxAmmo(uint32_t entityNum)
      * count to binary32 first. Both retain the integer divisor's precision
      * and round the quotient to float only when publishing the result. */
     WIDE_FLOAT reserveAmmoForDivide = ent->client->ps.ammo[weaponInfo->ammoIndex];
-#if defined(LINUX_BEHAVIOR)
-    reserveAmmoForDivide = coduo_round_f32(reserveAmmoForDivide);
-#endif
     int maxAmmo = BG_GetAmmoTypeMax(weaponInfo->ammoIndex);
-#if EMULATE_X87
-    Scr_AddFloat(x87f_store_f32(x87f_div(
-        x87f_load_f64((double)reserveAmmoForDivide), x87f_load_i32(maxAmmo))));
-#else
     Scr_AddFloat((float)(reserveAmmoForDivide / maxAmmo));
-#endif
 }
 
 /* VERIFIED_DECOMPILER(0x467a4, 567a4_script_method_player_setorigin.c, VERIFY-NEXT-003-SCRIPTPLAYER-2026-06-17): DATAFLOW_VERIFIED - entity validation prologue, Scr_GetVector(0), unlink, SetClientOrigin helper side effects, and relink checked against current decompiler output. */
@@ -973,13 +957,8 @@ void PlayerCmd_finishPlayerDamage(uint32_t entityNum)
         }
 
         /* Stock 0x476ba: (int)(fild(damage) * knockbackScale) fistp-direct. */
-#if EMULATE_X87
-        knockback = x87f_store_i32_trunc(
-            x87f_mul(x87f_load_i32(damage), x87f_load_f32(knockbackScale)));
-#else
         knockback = game_compat_int32_from_long_double_trunc(
             (long double)damage * (long double)knockbackScale);
-#endif
         if (knockback > PLAYER_DAMAGE_KNOCKBACK_MAX) {
             knockback = PLAYER_DAMAGE_KNOCKBACK_MAX;
         }
@@ -989,42 +968,15 @@ void PlayerCmd_finishPlayerDamage(uint32_t entityNum)
              * velocity sum. Y/Z impulses round first. Linux divides by 250
              * (0x4770e/0x4772b/0x47748) and stores all three impulses before
              * adding velocity. The deterministic base may be shared. */
-#if EMULATE_X87
-            x87f impulseBase = x87f_mul(x87f_load_i32(knockback), x87f_load_f32(g_knockback.value));
-#if defined(WINDOWS_BEHAVIOR)
-            impulseBase = x87f_mul(impulseBase, x87f_load_f32(PLAYER_DAMAGE_KNOCKBACK_RECIPROCAL));
-#else
-            impulseBase = x87f_div(impulseBase, x87f_load_f32(PLAYER_DAMAGE_KNOCKBACK_DIVISOR));
-#endif
-#else
             WIDE_FLOAT impulseBase = (WIDE_FLOAT)knockback * g_knockback.value;
-#if defined(WINDOWS_BEHAVIOR)
             impulseBase *= PLAYER_DAMAGE_KNOCKBACK_RECIPROCAL;
-#else
-            impulseBase /= PLAYER_DAMAGE_KNOCKBACK_DIVISOR;
-#endif
-#endif
             for (int axis = 0; axis < 3; axis++) {
-#if EMULATE_X87
-                x87f impulse = x87f_mul(x87f_load_f32(dir[axis]), impulseBase);
-#if defined(WINDOWS_BEHAVIOR)
-                if (axis != 0)
-#endif
-                {
-                    impulse = x87f_load_f32(x87f_store_f32(impulse));
-                }
-                ent->client->ps.velocity[axis] = x87f_store_f32(x87f_add(impulse,
-                    x87f_load_f32(ent->client->ps.velocity[axis])));
-#else
                 WIDE_FLOAT impulse = (WIDE_FLOAT)dir[axis] * impulseBase;
-#if defined(WINDOWS_BEHAVIOR)
                 if (axis != 0)
-#endif
                 {
                     impulse = coduo_round_f32(impulse);
                 }
                 ent->client->ps.velocity[axis] = impulse + ent->client->ps.velocity[axis];
-#endif
             }
 
             if (ent->client->ps.pmTime == 0) {

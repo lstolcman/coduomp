@@ -8,14 +8,9 @@
  * bodies. Preserve that original dependency edge without splitting the
  * parser implementation.
  */
-#if defined(WINDOWS_BEHAVIOR)
 void G_Error(const char *format, ...);
 void G_Printf(const char *format, ...);
 #define COM_PARSE_ERROR(level, ...) G_Error(__VA_ARGS__)
 #define COM_PARSE_PRINT(...) G_Printf(__VA_ARGS__)
-#else
-#define COM_PARSE_ERROR(level, ...) Com_Error((level), __VA_ARGS__)
-#define COM_PARSE_PRINT(...) Com_Printf(__VA_ARGS__)
-#endif
 
 #endif

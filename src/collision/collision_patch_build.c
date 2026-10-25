@@ -1,7 +1,6 @@
 #include "collision_patch_build.h"
 #include "collision_queries.h"
 
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 #include "qcommon/hunk.h"
 
@@ -9,11 +8,6 @@
 #include <stddef.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "collision_patch_build.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /*
  * Complete curved-patch collision builder shared by the Windows client engine
@@ -67,13 +61,6 @@ int32_t cm_windingPeakActiveCount; /* original 0x0494ddb0 */
 float cm_windingSplitDist; /* original 0x008e49b0 */
 float cm_windingChopDist; /* original 0x008e49b4 */
 
-#if defined(LINUX_BEHAVIOR)
-/* The Linux builder owns these work arrays in static storage; the Windows
- * executable uses equivalent function-local arrays. */
-static patchPlaneGrid_t cm_patchPlaneGrid;
-static cGrid_t cm_patchWorkGrid;
-static facet_t cm_patchFacets[CM_PATCH_MAX_FACETS];
-#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: typed factoring of the repeated four-dword plane
  * loads and optional sign flip in CM_AddFacetBevels. */
@@ -102,44 +89,6 @@ qboolean CM_PlaneEqual(
     const vec4_t left, const vec4_t right,
     qboolean *flipped)
 {
-#if EMULATE_X87
-    const x87f normalEpsilon =
-        x87f_load_f64(CM_PATCH_PLANE_NORMAL_EPSILON);
-    const x87f distanceEpsilon =
-        x87f_load_f64(CM_PATCH_PLANE_DISTANCE_EPSILON);
-
-    if (x87f_lt(x87f_abs(x87f_sub(x87f_load_f32(right[0]),
-                                  x87f_load_f32(left[0]))),
-                normalEpsilon) &&
-        x87f_lt(x87f_abs(x87f_sub(x87f_load_f32(right[1]),
-                                  x87f_load_f32(left[1]))),
-                normalEpsilon) &&
-        x87f_lt(x87f_abs(x87f_sub(x87f_load_f32(right[2]),
-                                  x87f_load_f32(left[2]))),
-                normalEpsilon) &&
-        x87f_lt(x87f_abs(x87f_sub(x87f_load_f32(right[3]),
-                                  x87f_load_f32(left[3]))),
-                distanceEpsilon)) {
-        *flipped = qfalse;
-        return qtrue;
-    }
-
-    if (x87f_lt(x87f_abs(x87f_add(x87f_load_f32(right[0]),
-                                  x87f_load_f32(left[0]))),
-                normalEpsilon) &&
-        x87f_lt(x87f_abs(x87f_add(x87f_load_f32(right[1]),
-                                  x87f_load_f32(left[1]))),
-                normalEpsilon) &&
-        x87f_lt(x87f_abs(x87f_add(x87f_load_f32(right[2]),
-                                  x87f_load_f32(left[2]))),
-                normalEpsilon) &&
-        x87f_lt(x87f_abs(x87f_add(x87f_load_f32(right[3]),
-                                  x87f_load_f32(left[3]))),
-                distanceEpsilon)) {
-        *flipped = qtrue;
-        return qtrue;
-    }
-#else
     if (fabsl((long double)right[0] -
               (long double)left[0]) <
             (long double)CM_PATCH_PLANE_NORMAL_EPSILON &&
@@ -171,7 +120,6 @@ qboolean CM_PlaneEqual(
         *flipped = qtrue;
         return qtrue;
     }
-#endif
 
     return qfalse;
 }
@@ -185,17 +133,8 @@ void CM_SnapVector(vec3_t normal)
     for (int32_t axis = 0;
          axis < CM_PATCH_VECTOR_AXIS_COUNT;
          ++axis) {
-#if EMULATE_X87
-        const x87f value = x87f_load_f32(normal[axis]);
-        const x87f one = x87f_load_f64(1.0);
-        const x87f epsilon =
-            x87f_load_f64(CM_PATCH_PLANE_NORMAL_EPSILON);
-
-        if (x87f_lt(x87f_abs(x87f_sub(value, one)), epsilon)) {
-#else
         if (fabsl((long double)normal[axis] - 1.0L) <
             (long double)CM_PATCH_PLANE_NORMAL_EPSILON) {
-#endif
             normal[0] = 0.0f;
             normal[1] = 0.0f;
             normal[2] = 0.0f;
@@ -203,12 +142,8 @@ void CM_SnapVector(vec3_t normal)
             return;
         }
 
-#if EMULATE_X87
-        if (x87f_lt(x87f_abs(x87f_add(value, one)), epsilon)) {
-#else
         if (fabsl((long double)normal[axis] + 1.0L) <
             (long double)CM_PATCH_PLANE_NORMAL_EPSILON) {
-#endif
             normal[0] = 0.0f;
             normal[1] = 0.0f;
             normal[2] = 0.0f;
@@ -286,24 +221,14 @@ qboolean CM_PlaneFromPoints(
     for (int32_t axis = 0;
          axis < CM_PATCH_VECTOR_AXIS_COUNT;
          ++axis) {
-#if EMULATE_X87
-        direction1[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(point1[axis]), x87f_load_f32(point0[axis])));
-        direction2[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(point2[axis]), x87f_load_f32(point0[axis])));
-#else
         direction1[axis] = (float)(
             (long double)point1[axis] -
             (long double)point0[axis]);
         direction2[axis] = (float)(
             (long double)point2[axis] -
             (long double)point0[axis]);
-#endif
     }
 
-#if EMULATE_X87
-    CrossProduct(direction2, direction1, plane);
-#else
     plane[0] = (float)(
         (long double)direction2[1] *
             (long double)direction1[2] -
@@ -319,20 +244,10 @@ qboolean CM_PlaneFromPoints(
             (long double)direction1[1] -
         (long double)direction2[1] *
             (long double)direction1[0]);
-#endif
 
     if (VectorNormalize(plane) == 0.0f)
         return qfalse;
 
-#if EMULATE_X87
-    plane[3] = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(plane[0]),
-                          x87f_load_f32(point0[0])),
-                 x87f_mul(x87f_load_f32(plane[1]),
-                          x87f_load_f32(point0[1]))),
-        x87f_mul(x87f_load_f32(plane[2]),
-                 x87f_load_f32(point0[2]))));
-#else
     plane[3] = (float)(
         ((long double)plane[0] *
              (long double)point0[0] +
@@ -340,7 +255,6 @@ qboolean CM_PlaneFromPoints(
              (long double)point0[1]) +
         (long double)plane[2] *
             (long double)point0[2]);
-#endif
     return qtrue;
 }
 
@@ -352,30 +266,6 @@ qboolean CM_NeedsSubdivision(
     const vec3_t point0, const vec3_t point1,
     const vec3_t point2, int32_t maxError)
 {
-#if defined(WINDOWS_BEHAVIOR)
-#if EMULATE_X87
-    x87f bend[3];
-
-    for (int32_t axis = 0;
-         axis < CM_PATCH_VECTOR_AXIS_COUNT;
-         ++axis) {
-        const x87f middle = x87f_load_f32(point1[axis]);
-        bend[axis] = x87f_sub(
-            x87f_add(x87f_load_f32(point0[axis]),
-                     x87f_load_f32(point2[axis])),
-            x87f_add(middle, middle));
-    }
-
-    const x87f lengthSquared = x87f_add(
-        x87f_add(x87f_mul(bend[2], bend[2]),
-                 x87f_mul(bend[1], bend[1])),
-        x87f_mul(bend[0], bend[0]));
-    const x87f scaledLength = x87f_mul(
-        x87f_sqrt(lengthSquared), x87f_load_f32(0.25f));
-    return x87f_lt(x87f_load_i32(maxError), scaledLength)
-               ? qtrue
-               : qfalse;
-#else
     long double bend[3];
 
     for (int32_t axis = 0;
@@ -396,49 +286,6 @@ qboolean CM_NeedsSubdivision(
                    (long double)maxError
                ? qtrue
                : qfalse;
-#endif
-#else
-    vec3_t bend;
-
-    for (int32_t axis = 0;
-         axis < CM_PATCH_VECTOR_AXIS_COUNT;
-         ++axis) {
-#if EMULATE_X87
-        const x87f middle = x87f_load_f32(point1[axis]);
-        bend[axis] = x87f_store_f32(x87f_sub(
-            x87f_add(x87f_load_f32(point0[axis]),
-                     x87f_load_f32(point2[axis])),
-            x87f_add(middle, middle)));
-#else
-        bend[axis] = (point0[axis] + point2[axis]) -
-                     (point1[axis] + point1[axis]);
-#endif
-    }
-
-#if EMULATE_X87
-    const x87f dot = x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(bend[0]),
-                          x87f_load_f32(bend[0])),
-                 x87f_mul(x87f_load_f32(bend[1]),
-                          x87f_load_f32(bend[1]))),
-        x87f_mul(x87f_load_f32(bend[2]),
-                 x87f_load_f32(bend[2])));
-    const float bendLength = (float)sqrt(x87f_store_f64(dot));
-    const float scaledLength = x87f_store_f32(x87f_mul(
-        x87f_load_f32(bendLength), x87f_load_f32(0.25f)));
-    return x87f_lt(x87f_load_i32(maxError),
-                   x87f_load_f32(scaledLength))
-               ? qtrue
-               : qfalse;
-#else
-    const float bendLength = (float)sqrt((double)(
-        bend[0] * bend[0] + bend[1] * bend[1] + bend[2] * bend[2]));
-    const float scaledLength = bendLength * 0.25f;
-    return (long double)maxError < (long double)scaledLength
-               ? qtrue
-               : qfalse;
-#endif
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x0041dba0..0x0041dc20.
@@ -455,21 +302,6 @@ void CM_Subdivide(
     for (int32_t axis = 0;
          axis < CM_PATCH_VECTOR_AXIS_COUNT;
          ++axis) {
-#if defined(WINDOWS_BEHAVIOR) && EMULATE_X87
-        midpoint01[axis] = x87f_store_f32(x87f_mul(
-            x87f_add(x87f_load_f32(point0[axis]),
-                     x87f_load_f32(point1[axis])),
-            x87f_load_f32(0.5f)));
-        const x87f midpoint12Extended = x87f_mul(
-            x87f_add(x87f_load_f32(point1[axis]),
-                     x87f_load_f32(point2[axis])),
-            x87f_load_f32(0.5f));
-        midpoint12[axis] = x87f_store_f32(midpoint12Extended);
-        center[axis] = x87f_store_f32(x87f_mul(
-            x87f_add(x87f_load_f32(midpoint01[axis]),
-                     midpoint12Extended),
-            x87f_load_f32(0.5f)));
-#elif defined(WINDOWS_BEHAVIOR)
         midpoint01[axis] = (float)(
             ((long double)point0[axis] +
              (long double)point1[axis]) *
@@ -484,24 +316,6 @@ void CM_Subdivide(
             ((long double)midpoint01[axis] +
              midpoint12Extended) *
             0.5L);
-#elif EMULATE_X87
-        midpoint01[axis] = x87f_store_f32(x87f_mul(
-            x87f_add(x87f_load_f32(point0[axis]),
-                     x87f_load_f32(point1[axis])),
-            x87f_load_f32(0.5f)));
-        midpoint12[axis] = x87f_store_f32(x87f_mul(
-            x87f_add(x87f_load_f32(point1[axis]),
-                     x87f_load_f32(point2[axis])),
-            x87f_load_f32(0.5f)));
-        center[axis] = x87f_store_f32(x87f_mul(
-            x87f_add(x87f_load_f32(midpoint01[axis]),
-                     x87f_load_f32(midpoint12[axis])),
-            x87f_load_f32(0.5f)));
-#else
-        midpoint01[axis] = (point0[axis] + point1[axis]) * 0.5f;
-        midpoint12[axis] = (point1[axis] + point2[axis]) * 0.5f;
-        center[axis] = (midpoint01[axis] + midpoint12[axis]) * 0.5f;
-#endif
     }
 }
 
@@ -511,7 +325,6 @@ void CM_Subdivide(
  * the same direction and contain all three input points within the original
  * double 0.1 tolerance. The x87 expressions group Y+Z before X and remain
  * extended through each comparison; the source preserves that ordering. */
-#if defined(WINDOWS_BEHAVIOR)
 int32_t CM_FindPlane2(
     const vec3_t point0, const vec3_t point1,
     const vec3_t point2)
@@ -530,17 +343,6 @@ int32_t CM_FindPlane2(
         ++planeIndex) {
         const patchPlane_t *const stored =
             &cm_patchPlanes[planeIndex];
-#if EMULATE_X87
-        const x87f facing = x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(plane[1]),
-                              x87f_load_f32(stored->normal[1])),
-                     x87f_mul(x87f_load_f32(plane[2]),
-                              x87f_load_f32(stored->normal[2]))),
-            x87f_mul(x87f_load_f32(plane[0]),
-                     x87f_load_f32(stored->normal[0])));
-        if (x87f_lt(facing, x87f_load_f64(0.0)))
-            continue;
-#else
         const long double facing =
             ((long double)plane[1] *
                  (long double)stored->normal[1] +
@@ -550,7 +352,6 @@ int32_t CM_FindPlane2(
                 (long double)stored->normal[0];
         if (facing < 0.0L)
             continue;
-#endif
 
         int32_t pointIndex;
         for (pointIndex = 0;
@@ -558,25 +359,6 @@ int32_t CM_FindPlane2(
              ++pointIndex) {
             const float *const point =
                 points[pointIndex];
-#if EMULATE_X87
-            const x87f distance = x87f_sub(
-                x87f_add(
-                    x87f_add(x87f_mul(x87f_load_f32(point[2]),
-                                      x87f_load_f32(stored->normal[2])),
-                             x87f_mul(x87f_load_f32(point[1]),
-                                      x87f_load_f32(stored->normal[1]))),
-                    x87f_mul(x87f_load_f32(point[0]),
-                             x87f_load_f32(stored->normal[0]))),
-                x87f_load_f32(stored->dist));
-            if (x87f_lt(
-                    distance,
-                    x87f_load_f64(-CM_PATCH_POINT_PLANE_EPSILON)) ||
-                x87f_lt(
-                    x87f_load_f64(CM_PATCH_POINT_PLANE_EPSILON),
-                    distance)) {
-                break;
-            }
-#else
             const long double distance =
                 ((long double)point[2] *
                      (long double)stored->normal[2] +
@@ -594,7 +376,6 @@ int32_t CM_FindPlane2(
                     distance) {
                 break;
             }
-#endif
         }
 
         if (pointIndex == 3)
@@ -627,109 +408,11 @@ int32_t CM_FindPlane2(
     cm_patchPlaneCount++;
     return planeIndex;
 }
-#else
-/* coduo_lnxded 0x0804d3af. Linux stores each point-to-plane distance as
- * binary32 before applying the double-precision tolerance. */
-int32_t CM_FindPlane2(const vec3_t point0, const vec3_t point1,
-                      const vec3_t point2)
-{
-    vec4_t plane;
-
-    if (CM_PlaneFromPoints(plane, point0, point1, point2) == qfalse) {
-        return -1;
-    }
-
-    for (int32_t planeIndex = 0;
-         planeIndex < cm_patchPlaneCount;
-         ++planeIndex) {
-        const patchPlane_t *const stored =
-            &cm_patchPlanes[planeIndex];
-
-#if EMULATE_X87
-        const x87f facing = x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(plane[0]),
-                              x87f_load_f32(stored->normal[0])),
-                     x87f_mul(x87f_load_f32(plane[1]),
-                              x87f_load_f32(stored->normal[1]))),
-            x87f_mul(x87f_load_f32(plane[2]),
-                     x87f_load_f32(stored->normal[2])));
-        if (x87f_lt(facing, x87f_load_f64(0.0))) {
-            continue;
-        }
-
-        const x87f epsilon =
-            x87f_load_f64(CM_PATCH_POINT_PLANE_EPSILON);
-        const x87f negativeEpsilon =
-            x87f_load_f64(-CM_PATCH_POINT_PLANE_EPSILON);
-        const float *const points[3] = {point0, point1, point2};
-        int32_t pointIndex;
-
-        for (pointIndex = 0; pointIndex < 3; ++pointIndex) {
-            const float *const point = points[pointIndex];
-            const float distance = x87f_store_f32(x87f_sub(
-                x87f_add(
-                    x87f_add(x87f_mul(x87f_load_f32(point[0]),
-                                      x87f_load_f32(stored->normal[0])),
-                             x87f_mul(x87f_load_f32(point[1]),
-                                      x87f_load_f32(stored->normal[1]))),
-                    x87f_mul(x87f_load_f32(point[2]),
-                             x87f_load_f32(stored->normal[2]))),
-                x87f_load_f32(stored->dist)));
-            if (x87f_lt(x87f_load_f32(distance), negativeEpsilon) ||
-                x87f_lt(epsilon, x87f_load_f32(distance))) {
-                break;
-            }
-        }
-#else
-        const long double facing =
-            (long double)plane[0] * (long double)stored->normal[0] +
-            (long double)plane[1] * (long double)stored->normal[1] +
-            (long double)plane[2] * (long double)stored->normal[2];
-        if (facing < 0.0L) {
-            continue;
-        }
-
-        const float *const points[3] = {point0, point1, point2};
-        int32_t pointIndex;
-        for (pointIndex = 0; pointIndex < 3; ++pointIndex) {
-            const float *const point = points[pointIndex];
-            const float distance =
-                point[0] * stored->normal[0] +
-                point[1] * stored->normal[1] +
-                point[2] * stored->normal[2] - stored->dist;
-            if (distance < -CM_PATCH_POINT_PLANE_EPSILON ||
-                CM_PATCH_POINT_PLANE_EPSILON < distance) {
-                break;
-            }
-        }
-#endif
-
-        if (pointIndex == 3) {
-            return planeIndex;
-        }
-    }
-
-    if (cm_patchPlaneCount == CM_PATCH_PLANE_LIMIT) {
-        Com_Error(ERR_DROP, "\x15" "MAX_PATCH_PLANES");
-    }
-
-    const int32_t planeIndex = cm_patchPlaneCount;
-    patchPlane_t *const stored = &cm_patchPlanes[planeIndex];
-    stored->normal[0] = plane[0];
-    stored->normal[1] = plane[1];
-    stored->normal[2] = plane[2];
-    stored->dist = plane[3];
-    stored->signbits = CM_SignbitsForNormal(plane);
-    cm_patchPlaneCount++;
-    return planeIndex;
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x0041e700..0x0041e754, recovered from the executable
  * gap. Name and signature: exact same-module Mac symbol
  * CM_PointOnPlaneSide. The Windows body retains the dot product in x87
  * extended precision and groups the Z and Y terms before adding X. */
-#if defined(WINDOWS_BEHAVIOR)
 int32_t CM_PointOnPlaneSide(const vec3_t point, int32_t planeIndex)
 {
     if (planeIndex == -1)
@@ -737,26 +420,6 @@ int32_t CM_PointOnPlaneSide(const vec3_t point, int32_t planeIndex)
 
     const patchPlane_t *const plane =
         &cm_patchPlanes[planeIndex];
-#if EMULATE_X87
-    const x87f distance = x87f_sub(
-        x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(point[2]),
-                              x87f_load_f32(plane->normal[2])),
-                     x87f_mul(x87f_load_f32(point[1]),
-                              x87f_load_f32(plane->normal[1]))),
-            x87f_mul(x87f_load_f32(point[0]),
-                     x87f_load_f32(plane->normal[0]))),
-        x87f_load_f32(plane->dist));
-
-    if (x87f_lt(x87f_load_f64(CM_PATCH_POINT_PLANE_EPSILON),
-                distance)) {
-        return CM_WINDING_SIDE_FRONT;
-    }
-    if (x87f_lt(distance,
-                x87f_load_f64(-CM_PATCH_POINT_PLANE_EPSILON))) {
-        return CM_WINDING_SIDE_BACK;
-    }
-#else
     const long double distance =
         ((long double)point[2] *
              (long double)plane->normal[2] +
@@ -774,52 +437,8 @@ int32_t CM_PointOnPlaneSide(const vec3_t point, int32_t planeIndex)
         -(long double)CM_PATCH_POINT_PLANE_EPSILON) {
         return CM_WINDING_SIDE_BACK;
     }
-#endif
     return CM_WINDING_SIDE_ON;
 }
-#else
-/* coduo_lnxded 0x0804d6d0 stores the distance as binary32 before the side
- * comparisons. */
-int32_t CM_PointOnPlaneSide(const vec3_t point, int32_t planeIndex)
-{
-    if (planeIndex == -1) {
-        return CM_WINDING_SIDE_ON;
-    }
-
-    const patchPlane_t *const plane = &cm_patchPlanes[planeIndex];
-#if EMULATE_X87
-    const float distance = x87f_store_f32(x87f_sub(
-        x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(point[0]),
-                              x87f_load_f32(plane->normal[0])),
-                     x87f_mul(x87f_load_f32(point[1]),
-                              x87f_load_f32(plane->normal[1]))),
-            x87f_mul(x87f_load_f32(point[2]),
-                     x87f_load_f32(plane->normal[2]))),
-        x87f_load_f32(plane->dist)));
-    if (x87f_lt(x87f_load_f64(CM_PATCH_POINT_PLANE_EPSILON),
-                x87f_load_f32(distance))) {
-        return CM_WINDING_SIDE_FRONT;
-    }
-    if (x87f_lt(x87f_load_f32(distance),
-                x87f_load_f64(-CM_PATCH_POINT_PLANE_EPSILON))) {
-        return CM_WINDING_SIDE_BACK;
-    }
-#else
-    const float distance =
-        point[0] * plane->normal[0] +
-        point[1] * plane->normal[1] +
-        point[2] * plane->normal[2] - plane->dist;
-    if (CM_PATCH_POINT_PLANE_EPSILON < distance) {
-        return CM_WINDING_SIDE_FRONT;
-    }
-    if (distance < -CM_PATCH_POINT_PLANE_EPSILON) {
-        return CM_WINDING_SIDE_BACK;
-    }
-#endif
-    return CM_WINDING_SIDE_ON;
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x0041e760..0x0041e78b.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0041e760_0041e78c.mcode.
@@ -907,21 +526,12 @@ int32_t CM_EdgePlaneNum(
     for (int32_t axis = 0;
          axis < CM_PATCH_VECTOR_AXIS_COUNT;
          ++axis) {
-#if EMULATE_X87
-        offsetPoint[axis] = x87f_store_f32(x87f_add(
-            x87f_mul(
-                x87f_load_f32(
-                    cm_patchPlanes[adjacentPlane].normal[axis]),
-                x87f_load_f32(4.0f)),
-            x87f_load_f32(point0[axis])));
-#else
         offsetPoint[axis] = (float)(
             (long double)
                     cm_patchPlanes[adjacentPlane]
                         .normal[axis] *
                 4.0L +
             (long double)point0[axis]);
-#endif
     }
 
     if (reversePoints != qfalse) {
@@ -1068,15 +678,6 @@ qboolean CM_ValidateFacet(
     for (int32_t axis = 0;
          axis < CM_PATCH_VECTOR_AXIS_COUNT;
          ++axis) {
-#if EMULATE_X87
-        const x87f extent = x87f_sub(x87f_load_f32(maxs[axis]),
-                                     x87f_load_f32(mins[axis]));
-        if (x87f_lt(x87f_load_i32(CM_PATCH_WORLD_COORD_LIMIT), extent) ||
-            mins[axis] >= (float)CM_PATCH_WORLD_COORD_LIMIT ||
-            maxs[axis] <= (float)-CM_PATCH_WORLD_COORD_LIMIT) {
-            return qfalse;
-        }
-#else
         if ((long double)maxs[axis] -
                     (long double)mins[axis] >
                 (long double)
@@ -1087,7 +688,6 @@ qboolean CM_ValidateFacet(
                 (float)-CM_PATCH_WORLD_COORD_LIMIT) {
             return qfalse;
         }
-#endif
     }
 
     return qtrue;
@@ -1172,15 +772,9 @@ void CM_AddFacetBevels(facet_t *facet)
         for (int32_t axis = 0;
              axis < CM_PATCH_VECTOR_AXIS_COUNT;
              ++axis) {
-#if EMULATE_X87
-            edge[axis] = x87f_store_f32(x87f_sub(
-                x87f_load_f32(winding->p[pointIndex][axis]),
-                x87f_load_f32(winding->p[nextIndex][axis])));
-#else
             edge[axis] = (float)(
                 (long double)winding->p[pointIndex][axis] -
                 (long double)winding->p[nextIndex][axis]);
-#endif
         }
 
         if ((double)VectorNormalize(edge) <
@@ -1216,31 +810,6 @@ void CM_AddFacetBevels(facet_t *facet)
                 /* Windows forms x + (y + z); Linux forms (x + y) + z.  Both
                  * round only the final value to the float bevel-distance
                  * slot. */
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-                bevel[3] = x87f_store_f32(x87f_add(
-                    x87f_mul(x87f_load_f32(winding->p[pointIndex][0]),
-                             x87f_load_f32(bevel[0])),
-                    x87f_add(
-                        x87f_mul(x87f_load_f32(
-                                     winding->p[pointIndex][1]),
-                                 x87f_load_f32(bevel[1])),
-                        x87f_mul(x87f_load_f32(
-                                     winding->p[pointIndex][2]),
-                                 x87f_load_f32(bevel[2])))));
-#else
-                bevel[3] = x87f_store_f32(x87f_add(
-                    x87f_add(
-                        x87f_mul(x87f_load_f32(
-                                     winding->p[pointIndex][0]),
-                                 x87f_load_f32(bevel[0])),
-                        x87f_mul(x87f_load_f32(
-                                     winding->p[pointIndex][1]),
-                                 x87f_load_f32(bevel[1]))),
-                    x87f_mul(x87f_load_f32(winding->p[pointIndex][2]),
-                             x87f_load_f32(bevel[2]))));
-#endif
-#else
                 bevel[3] = (float)(
                     (long double)winding->p[pointIndex][0] *
                         (long double)bevel[0] +
@@ -1248,42 +817,12 @@ void CM_AddFacetBevels(facet_t *facet)
                          (long double)bevel[1] +
                      (long double)winding->p[pointIndex][2] *
                          (long double)bevel[2]));
-#endif
 
                 qboolean hasBackPoint = qfalse;
                 int32_t checkPoint;
                 for (checkPoint = 0;
                      checkPoint < winding->numpoints;
                      ++checkPoint) {
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-                    const x87f pointDistance = x87f_add(
-                        x87f_mul(x87f_load_f32(
-                                     winding->p[checkPoint][0]),
-                                 x87f_load_f32(bevel[0])),
-                        x87f_add(
-                            x87f_mul(x87f_load_f32(
-                                         winding->p[checkPoint][1]),
-                                     x87f_load_f32(bevel[1])),
-                            x87f_mul(x87f_load_f32(
-                                         winding->p[checkPoint][2]),
-                                     x87f_load_f32(bevel[2]))));
-#else
-                    const x87f pointDistance = x87f_add(
-                        x87f_add(
-                            x87f_mul(x87f_load_f32(
-                                         winding->p[checkPoint][0]),
-                                     x87f_load_f32(bevel[0])),
-                            x87f_mul(x87f_load_f32(
-                                         winding->p[checkPoint][1]),
-                                     x87f_load_f32(bevel[1]))),
-                        x87f_mul(x87f_load_f32(
-                                     winding->p[checkPoint][2]),
-                                 x87f_load_f32(bevel[2])));
-#endif
-                    const float dist = x87f_store_f32(x87f_sub(
-                        pointDistance, x87f_load_f32(bevel[3])));
-#else
                     const float dist = (float)(
                         (long double)winding->p[checkPoint][0] *
                             (long double)bevel[0] +
@@ -1292,7 +831,6 @@ void CM_AddFacetBevels(facet_t *facet)
                          (long double)winding->p[checkPoint][2] *
                              (long double)bevel[2]) -
                          (long double)bevel[3]);
-#endif
 
                     if ((double)dist >
                         CM_PATCH_BEVEL_PLANE_EPSILON) {
@@ -1398,15 +936,10 @@ void CM_PatchCollideFromGrid(const cGrid_t *grid,
 {
     int32_t (*mutablePlaneGrid)[CM_PATCH_PLANE_GRID_SIZE][2];
     facet_t *facets;
-#if defined(WINDOWS_BEHAVIOR)
     patchPlaneGrid_t localPlaneGrid;
     facet_t localFacets[CM_PATCH_MAX_FACETS];
     mutablePlaneGrid = localPlaneGrid;
     facets = localFacets;
-#else
-    mutablePlaneGrid = cm_patchPlaneGrid;
-    facets = cm_patchFacets;
-#endif
     int32_t numFacets = 0;
 
     cm_patchPlaneCount = 0;
@@ -1602,27 +1135,17 @@ void CM_PatchCollideFromGrid(const cGrid_t *grid,
     patchCollide->numPlanes = cm_patchPlaneCount;
     patchCollide->numFacets = numFacets;
     patchCollide->facets =
-#if defined(WINDOWS_BEHAVIOR)
         Hunk_AllocAlignInternal(
         (size_t)numFacets * sizeof(patchCollide->facets[0]),
         CM_PATCH_HUNK_ALIGNMENT);
-#else
-        Hunk_AllocInternal(
-            (size_t)numFacets * sizeof(patchCollide->facets[0]));
-#endif
     Com_Memcpy(
         patchCollide->facets, facets,
         (size_t)numFacets * sizeof(patchCollide->facets[0]));
     patchCollide->planes =
-#if defined(WINDOWS_BEHAVIOR)
         Hunk_AllocAlignInternal(
         (size_t)cm_patchPlaneCount *
             sizeof(patchCollide->planes[0]),
         CM_PATCH_HUNK_ALIGNMENT);
-#else
-        Hunk_AllocInternal(
-            (size_t)cm_patchPlaneCount * sizeof(patchCollide->planes[0]));
-#endif
     Com_Memcpy(
         patchCollide->planes, cm_patchPlanes,
         (size_t)cm_patchPlaneCount *
@@ -1706,20 +1229,6 @@ void CM_SetGridWrapWidth(cGrid_t *grid)
         int32_t axis;
 
         for (axis = 0; axis < 3; ++axis) {
-#if defined(WINDOWS_BEHAVIOR) && EMULATE_X87
-            const x87f delta = x87f_sub(
-                x87f_load_f32(grid->points[0][y][axis]),
-                x87f_load_f32(
-                    grid->points[grid->width - 1][y][axis]));
-            if (x87f_lt(
-                    delta,
-                    x87f_load_f64(-CM_PATCH_GRID_POINT_EPSILON)) ||
-                x87f_lt(
-                    x87f_load_f64(CM_PATCH_GRID_POINT_EPSILON),
-                    delta)) {
-                break;
-            }
-#elif defined(WINDOWS_BEHAVIOR)
             const long double delta =
                 (long double)grid->points[0][y][axis] -
                 (long double)
@@ -1731,28 +1240,6 @@ void CM_SetGridWrapWidth(cGrid_t *grid)
                     (long double)CM_PATCH_GRID_POINT_EPSILON) {
                 break;
             }
-#elif EMULATE_X87
-            const float delta = x87f_store_f32(x87f_sub(
-                x87f_load_f32(grid->points[0][y][axis]),
-                x87f_load_f32(
-                    grid->points[grid->width - 1][y][axis])));
-            if (x87f_lt(
-                    x87f_load_f32(delta),
-                    x87f_load_f64(-CM_PATCH_GRID_POINT_EPSILON)) ||
-                x87f_lt(
-                    x87f_load_f64(CM_PATCH_GRID_POINT_EPSILON),
-                    x87f_load_f32(delta))) {
-                break;
-            }
-#else
-            const float delta =
-                grid->points[0][y][axis] -
-                grid->points[grid->width - 1][y][axis];
-            if (delta < -CM_PATCH_GRID_POINT_EPSILON ||
-                delta > CM_PATCH_GRID_POINT_EPSILON) {
-                break;
-            }
-#endif
         }
         if (axis != 3) {
             break;
@@ -1768,44 +1255,15 @@ void CM_SetGridWrapWidth(cGrid_t *grid)
  * Name and max-error interface: exact same-module Mac symbol
  * CM_SubdivideGridColumns. Windows proves the x87 bend-length test,
  * two-column insertion shift, and float-rounded three-point subdivision. */
-#if defined(WINDOWS_BEHAVIOR)
 void CM_SubdivideGridColumns(cGrid_t *grid, int32_t maxError)
 {
     int32_t x = 0;
-#if EMULATE_X87
-    const float maxErrorAsFloat =
-        x87f_store_f32(x87f_load_i32(maxError));
-#else
     const float maxErrorAsFloat = (float)maxError;
-#endif
 
     while (x < grid->width - 2) {
         int32_t y;
 
         for (y = 0; y < grid->height; ++y) {
-#if EMULATE_X87
-            x87f bend[3];
-
-            for (int32_t axis = 0; axis < 3; ++axis) {
-                const x87f middle =
-                    x87f_load_f32(grid->points[x + 1][y][axis]);
-                bend[axis] = x87f_sub(
-                    x87f_add(
-                        x87f_load_f32(grid->points[x][y][axis]),
-                        x87f_load_f32(grid->points[x + 2][y][axis])),
-                    x87f_add(middle, middle));
-            }
-            const x87f lengthSquared = x87f_add(
-                x87f_mul(bend[0], bend[0]),
-                x87f_add(x87f_mul(bend[1], bend[1]),
-                         x87f_mul(bend[2], bend[2])));
-            const x87f scaledLength = x87f_mul(
-                x87f_sqrt(lengthSquared), x87f_load_f32(0.25f));
-            if (x87f_lt(x87f_load_f32(maxErrorAsFloat),
-                        scaledLength)) {
-                break;
-            }
-#else
             long double bend[3];
 
             for (int32_t axis = 0; axis < 3; ++axis) {
@@ -1826,7 +1284,6 @@ void CM_SubdivideGridColumns(cGrid_t *grid, int32_t maxError)
                 sqrtl(lengthSquared) * 0.25L) {
                 break;
             }
-#endif
         }
 
         if (y == grid->height) {
@@ -1864,18 +1321,6 @@ void CM_SubdivideGridColumns(cGrid_t *grid, int32_t maxError)
             }
 
             for (int32_t axis = 0; axis < 3; ++axis) {
-#if EMULATE_X87
-                const float midpoint01 = x87f_store_f32(x87f_mul(
-                    x87f_add(x87f_load_f32(point0[axis]),
-                             x87f_load_f32(point1[axis])),
-                    x87f_load_f32(0.5f)));
-                const x87f midpoint12Extended = x87f_mul(
-                    x87f_add(x87f_load_f32(point1[axis]),
-                             x87f_load_f32(point2[axis])),
-                    x87f_load_f32(0.5f));
-                const float midpoint12 =
-                    x87f_store_f32(midpoint12Extended);
-#else
                 const float midpoint01 = (float)(
                     ((long double)point0[axis] +
                      (long double)point1[axis]) * 0.5L);
@@ -1884,7 +1329,6 @@ void CM_SubdivideGridColumns(cGrid_t *grid, int32_t maxError)
                      (long double)point2[axis]) * 0.5L;
                 const float midpoint12 =
                     (float)midpoint12Extended;
-#endif
 
                 grid->points[x + 1][y][axis] =
                     midpoint01;
@@ -1892,88 +1336,15 @@ void CM_SubdivideGridColumns(cGrid_t *grid, int32_t maxError)
                     midpoint12;
                 /* FST stores midpoint12 to float but retains the extended
                  * value in ST0 for the center calculation. */
-#if EMULATE_X87
-                grid->points[x + 2][y][axis] = x87f_store_f32(x87f_mul(
-                    x87f_add(x87f_load_f32(midpoint01),
-                             midpoint12Extended),
-                    x87f_load_f32(0.5f)));
-#else
                 grid->points[x + 2][y][axis] = (float)(
                     ((long double)midpoint01 +
                      midpoint12Extended) * 0.5L);
-#endif
             }
         }
 
         grid->width += 2;
     }
 }
-#else
-/* coduo_lnxded 0x0804c9b1.  The Linux compiler retains the two source helper
- * calls, so their original binary32 spills remain observable here. */
-void CM_SubdivideGridColumns(cGrid_t *grid, int32_t maxError)
-{
-    int32_t x = 0;
-
-    while (x < grid->width - 2) {
-        int32_t y = 0;
-        while (y < grid->height &&
-               CM_NeedsSubdivision(grid->points[x][y],
-                                   grid->points[x + 1][y],
-                                   grid->points[x + 2][y],
-                                   maxError) == qfalse) {
-            y++;
-        }
-
-        if (y == grid->height) {
-            x += 2;
-            continue;
-        }
-
-        /* NOT_FROM_ORIGINAL_SOURCE: apply the same two-column pre-write
-         * capacity gate to the Linux operation graph. */
-        if (grid->width > CM_PATCH_POINT_GRID_SIZE - 2) {
-            Com_Error(ERR_DROP, "\x15" "CM_SubdivideGridColumns: MAX_GRID_SIZE");
-        }
-
-        for (y = 0; y < grid->height; ++y) {
-            vec3_t point0 = {
-                grid->points[x][y][0],
-                grid->points[x][y][1],
-                grid->points[x][y][2]
-            };
-            vec3_t point1 = {
-                grid->points[x + 1][y][0],
-                grid->points[x + 1][y][1],
-                grid->points[x + 1][y][2]
-            };
-            vec3_t point2 = {
-                grid->points[x + 2][y][0],
-                grid->points[x + 2][y][1],
-                grid->points[x + 2][y][2]
-            };
-
-            for (int32_t source = grid->width - 1;
-                 source > x + 1;
-                 --source) {
-                grid->points[source + 2][y][0] =
-                    grid->points[source][y][0];
-                grid->points[source + 2][y][1] =
-                    grid->points[source][y][1];
-                grid->points[source + 2][y][2] =
-                    grid->points[source][y][2];
-            }
-
-            CM_Subdivide(point0, point1, point2,
-                         grid->points[x + 1][y],
-                         grid->points[x + 2][y],
-                         grid->points[x + 3][y]);
-        }
-
-        grid->width += 2;
-    }
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x0041e170..0x0041e1d9, recovered from the executable
  * gap. Name and signature: exact same-module Mac symbol CM_ComparePoints.
@@ -1984,16 +1355,6 @@ qboolean CM_ComparePoints(const vec3_t left, const vec3_t right)
     for (int32_t axis = 0;
          axis < CM_PATCH_VECTOR_AXIS_COUNT;
          ++axis) {
-#if defined(WINDOWS_BEHAVIOR) && EMULATE_X87
-        const x87f delta = x87f_sub(x87f_load_f32(left[axis]),
-                                    x87f_load_f32(right[axis]));
-        if (x87f_lt(delta,
-                    x87f_load_f64(-CM_PATCH_GRID_POINT_EPSILON)) ||
-            x87f_lt(x87f_load_f64(CM_PATCH_GRID_POINT_EPSILON),
-                    delta)) {
-            return qfalse;
-        }
-#elif defined(WINDOWS_BEHAVIOR)
         const long double delta =
             (long double)left[axis] -
             (long double)right[axis];
@@ -2003,22 +1364,6 @@ qboolean CM_ComparePoints(const vec3_t left, const vec3_t right)
                 delta) {
             return qfalse;
         }
-#elif EMULATE_X87
-        const float delta = x87f_store_f32(x87f_sub(
-            x87f_load_f32(left[axis]), x87f_load_f32(right[axis])));
-        if (x87f_lt(x87f_load_f32(delta),
-                    x87f_load_f64(-CM_PATCH_GRID_POINT_EPSILON)) ||
-            x87f_lt(x87f_load_f64(CM_PATCH_GRID_POINT_EPSILON),
-                    x87f_load_f32(delta))) {
-            return qfalse;
-        }
-#else
-        const float delta = left[axis] - right[axis];
-        if (delta < -CM_PATCH_GRID_POINT_EPSILON ||
-            CM_PATCH_GRID_POINT_EPSILON < delta) {
-            return qfalse;
-        }
-#endif
     }
     return qtrue;
 }
@@ -2088,12 +1433,8 @@ patchCollide_t *CM_GeneratePatchCollide(
     uint32_t width, uint32_t height, int32_t maxError,
     const vec3_t *points, vec3_t bounds[2])
 {
-#if defined(WINDOWS_BEHAVIOR)
     cGrid_t localGrid;
     cGrid_t *const grid = &localGrid;
-#else
-    cGrid_t *const grid = &cm_patchWorkGrid;
-#endif
 
     if ((int32_t)width <= 2 ||
         (int32_t)height <= 2 ||
@@ -2143,13 +1484,9 @@ patchCollide_t *CM_GeneratePatchCollide(
 
     {
         patchCollide_t *const patchCollide =
-#if defined(WINDOWS_BEHAVIOR)
             Hunk_AllocAlignInternal(
                 sizeof(*patchCollide),
                 CM_PATCH_HUNK_ALIGNMENT);
-#else
-            Hunk_AllocInternal(sizeof(*patchCollide));
-#endif
 
         ClearBounds(bounds[0], bounds[1]);
         for (int32_t x = 0; x < grid->width; ++x) {

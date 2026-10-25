@@ -16,7 +16,6 @@
 #include "game_functions.h"
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_x87_eval.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 
 #define ENTITY_FLAG_HIDDEN 0x00001000u
 #define ENTITY_FLAG_GRENADE_TOUCH_DAMAGE 0x00008000u
@@ -82,9 +81,6 @@ static qboolean game_compat_script_entity_contents_bounds_touch(const vec3_t aMi
     bMins[1] = b->currentOrigin[1] + b->mins[1];
     bMins[2] = b->currentOrigin[2] + b->mins[2];
     WIDE_FLOAT bMaxX = (WIDE_FLOAT)b->currentOrigin[0] + b->maxs[0];
-#if defined(LINUX_BEHAVIOR)
-    bMaxX = coduo_round_f32(bMaxX);
-#endif
     float bMaxY = b->currentOrigin[1] + b->maxs[1];
     float bMaxZ = b->currentOrigin[2] + b->maxs[2];
 
@@ -392,14 +388,8 @@ void ScrCmd_GetNormalHealth(uint32_t scriptObject)
         /* 0x68d2a..0x68d41: fild health, fild normalMaxHealth, fdivp, one
          * float rounding at the argument store — neither integer is rounded
          * to float before the divide. */
-#if EMULATE_X87
-        Scr_AddFloat(x87f_store_f32(x87f_div(
-            x87f_load_i32(ent->health),
-            x87f_load_i32(ent->client->normalMaxHealth))));
-#else
         Scr_AddFloat((float)((long double)ent->health /
                              (long double)ent->client->normalMaxHealth));
-#endif
     }
 }
 
@@ -421,22 +411,12 @@ void ScrCmd_SetNormalHealth(uint32_t scriptObject)
         if (ent->maxHealth == 0) {
             health = coduo_fp_to_i32_extended((WIDE_FLOAT)value);
         } else {
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-            health = x87f_store_i32_trunc(x87f_mul(
-                x87f_load_i32(ent->maxHealth), x87f_load_f32(value)));
-#else
             health = coduo_fp_to_i32_extended(
                 (WIDE_FLOAT)ent->maxHealth * (WIDE_FLOAT)value);
-#endif
         }
     } else {
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-        health = x87f_store_i32_trunc(x87f_mul(
-            x87f_load_i32(ent->client->normalMaxHealth), x87f_load_f32(value)));
-#else
         health = coduo_fp_to_i32_extended(
             (WIDE_FLOAT)ent->client->normalMaxHealth * (WIDE_FLOAT)value);
-#endif
     }
 
     if (health < 1) {
@@ -583,10 +563,6 @@ void ScrCmd_VerifyPosition(uint32_t scriptObject)
          */
         WIDE_FLOAT scaledMinX = (WIDE_FLOAT)mins[0] * VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         WIDE_FLOAT scaledMinY = (WIDE_FLOAT)mins[1] * VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
-#if defined(LINUX_BEHAVIOR)
-        scaledMinX = coduo_round_f32(scaledMinX);
-        scaledMinY = coduo_round_f32(scaledMinY);
-#endif
         mins[2] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         maxs[0] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
         maxs[1] *= VERIFYPOSITION_VEHICLE_BOUNDS_SCALE;
@@ -594,9 +570,6 @@ void ScrCmd_VerifyPosition(uint32_t scriptObject)
         mins[0] = scaledMinX + ent->currentOrigin[0];
         mins[1] = scaledMinY + ent->currentOrigin[1];
         WIDE_FLOAT minimumZ = (WIDE_FLOAT)mins[2] + ent->currentOrigin[2];
-#if defined(LINUX_BEHAVIOR)
-        minimumZ = coduo_round_f32(minimumZ);
-#endif
         maxs[0] += ent->currentOrigin[0];
         maxs[1] += ent->currentOrigin[1];
         maxs[2] += ent->currentOrigin[2];

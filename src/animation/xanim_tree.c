@@ -91,11 +91,7 @@ void XAnimCopyRuntimeTree(XAnimTree *runtimeTree,
  * inspect it; both bodies return the script-memory block selected for size. */
 void *MT_AllocAnimTree(size_t size)
 {
-#if defined(WINDOWS_BEHAVIOR)
     return MT_Alloc(size);
-#else
-    return MT_Alloc(size, XANIM_RUNTIME_TREE_MT_TAG);
-#endif
 }
 
 /* Sources: CoDUOMP.exe 0x0043d380 and coduo_lnxded 0x08072a9f.

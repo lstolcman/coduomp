@@ -1,12 +1,6 @@
 #include "q_math.h"
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 /*
  * The four authoritative Windows bodies are instruction-identical:
@@ -31,17 +25,6 @@
  */
 void CrossProduct(const vec3_t left, const vec3_t right, vec3_t output)
 {
-#if EMULATE_X87
-    output[0] = x87f_store_f32(x87f_sub(
-        x87f_mul(x87f_load_f32(left[1]), x87f_load_f32(right[2])),
-        x87f_mul(x87f_load_f32(left[2]), x87f_load_f32(right[1]))));
-    output[1] = x87f_store_f32(x87f_sub(
-        x87f_mul(x87f_load_f32(left[2]), x87f_load_f32(right[0])),
-        x87f_mul(x87f_load_f32(left[0]), x87f_load_f32(right[2]))));
-    output[2] = x87f_store_f32(x87f_sub(
-        x87f_mul(x87f_load_f32(left[0]), x87f_load_f32(right[1])),
-        x87f_mul(x87f_load_f32(left[1]), x87f_load_f32(right[0]))));
-#else
     /* Preserve the single binary32 store per lane on native FP hosts too. */
     output[0] = (float)((long double)left[1] * (long double)right[2] -
                         (long double)left[2] * (long double)right[1]);
@@ -49,5 +32,4 @@ void CrossProduct(const vec3_t left, const vec3_t right, vec3_t output)
                         (long double)left[0] * (long double)right[2]);
     output[2] = (float)((long double)left[0] * (long double)right[1] -
                         (long double)left[1] * (long double)right[0]);
-#endif
 }

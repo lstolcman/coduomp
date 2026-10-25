@@ -1,10 +1,5 @@
 #include "animation_private.h"
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /*
  * The authoritative client and dedicated-server bodies retain the same tree
@@ -20,7 +15,6 @@
  * its PC=64 policy.  The two complete bodies preserve that observable target
  * difference without splitting the common diagnostic subsystem.
  */
-#if defined(WINDOWS_BEHAVIOR)
 void XAnimDisplay(XAnimTree *tree, uint32_t animIndex, int32_t depth)
 {
     XAnim *sourceTree = tree->sourceTree;
@@ -138,124 +132,6 @@ void XAnimDisplay(XAnimTree *tree, uint32_t animIndex, int32_t depth)
                      depth + 1);
     }
 }
-#else
-void XAnimDisplay(XAnimTree *tree, uint32_t animIndex, int32_t depth)
-{
-    XAnim *sourceTree = tree->sourceTree;
-    XAnimEntry *entry = &sourceTree->entries[animIndex];
-    uint16_t handle = tree->poolNodeHandles[animIndex];
-
-    if (handle == 0) {
-        return;
-    }
-
-    XAnimInfo *node = &xanim_pool[handle];
-    XAnimState *payload = &node->states[xanim_activePoolPayloadSlot];
-
-    if (payload->currentWeight == 0.0f) {
-        return;
-    }
-
-    for (int32_t indent = 0; indent < depth; ++indent) {
-        Com_Printf(" ");
-    }
-
-    if (entry->childCount == 0) {
-        XAnimParts *record = entry->payload.leafAsset->data.xanimParts;
-        float realTimeDelta = payload->time - payload->oldTime;
-
-        if (realTimeDelta < 0.0f) {
-            realTimeDelta += 1.0f;
-        }
-        if (record->frequency != 0.0f) {
-            realTimeDelta /= record->frequency;
-        } else {
-            realTimeDelta = 0.0f;
-        }
-
-        if (xanim_activePoolPayloadSlot == 0 || node->notifyName == 0) {
-            Com_Printf("(name) %s: (weight) %f -> %f, "
-                       "(time) %f -> %f, (realtimedelta) %f\n",
-                       entry->payload.leafAsset->name,
-                       (double)payload->currentWeight,
-                       (double)payload->targetWeight,
-                       (double)payload->oldTime,
-                       (double)payload->time,
-                       (double)realTimeDelta);
-        } else {
-            float notifyWeight =
-                node->notifyIndex < 0
-                    ? 1.0f
-                    : record->noteTracks[node->notifyIndex].time;
-
-            Com_Printf("(name) %s: (weight) %f -> %f, "
-                       "(time) %f -> %f, (realtimedelta) %f, "
-                       "'%s' (%f)\n",
-                       entry->payload.leafAsset->name,
-                       (double)payload->currentWeight,
-                       (double)payload->targetWeight,
-                       (double)payload->oldTime,
-                       (double)payload->time,
-                       (double)realTimeDelta,
-                       SL_ConvertToString(node->notifyName),
-                       (double)notifyWeight);
-        }
-        return;
-    }
-
-    if (xanim_activePoolPayloadSlot == 0 || node->notifyName == 0) {
-        if (XAnimHasTime(sourceTree, animIndex) == qfalse) {
-            Com_Printf("(index) %d: (weight) %f -> %f\n", animIndex,
-                       (double)payload->currentWeight,
-                       (double)payload->targetWeight);
-        } else {
-            Com_Printf("(index) %d: (weight) %f -> %f, "
-                       "(time) %f -> %f\n",
-                       animIndex, (double)payload->currentWeight,
-                       (double)payload->targetWeight,
-                       (double)payload->oldTime,
-                       (double)payload->time);
-        }
-    } else {
-        const char *notifyName = SL_ConvertToString(node->notifyName);
-
-        if (XAnimHasTime(sourceTree, animIndex) == qfalse) {
-            Com_Printf("(index) %d: (weight) %f -> %f, '%s'\n",
-                       animIndex, (double)payload->currentWeight,
-                       (double)payload->targetWeight, notifyName);
-        } else if (node->notifyChildIndex == 0) {
-            Com_Printf("(index) %d: (weight) %f -> %f, "
-                       "(time) %f -> %f, '%s'\n",
-                       animIndex, (double)payload->currentWeight,
-                       (double)payload->targetWeight,
-                       (double)payload->oldTime,
-                       (double)payload->time, notifyName);
-        } else {
-            XAnimEntry *sourceEntry =
-                &sourceTree->entries[node->notifyChildIndex];
-            XAnimParts *sourceRecord =
-                sourceEntry->payload.leafAsset->data.xanimParts;
-            float notifyWeight =
-                node->notifyIndex < 0
-                    ? 1.0f
-                    : sourceRecord->noteTracks[node->notifyIndex].time;
-
-            Com_Printf("(index) %d: (weight) %f -> %f, "
-                       "(time) %f -> %f, '%s', (%f)\n",
-                       animIndex, (double)payload->currentWeight,
-                       (double)payload->targetWeight,
-                       (double)payload->oldTime,
-                       (double)payload->time, notifyName,
-                       (double)notifyWeight);
-        }
-    }
-
-    for (int32_t child = 0; child < entry->childCount; ++child) {
-        XAnimDisplay(tree, entry->payload.parent.firstChildIndex + child,
-                     depth + 1);
-    }
-}
-#endif
 
 /*
  * The client and dedicated-server bodies test the runtime-tree pointer,

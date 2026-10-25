@@ -7,16 +7,8 @@
 
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR)
 void *GetClearedMemory(size_t size);
 void FreeMemory(void *memory);
-#elif defined(LINUX_BEHAVIOR)
-void *Com_ZoneDebugAlloc(size_t size);
-void *Com_ZoneDebugAllocClear(size_t size);
-void Com_DebugFree(void *pointer);
-#else
-#error "precompiler_script.c requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 enum {
     PC_SCRIPT_INITIAL_LINE = 1
@@ -47,13 +39,8 @@ script_t *LoadScriptFile(const char *filename)
     if (handle == 0)
         return NULL;
 
-#if defined(WINDOWS_BEHAVIOR)
     script_t *script = GetClearedMemory(
         sizeof(*script) + (size_t)fileLength + 1);
-#else
-    script_t *script = Com_ZoneDebugAlloc(
-        sizeof(*script) + (size_t)fileLength + 1);
-#endif
     memset(script, 0, sizeof(*script));
     strcpy(script->filename, filename);
 
@@ -87,12 +74,7 @@ script_t *LoadScriptMemory(const char *buffer, size_t length,
         return NULL;
     }
 
-#if defined(WINDOWS_BEHAVIOR)
     script_t *script = GetClearedMemory(sizeof(*script) + length + 1);
-#else
-    script_t *script = Com_ZoneDebugAllocClear(
-        sizeof(*script) + length + 1);
-#endif
     memset(script, 0, sizeof(*script));
     strcpy(script->filename, name);
 
@@ -119,17 +101,9 @@ script_t *LoadScriptMemory(const char *buffer, size_t length,
 void FreeScript(script_t *script)
 {
     if (script->punctuationTable != NULL) {
-#if defined(WINDOWS_BEHAVIOR)
         FreeMemory(script->punctuationTable);
-#else
-        Com_DebugFree(script->punctuationTable);
-#endif
     }
-#if defined(WINDOWS_BEHAVIOR)
     FreeMemory(script);
-#else
-    Com_DebugFree(script);
-#endif
 }
 
 /* Sources: CoDUOMP.exe 0x00448be0..0x00448bf8 and coduo_lnxded

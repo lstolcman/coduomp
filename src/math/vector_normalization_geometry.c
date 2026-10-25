@@ -6,13 +6,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 #define Q_RSQRT_MAGIC UINT32_C(0x5f3759df)
 #define Q_FLOAT_SIGN_BIT UINT32_C(0x80000000)
@@ -33,7 +27,6 @@
  * game.mp.uo.i386.so RVA 0x00039a6f).  The supporting PowerPC executable,
  * cgame, and game modules retain the canonical Q_rsqrt symbol.
  */
-#if defined(WINDOWS_BEHAVIOR)
 float Q_rsqrt(float value)
 {
     const float half = 0.5f;
@@ -45,26 +38,7 @@ float Q_rsqrt(float value)
     bits = Q_RSQRT_MAGIC - coduo_int32_sar_bits(bits, 1U);
     memcpy(&estimate, &bits, sizeof(estimate));
 
-#if EMULATE_X87
-    {
-        const x87f estimateWide = x87f_load_f32(estimate);
-        const x87f result = x87f_mul(
-            estimateWide,
-            x87f_sub(
-                x87f_load_f32(threeHalves),
-                x87f_mul(
-                    x87f_mul(
-                        x87f_mul(x87f_load_f32(value),
-                                 x87f_load_f32(half)),
-                        estimateWide),
-                    estimateWide)));
-
-        /* A non-x87 ABI cannot carry the original live ST0 result.  Narrow at
-         * the public binary32 boundary after reproducing its PC=53 graph. */
-        return x87f_store_f32(result);
-    }
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-    (defined(__GNUC__) || defined(__clang__))
+#if   (defined(__i386__) || defined(__x86_64__)) &&      (defined(__GNUC__) || defined(__clang__))
     {
         register float result;
 
@@ -89,67 +63,6 @@ float Q_rsqrt(float value)
                     (WIDE_FLOAT)estimate * (WIDE_FLOAT)estimate));
 #endif
 }
-#else
-float Q_rsqrt(float value)
-{
-    const float half = 0.5f;
-    const float threeHalves = 1.5f;
-    uint32_t bits;
-    float estimate;
-    float halfValue;
-
-#if EMULATE_X87
-    halfValue = x87f_store_f32(
-        x87f_mul(x87f_load_f32(value), x87f_load_f32(half)));
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
-    __asm__ __volatile__("flds %1\n\t"
-                         "fmuls %2\n\t"
-                         "fstps %0"
-                         : "=m"(halfValue)
-                         : "m"(value), "m"(half)
-                         : "st", "memory");
-#else
-    halfValue = value * half;
-#endif
-
-    memcpy(&bits, &value, sizeof(bits));
-    bits = Q_RSQRT_MAGIC - coduo_int32_sar_bits(bits, 1U);
-    memcpy(&estimate, &bits, sizeof(estimate));
-
-#if EMULATE_X87
-    {
-        const x87f estimateWide = x87f_load_f32(estimate);
-
-        estimate = x87f_store_f32(x87f_mul(
-            estimateWide,
-            x87f_sub(x87f_load_f32(threeHalves),
-                     x87f_mul(x87f_mul(x87f_load_f32(halfValue),
-                                       estimateWide),
-                              estimateWide))));
-    }
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
-    __asm__ __volatile__("flds %[halfValue]\n\t"
-                         "fmuls %[estimate]\n\t"
-                         "fmuls %[estimate]\n\t"
-                         "flds %[threeHalves]\n\t"
-                         "fsubp %%st, %%st(1)\n\t"
-                         "flds %[estimate]\n\t"
-                         "fmulp %%st, %%st(1)\n\t"
-                         "fstps %[estimate]"
-                         : [estimate] "+m"(estimate)
-                         : [halfValue] "m"(halfValue),
-                           [threeHalves] "m"(threeHalves)
-                         : "st", "st(1)", "memory");
-#else
-    estimate = (float)((WIDE_FLOAT)estimate *
-                       ((WIDE_FLOAT)threeHalves - (WIDE_FLOAT)halfValue *
-                        (WIDE_FLOAT)estimate * (WIDE_FLOAT)estimate));
-#endif
-    return estimate;
-}
-#endif
 
 /*
  * Each Windows function below is byte-identical across CoDUOMP.exe, cgame,
@@ -191,22 +104,6 @@ float VectorNormalize2D(vec2_t vector)
     float lengthSquared;
     float length;
 
-#if EMULATE_X87
-    lengthSquared = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(vector[0]), x87f_load_f32(vector[0])),
-        x87f_mul(x87f_load_f32(vector[1]), x87f_load_f32(vector[1]))));
-    length = (float)sqrt(
-        x87f_store_f64(x87f_load_f32(lengthSquared)));
-    if (length != 0.0f) {
-        const float inverseLength = x87f_store_f32(
-            x87f_div(x87f_load_f32(1.0f), x87f_load_f32(length)));
-
-        vector[0] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(vector[0]), x87f_load_f32(inverseLength)));
-        vector[1] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(vector[1]), x87f_load_f32(inverseLength)));
-    }
-#else
     /* The squared sum has one binary32 store, after both products and the sum. */
     lengthSquared = (float)((WIDE_FLOAT)vector[0] * (WIDE_FLOAT)vector[0] +
                             (WIDE_FLOAT)vector[1] * (WIDE_FLOAT)vector[1]);
@@ -217,7 +114,6 @@ float VectorNormalize2D(vec2_t vector)
         vector[0] = vector[0] * inverseLength;
         vector[1] = vector[1] * inverseLength;
     }
-#endif
     return length;
 }
 
@@ -226,27 +122,6 @@ float VectorNormalize(vec3_t vector)
     float lengthSquared;
     float length;
 
-#if EMULATE_X87
-    lengthSquared = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(vector[0]),
-                          x87f_load_f32(vector[0])),
-                 x87f_mul(x87f_load_f32(vector[1]),
-                          x87f_load_f32(vector[1]))),
-        x87f_mul(x87f_load_f32(vector[2]), x87f_load_f32(vector[2]))));
-    length = (float)sqrt(
-        x87f_store_f64(x87f_load_f32(lengthSquared)));
-    if (length != 0.0f) {
-        const float inverseLength = x87f_store_f32(
-            x87f_div(x87f_load_f32(1.0f), x87f_load_f32(length)));
-
-        vector[0] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(vector[0]), x87f_load_f32(inverseLength)));
-        vector[1] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(vector[1]), x87f_load_f32(inverseLength)));
-        vector[2] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(vector[2]), x87f_load_f32(inverseLength)));
-    }
-#else
     /* Keep the products and additions wide until the original binary32
      * squared-length store, including on hosts without x87 excess precision. */
     lengthSquared = (float)(((long double)vector[0] * (long double)vector[0] +
@@ -260,7 +135,6 @@ float VectorNormalize(vec3_t vector)
         vector[1] = vector[1] * inverseLength;
         vector[2] = vector[2] * inverseLength;
     }
-#endif
     return length;
 }
 
@@ -269,31 +143,6 @@ float VectorNormalize4D(vec4_t vector)
     float lengthSquared;
     float length;
 
-#if EMULATE_X87
-    x87f sum = x87f_add(
-        x87f_mul(x87f_load_f32(vector[0]), x87f_load_f32(vector[0])),
-        x87f_mul(x87f_load_f32(vector[1]), x87f_load_f32(vector[1])));
-    sum = x87f_add(
-        sum, x87f_mul(x87f_load_f32(vector[2]), x87f_load_f32(vector[2])));
-    sum = x87f_add(
-        sum, x87f_mul(x87f_load_f32(vector[3]), x87f_load_f32(vector[3])));
-    lengthSquared = x87f_store_f32(sum);
-    length = (float)sqrt(
-        x87f_store_f64(x87f_load_f32(lengthSquared)));
-    if (length != 0.0f) {
-        const float inverseLength = x87f_store_f32(
-            x87f_div(x87f_load_f32(1.0f), x87f_load_f32(length)));
-
-        vector[0] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(vector[0]), x87f_load_f32(inverseLength)));
-        vector[1] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(vector[1]), x87f_load_f32(inverseLength)));
-        vector[2] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(vector[2]), x87f_load_f32(inverseLength)));
-        vector[3] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(vector[3]), x87f_load_f32(inverseLength)));
-    }
-#else
     lengthSquared = (float)((((WIDE_FLOAT)vector[0] * (WIDE_FLOAT)vector[0] +
                               (WIDE_FLOAT)vector[1] * (WIDE_FLOAT)vector[1]) +
                              (WIDE_FLOAT)vector[2] * (WIDE_FLOAT)vector[2]) +
@@ -307,7 +156,6 @@ float VectorNormalize4D(vec4_t vector)
         vector[2] = vector[2] * inverseLength;
         vector[3] = vector[3] * inverseLength;
     }
-#endif
     return length;
 }
 
@@ -320,41 +168,7 @@ void VectorNormalizeFast(vec3_t vector)
     uint32_t bits;
     float inverseLength;
 
-#if EMULATE_X87
-    lengthSquared = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(vector[0]),
-                          x87f_load_f32(vector[0])),
-                 x87f_mul(x87f_load_f32(vector[1]),
-                          x87f_load_f32(vector[1]))),
-        x87f_mul(x87f_load_f32(vector[2]), x87f_load_f32(vector[2]))));
-    halfLengthSquared = x87f_store_f32(x87f_mul(
-        x87f_load_f32(lengthSquared), x87f_load_f32(half)));
-    memcpy(&bits, &lengthSquared, sizeof(bits));
-    bits = Q_RSQRT_MAGIC - coduo_int32_sar_bits(bits, 1U);
-    memcpy(&inverseLength, &bits, sizeof(inverseLength));
-    {
-        const x87f estimate = x87f_load_f32(inverseLength);
-
-        inverseLength = x87f_store_f32(x87f_mul(
-            estimate,
-            x87f_sub(x87f_load_f32(threeHalves),
-#if defined(WINDOWS_BEHAVIOR)
-                     x87f_mul(x87f_mul(estimate, estimate),
-                              x87f_load_f32(halfLengthSquared)))));
-#else
-                     x87f_mul(x87f_mul(x87f_load_f32(halfLengthSquared),
-                                       estimate),
-                              estimate))));
-#endif
-    }
-    vector[0] = x87f_store_f32(x87f_mul(
-        x87f_load_f32(vector[0]), x87f_load_f32(inverseLength)));
-    vector[1] = x87f_store_f32(x87f_mul(
-        x87f_load_f32(vector[1]), x87f_load_f32(inverseLength)));
-    vector[2] = x87f_store_f32(x87f_mul(
-        x87f_load_f32(vector[2]), x87f_load_f32(inverseLength)));
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
+#if   (defined(__i386__) || defined(__x86_64__)) &&        (defined(__GNUC__) || defined(__clang__))
     lengthSquared = (float)(((WIDE_FLOAT)vector[0] * (WIDE_FLOAT)vector[0] +
                              (WIDE_FLOAT)vector[1] * (WIDE_FLOAT)vector[1]) +
                             (WIDE_FLOAT)vector[2] * (WIDE_FLOAT)vector[2]);
@@ -368,7 +182,6 @@ void VectorNormalizeFast(vec3_t vector)
     memcpy(&bits, &lengthSquared, sizeof(bits));
     bits = Q_RSQRT_MAGIC - coduo_int32_sar_bits(bits, 1U);
     memcpy(&inverseLength, &bits, sizeof(inverseLength));
-#if defined(WINDOWS_BEHAVIOR)
     __asm__ __volatile__("flds %[estimate]\n\t"
                          "fmuls %[estimate]\n\t"
                          "fmuls %[halfLengthSquared]\n\t"
@@ -379,18 +192,6 @@ void VectorNormalizeFast(vec3_t vector)
                          : [halfLengthSquared] "m"(halfLengthSquared),
                            [threeHalves] "m"(threeHalves)
                          : "st", "memory");
-#else
-    __asm__ __volatile__("flds %[halfLengthSquared]\n\t"
-                         "fmuls %[estimate]\n\t"
-                         "fmuls %[estimate]\n\t"
-                         "fsubrs %[threeHalves]\n\t"
-                         "fmuls %[estimate]\n\t"
-                         "fstps %[estimate]"
-                         : [estimate] "+m"(inverseLength)
-                         : [halfLengthSquared] "m"(halfLengthSquared),
-                           [threeHalves] "m"(threeHalves)
-                         : "st", "memory");
-#endif
     vector[0] = vector[0] * inverseLength;
     vector[1] = vector[1] * inverseLength;
     vector[2] = vector[2] * inverseLength;
@@ -402,15 +203,9 @@ void VectorNormalizeFast(vec3_t vector)
     memcpy(&bits, &lengthSquared, sizeof(bits));
     bits = Q_RSQRT_MAGIC - coduo_int32_sar_bits(bits, 1U);
     memcpy(&inverseLength, &bits, sizeof(inverseLength));
-#if defined(WINDOWS_BEHAVIOR)
     inverseLength = (float)((WIDE_FLOAT)inverseLength *
         ((WIDE_FLOAT)threeHalves -
          ((WIDE_FLOAT)inverseLength * (WIDE_FLOAT)inverseLength) * (WIDE_FLOAT)halfLengthSquared));
-#else
-    inverseLength = (float)((WIDE_FLOAT)inverseLength *
-        ((WIDE_FLOAT)threeHalves -
-         ((WIDE_FLOAT)halfLengthSquared * (WIDE_FLOAT)inverseLength) * (WIDE_FLOAT)inverseLength));
-#endif
     vector[0] = vector[0] * inverseLength;
     vector[1] = vector[1] * inverseLength;
     vector[2] = vector[2] * inverseLength;
@@ -422,31 +217,6 @@ float VectorNormalize2(const vec3_t input, vec3_t output)
     float lengthSquared;
     float length;
 
-#if EMULATE_X87
-    lengthSquared = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(input[0]),
-                          x87f_load_f32(input[0])),
-                 x87f_mul(x87f_load_f32(input[1]),
-                          x87f_load_f32(input[1]))),
-        x87f_mul(x87f_load_f32(input[2]), x87f_load_f32(input[2]))));
-    length = (float)sqrt(
-        x87f_store_f64(x87f_load_f32(lengthSquared)));
-    if (length != 0.0f) {
-        const float inverseLength = x87f_store_f32(
-            x87f_div(x87f_load_f32(1.0f), x87f_load_f32(length)));
-
-        output[0] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(input[0]), x87f_load_f32(inverseLength)));
-        output[1] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(input[1]), x87f_load_f32(inverseLength)));
-        output[2] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(input[2]), x87f_load_f32(inverseLength)));
-    } else {
-        output[2] = 0.0f;
-        output[1] = 0.0f;
-        output[0] = 0.0f;
-    }
-#else
     /* Match VectorNormalize's single squared-length rounding boundary. */
     lengthSquared = (float)(((long double)input[0] * (long double)input[0] +
                              (long double)input[1] * (long double)input[1]) +
@@ -463,7 +233,6 @@ float VectorNormalize2(const vec3_t input, vec3_t output)
         output[1] = 0.0f;
         output[0] = 0.0f;
     }
-#endif
     return length;
 }
 /*
@@ -475,7 +244,6 @@ float VectorNormalize2(const vec3_t input, vec3_t output)
  * independently stored Gram-Schmidt updates, normalize right, and compute
  * CrossProduct(right, forward, up).
  */
-#if defined(WINDOWS_BEHAVIOR)
 void MakeNormalVectors(const vec3_t forward, vec3_t right, vec3_t up)
 {
     float dot;
@@ -543,95 +311,6 @@ void MakeNormalVectors(const vec3_t forward, vec3_t right, vec3_t up)
     (void)VectorNormalize(right);
     CrossProduct(right, forward, up);
 }
-#else
-void MakeNormalVectors(const vec3_t forward, vec3_t right, vec3_t up)
-{
-    uint32_t bits;
-    float dot;
-
-    memcpy(&bits, &forward[0], sizeof(bits));
-    bits ^= Q_FLOAT_SIGN_BIT;
-    memcpy(&right[1], &bits, sizeof(bits));
-    memcpy(&right[2], &forward[1], sizeof(right[2]));
-    memcpy(&right[0], &forward[2], sizeof(right[0]));
-
-#if EMULATE_X87
-    dot = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(right[0]),
-                          x87f_load_f32(forward[0])),
-                 x87f_mul(x87f_load_f32(right[1]),
-                          x87f_load_f32(forward[1]))),
-        x87f_mul(x87f_load_f32(right[2]), x87f_load_f32(forward[2]))));
-    right[0] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_neg(x87f_load_f32(dot)),
-                 x87f_load_f32(forward[0])),
-        x87f_load_f32(right[0])));
-    right[1] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_neg(x87f_load_f32(dot)),
-                 x87f_load_f32(forward[1])),
-        x87f_load_f32(right[1])));
-    right[2] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_neg(x87f_load_f32(dot)),
-                 x87f_load_f32(forward[2])),
-        x87f_load_f32(right[2])));
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
-    __asm__ __volatile__("flds %[rightX]\n\t"
-                         "fmuls %[forwardX]\n\t"
-                         "flds %[rightY]\n\t"
-                         "fmuls %[forwardY]\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "flds %[rightZ]\n\t"
-                         "fmuls %[forwardZ]\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fstps %[dot]"
-                         : [dot] "=m"(dot)
-                         : [forwardX] "m"(forward[0]),
-                           [forwardY] "m"(forward[1]),
-                           [forwardZ] "m"(forward[2]),
-                           [rightX] "m"(right[0]),
-                           [rightY] "m"(right[1]),
-                           [rightZ] "m"(right[2])
-                         : "st", "st(1)", "memory");
-    __asm__ __volatile__("flds %[dot]\n\t"
-                         "fchs\n\t"
-                         "fmuls %[forward]\n\t"
-                         "flds %[right]\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fstps %[right]"
-                         : [right] "+m"(right[0])
-                         : [dot] "m"(dot), [forward] "m"(forward[0])
-                         : "st", "st(1)", "memory");
-    __asm__ __volatile__("flds %[dot]\n\t"
-                         "fchs\n\t"
-                         "fmuls %[forward]\n\t"
-                         "flds %[right]\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fstps %[right]"
-                         : [right] "+m"(right[1])
-                         : [dot] "m"(dot), [forward] "m"(forward[1])
-                         : "st", "st(1)", "memory");
-    __asm__ __volatile__("flds %[dot]\n\t"
-                         "fchs\n\t"
-                         "fmuls %[forward]\n\t"
-                         "flds %[right]\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fstps %[right]"
-                         : [right] "+m"(right[2])
-                         : [dot] "m"(dot), [forward] "m"(forward[2])
-                         : "st", "st(1)", "memory");
-#else
-    dot = (float)(((WIDE_FLOAT)right[0] * (WIDE_FLOAT)forward[0] +
-                   (WIDE_FLOAT)right[1] * (WIDE_FLOAT)forward[1]) +
-                  (WIDE_FLOAT)right[2] * (WIDE_FLOAT)forward[2]);
-    right[0] = (float)(-(WIDE_FLOAT)dot * (WIDE_FLOAT)forward[0] + (WIDE_FLOAT)right[0]);
-    right[1] = (float)(-(WIDE_FLOAT)dot * (WIDE_FLOAT)forward[1] + (WIDE_FLOAT)right[1]);
-    right[2] = (float)(-(WIDE_FLOAT)dot * (WIDE_FLOAT)forward[2] + (WIDE_FLOAT)right[2]);
-#endif
-    (void)VectorNormalize(right);
-    CrossProduct(right, forward, up);
-}
-#endif
 
 /*
  * PerpendicularVector is byte-identical within the four Windows targets at
@@ -648,19 +327,10 @@ void PerpendicularVector(vec3_t output, const vec3_t source)
     vec3_t axis = {0.0f, 0.0f, 0.0f};
 
     for (int32_t lane = 0; lane < 3; ++lane) {
-#if EMULATE_X87
-        if (x87f_lt(x87f_abs(x87f_load_f32(source[lane])),
-                    x87f_load_f32(minimum))) {
-            minimum = x87f_store_f32(
-                x87f_abs(x87f_load_f32(source[lane])));
-            position = lane;
-        }
-#else
         if (isless(fabsf(source[lane]), minimum)) {
             minimum = fabsf(source[lane]);
             position = lane;
         }
-#endif
     }
     axis[position] = 1.0f;
     ProjectPointOnPlane(output, axis, source);
@@ -682,42 +352,23 @@ int32_t PlaneFromPoints(vec4_t plane, const vec3_t point0,
     vec3_t edge0;
     vec3_t edge1;
 
-#if EMULATE_X87
-    for (int32_t lane = 0; lane < 3; ++lane) {
-        edge0[lane] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(point1[lane]), x87f_load_f32(point0[lane])));
-        edge1[lane] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(point2[lane]), x87f_load_f32(point0[lane])));
-    }
-#else
     edge0[0] = point1[0] - point0[0];
     edge0[1] = point1[1] - point0[1];
     edge0[2] = point1[2] - point0[2];
     edge1[0] = point2[0] - point0[0];
     edge1[1] = point2[1] - point0[1];
     edge1[2] = point2[2] - point0[2];
-#endif
     CrossProduct(edge1, edge0, plane);
     if (VectorNormalize(plane) == 0.0f) {
         return 0;
     }
-#if EMULATE_X87
-    plane[3] = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(point0[0]),
-                          x87f_load_f32(plane[0])),
-                 x87f_mul(x87f_load_f32(point0[1]),
-                          x87f_load_f32(plane[1]))),
-        x87f_mul(x87f_load_f32(point0[2]), x87f_load_f32(plane[2]))));
-#else
     plane[3] = (float)(((WIDE_FLOAT)point0[0] * (WIDE_FLOAT)plane[0] +
                        (WIDE_FLOAT)point0[1] * (WIDE_FLOAT)plane[1]) +
                       (WIDE_FLOAT)point0[2] * (WIDE_FLOAT)plane[2]);
-#endif
     return 1;
 }
 
 /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-#if defined(WINDOWS_BEHAVIOR)
 void ProjectPointOnPlane(vec3_t output, const vec3_t point,
                          const vec3_t normal)
 {
@@ -838,131 +489,3 @@ void ProjectPointOnPlane(vec3_t output, const vec3_t point,
                         (double)scaledNormal[2] * pointScale);
 #endif
 }
-#else
-void ProjectPointOnPlane(vec3_t output, const vec3_t point,
-                         const vec3_t normal)
-{
-#if EMULATE_X87
-    const float lengthSquared = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(normal[0]),
-                          x87f_load_f32(normal[0])),
-                 x87f_mul(x87f_load_f32(normal[1]),
-                          x87f_load_f32(normal[1]))),
-        x87f_mul(x87f_load_f32(normal[2]), x87f_load_f32(normal[2]))));
-    const float inverseLengthSquared = x87f_store_f32(
-        x87f_div(x87f_load_f32(1.0f), x87f_load_f32(lengthSquared)));
-    const float pointScale = x87f_store_f32(x87f_mul(
-        x87f_add(x87f_add(x87f_mul(x87f_load_f32(normal[0]),
-                                   x87f_load_f32(point[0])),
-                          x87f_mul(x87f_load_f32(normal[1]),
-                                   x87f_load_f32(point[1]))),
-                 x87f_mul(x87f_load_f32(normal[2]),
-                          x87f_load_f32(point[2]))),
-        x87f_load_f32(inverseLengthSquared)));
-    const float scaled0 = x87f_store_f32(x87f_mul(
-        x87f_load_f32(normal[0]), x87f_load_f32(inverseLengthSquared)));
-    const float scaled1 = x87f_store_f32(x87f_mul(
-        x87f_load_f32(normal[1]), x87f_load_f32(inverseLengthSquared)));
-    const float scaled2 = x87f_store_f32(x87f_mul(
-        x87f_load_f32(normal[2]), x87f_load_f32(inverseLengthSquared)));
-
-    output[0] = x87f_store_f32(x87f_sub(
-        x87f_load_f32(point[0]),
-        x87f_mul(x87f_load_f32(pointScale), x87f_load_f32(scaled0))));
-    output[1] = x87f_store_f32(x87f_sub(
-        x87f_load_f32(point[1]),
-        x87f_mul(x87f_load_f32(pointScale), x87f_load_f32(scaled1))));
-    output[2] = x87f_store_f32(x87f_sub(
-        x87f_load_f32(point[2]),
-        x87f_mul(x87f_load_f32(pointScale), x87f_load_f32(scaled2))));
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
-    float lengthSquared;
-    float inverseLengthSquared;
-    float pointScale;
-    vec3_t scaledNormal;
-
-    __asm__ __volatile__("flds 0(%[normal])\n\t"
-                         "fmuls 0(%[normal])\n\t"
-                         "flds 4(%[normal])\n\t"
-                         "fmuls 4(%[normal])\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "flds 8(%[normal])\n\t"
-                         "fmuls 8(%[normal])\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fstps %[result]"
-                         : [result] "=m"(lengthSquared)
-                         : [normal] "r"(normal)
-                         : "st", "st(1)", "memory");
-    __asm__ __volatile__("fld1\n\t"
-                         "fdivs %[lengthSquared]\n\t"
-                         "fstps %[inverse]"
-                         : [inverse] "=m"(inverseLengthSquared)
-                         : [lengthSquared] "m"(lengthSquared)
-                         : "st", "memory");
-    __asm__ __volatile__("flds 0(%[normal])\n\t"
-                         "fmuls 0(%[point])\n\t"
-                         "flds 4(%[normal])\n\t"
-                         "fmuls 4(%[point])\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "flds 8(%[normal])\n\t"
-                         "fmuls 8(%[point])\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fmuls %[inverse]\n\t"
-                         "fstps %[scale]"
-                         : [scale] "=m"(pointScale)
-                         : [normal] "r"(normal), [point] "r"(point),
-                           [inverse] "m"(inverseLengthSquared)
-                         : "st", "st(1)", "memory");
-    __asm__ __volatile__("flds 0(%[normal])\n\t"
-                         "fmuls %[inverse]\n\t"
-                         "fstps 0(%[scaled])\n\t"
-                         "flds 4(%[normal])\n\t"
-                         "fmuls %[inverse]\n\t"
-                         "fstps 4(%[scaled])\n\t"
-                         "flds 8(%[normal])\n\t"
-                         "fmuls %[inverse]\n\t"
-                         "fstps 8(%[scaled])"
-                         :
-                         : [normal] "r"(normal), [scaled] "r"(scaledNormal),
-                           [inverse] "m"(inverseLengthSquared)
-                         : "st", "memory");
-    __asm__ __volatile__("flds %[scale]\n\t"
-                         "fmuls 0(%[scaled])\n\t"
-                         "flds 0(%[point])\n\t"
-                         "fsubp %%st, %%st(1)\n\t"
-                         "fstps 0(%[output])\n\t"
-                         "flds %[scale]\n\t"
-                         "fmuls 4(%[scaled])\n\t"
-                         "flds 4(%[point])\n\t"
-                         "fsubp %%st, %%st(1)\n\t"
-                         "fstps 4(%[output])\n\t"
-                         "flds %[scale]\n\t"
-                         "fmuls 8(%[scaled])\n\t"
-                         "flds 8(%[point])\n\t"
-                         "fsubp %%st, %%st(1)\n\t"
-                         "fstps 8(%[output])"
-                         :
-                         : [scale] "m"(pointScale),
-                           [scaled] "r"(scaledNormal), [point] "r"(point),
-                           [output] "r"(output)
-                         : "st", "st(1)", "memory");
-#else
-    const float lengthSquared = (float)(((WIDE_FLOAT)normal[0] * (WIDE_FLOAT)normal[0] +
-                                         (WIDE_FLOAT)normal[1] * (WIDE_FLOAT)normal[1]) +
-                                        (WIDE_FLOAT)normal[2] * (WIDE_FLOAT)normal[2]);
-    const float inverseLengthSquared = 1.0f / lengthSquared;
-    const float pointScale = (float)((((WIDE_FLOAT)normal[0] * (WIDE_FLOAT)point[0] +
-                                      (WIDE_FLOAT)normal[1] * (WIDE_FLOAT)point[1]) +
-                                     (WIDE_FLOAT)normal[2] * (WIDE_FLOAT)point[2]) *
-                                    (WIDE_FLOAT)inverseLengthSquared);
-    const float scaled0 = normal[0] * inverseLengthSquared;
-    const float scaled1 = normal[1] * inverseLengthSquared;
-    const float scaled2 = normal[2] * inverseLengthSquared;
-
-    output[0] = (float)((WIDE_FLOAT)point[0] - (WIDE_FLOAT)pointScale * (WIDE_FLOAT)scaled0);
-    output[1] = (float)((WIDE_FLOAT)point[1] - (WIDE_FLOAT)pointScale * (WIDE_FLOAT)scaled1);
-    output[2] = (float)((WIDE_FLOAT)point[2] - (WIDE_FLOAT)pointScale * (WIDE_FLOAT)scaled2);
-#endif
-}
-#endif

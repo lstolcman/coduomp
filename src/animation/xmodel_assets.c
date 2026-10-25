@@ -856,7 +856,7 @@ void XModelReadSurface(XSurface *surface, const uint8_t **position,
  * Windows inlines the quaternion and point transforms while Linux calls the
  * stock shared helpers. Both sides store the packed rotations to binary32
  * before quaternion multiplication and store every helper result to the same
- * binary32 DObjSkelMat fields. Calling the behavior-selected shared helpers
+ * binary32 DObjSkelMat fields. Calling the Windows shared helpers
  * therefore preserves each platform's finite arithmetic without duplicating
  * this common control flow. */
 void XModelGetBasePose(const XModel *model,
@@ -964,7 +964,6 @@ void XModelGetBasePose(const XModel *model,
  * coduo_lnxded 0x080c4892..0x080c4cb2.
  * Name: same-module Mac symbol XModelTraceLine. Constants preserve the exact
  * original float encodings 0x3e000000, 0xba83126f, and 0x3f8020c5. */
-#if defined(WINDOWS_BEHAVIOR)
 int32_t XModelTraceLine(const XModel *model,
                         trace_t *trace,
                         const DObjSkelMat *basePose,
@@ -1158,153 +1157,10 @@ int32_t XModelTraceLine(const XModel *model,
     trace->normal[2] = worldNormal[2];
     return hitPart;
 }
-#else
-/*
- * The Linux compiler retains source-level calls to the shared math
- * primitives and its binary32 spill points affect finite inputs.  Keep this
- * complete body separate from the Windows inlined x87 operation graph.
- */
-int32_t
-XModelTraceLine(const XModel *model,
-                trace_t *traceState,
-                const DObjSkelMat *basePose, const vec3_t start,
-                const vec3_t end, int32_t contentMask)
-{
-    const XModel *entry =
-        model;
-    const XModelInfo *collision = entry->info;
-    int32_t hitPart = XMODEL_TRACE_NO_HIT;
-    const float planeOffsetEpsilon = 0.125f;
-    const float barycentricMin = -0.0010000000474974513f;
-    const float barycentricMax = 1.0010000467300415f;
-
-    for (int32_t surfaceIndex = 0;
-         surfaceIndex < collision->collisionSurfaceCount; ++surfaceIndex) {
-        const XModelCollSurf *surface =
-            &collision->collisionSurfaces[surfaceIndex];
-
-        if ((contentMask & surface->contents) == 0) {
-            continue;
-        }
-
-        const DObjSkelMat *pose =
-            &basePose[surface->basePoseIndex];
-        vec3_t offsetStart;
-        vec3_t offsetEnd;
-        vec3_t localStart;
-        vec3_t localEnd;
-
-        offsetStart[0] = start[0] - pose->origin[0];
-        offsetStart[1] = start[1] - pose->origin[1];
-        offsetStart[2] = start[2] - pose->origin[2];
-        XSurfaceTransformVectorRows43(offsetStart, pose, localStart);
-
-        offsetEnd[0] = end[0] - pose->origin[0];
-        offsetEnd[1] = end[1] - pose->origin[1];
-        offsetEnd[2] = end[2] - pose->origin[2];
-        XSurfaceTransformVectorRows43(offsetEnd, pose, localEnd);
-
-        if (CM_TraceLineSkipsBox(localStart, localEnd, surface->expandedMins,
-                                 surface->expandedMaxs,
-                                 traceState->fraction) != qfalse) {
-            continue;
-        }
-
-        vec3_t delta = {
-            localEnd[0] - localStart[0],
-            localEnd[1] - localStart[1],
-            localEnd[2] - localStart[2],
-        };
-
-        for (int32_t facetIndex = 0; facetIndex < surface->numCollTris;
-             ++facetIndex) {
-            const XModelCollTri *facet =
-                &surface->collTris[facetIndex];
-            const XModelCollTriPlane *plane0 =
-                &facet->planes[0];
-
-            float endDist = localEnd[0] * plane0->normal[0] +
-                            localEnd[1] * plane0->normal[1] +
-                            localEnd[2] * plane0->normal[2] -
-                            plane0->distance;
-
-            if (endDist >= 0.0f) {
-                continue;
-            }
-
-            float startDist =
-                localStart[0] * plane0->normal[0] +
-                localStart[1] * plane0->normal[1] +
-                localStart[2] * plane0->normal[2] - plane0->distance;
-
-            if (startDist <= 0.0f) {
-                continue;
-            }
-
-            float hitFraction =
-                (startDist - planeOffsetEpsilon) / (startDist - endDist);
-            if (hitFraction >= traceState->fraction) {
-                continue;
-            }
-
-            float planeFraction = startDist / (startDist - endDist);
-            vec3_t hitPoint = {
-                localStart[0] + delta[0] * planeFraction,
-                localStart[1] + delta[1] * planeFraction,
-                localStart[2] + delta[2] * planeFraction,
-            };
-
-            const XModelCollTriPlane *plane1 =
-                &facet->planes[1];
-            float bary0 = hitPoint[0] * plane1->normal[0] +
-                          hitPoint[1] * plane1->normal[1] +
-                          hitPoint[2] * plane1->normal[2] - plane1->distance;
-            if (bary0 < barycentricMin || bary0 > barycentricMax) {
-                continue;
-            }
-
-            const XModelCollTriPlane *plane2 =
-                &facet->planes[2];
-            float bary1 = hitPoint[0] * plane2->normal[0] +
-                          hitPoint[1] * plane2->normal[1] +
-                          hitPoint[2] * plane2->normal[2] - plane2->distance;
-            if (bary1 < barycentricMin ||
-                bary0 + bary1 > barycentricMax) {
-                continue;
-            }
-
-            hitPart = surface->basePoseIndex;
-            traceState->allsolid = 0;
-            traceState->startsolid = 0;
-            traceState->fraction = hitFraction;
-            traceState->surfaceFlags = surface->surfaceFlags;
-            traceState->contents = surface->contents;
-            traceState->normal[0] = plane0->normal[0];
-            traceState->normal[1] = plane0->normal[1];
-            traceState->normal[2] = plane0->normal[2];
-        }
-    }
-
-    if (hitPart < 0) {
-        return XMODEL_TRACE_NO_HIT;
-    }
-
-    const DObjSkelMat *pose = &basePose[hitPart];
-    vec3_t worldNormal;
-
-    XSurfaceTransformNormal43(traceState->normal, pose, worldNormal);
-    traceState->normal[0] = worldNormal[0];
-    traceState->normal[1] = worldNormal[1];
-    traceState->normal[2] = worldNormal[2];
-
-    return hitPart;
-}
-#endif
 
 /* Sources: CoDUOMP.exe 0x0049f410..0x0049f56f;
  * coduo_lnxded 0x080c4cb2..0x080c4e86.
  * Name: same-module Mac symbol XModelGetStaticBounds. */
-#if defined(WINDOWS_BEHAVIOR)
 qboolean XModelGetStaticBounds(const XModel *model,
                                axis_t transform,
                                vec3_t mins, vec3_t maxs)
@@ -1369,76 +1225,10 @@ qboolean XModelGetStaticBounds(const XModel *model,
     }
     return qtrue;
 }
-#else
-/*
- * The Linux compiler retains source-level calls to the shared math
- * primitives and its binary32 spill points affect finite inputs.  Keep this
- * complete body separate from the Windows inlined x87 operation graph.
- */
-qboolean XModelGetStaticBounds(const XModel *model,
-                               axis_t transform,
-                               vec3_t mins, vec3_t maxs)
-{
-    const XModel *entry =
-        model;
-    const XModelInfo *collision = entry->info;
-
-    if (collision->collisionSurfaceCount == 0) {
-        return qfalse;
-    }
-
-    mins[0] = FLT_MAX;
-    mins[1] = FLT_MAX;
-    mins[2] = FLT_MAX;
-    maxs[0] = -FLT_MAX;
-    maxs[1] = -FLT_MAX;
-    maxs[2] = -FLT_MAX;
-
-    for (int32_t surfaceIndex = 0;
-         surfaceIndex < collision->collisionSurfaceCount; ++surfaceIndex) {
-        const XModelCollSurf *surface =
-            &collision->collisionSurfaces[surfaceIndex];
-
-        for (int32_t corner = 0; corner < XMODEL_BOUNDS_CORNER_COUNT;
-             ++corner) {
-            vec3_t localCorner;
-            vec3_t transformedCorner;
-
-            localCorner[0] =
-                (corner & 1) == 0 ? surface->expandedMaxs[0]
-                                  : surface->expandedMins[0];
-            localCorner[1] =
-                (corner & 2) == 0 ? surface->expandedMaxs[1]
-                                  : surface->expandedMins[1];
-            localCorner[2] =
-                (corner & 4) == 0 ? surface->expandedMaxs[2]
-                                  : surface->expandedMins[2];
-
-            /* C11 cannot add element qualification through the axis_t array
-             * typedef implicitly; the matrix remains read-only. */
-            MatrixTransformVector(localCorner,
-                                  (const vec3_t *)transform,
-                                  transformedCorner);
-
-            for (int32_t axis = 0; axis < 3; ++axis) {
-                if (transformedCorner[axis] < mins[axis]) {
-                    mins[axis] = transformedCorner[axis];
-                }
-                if (maxs[axis] < transformedCorner[axis]) {
-                    maxs[axis] = transformedCorner[axis];
-                }
-            }
-        }
-    }
-
-    return qtrue;
-}
-#endif
 
 /* Sources: CoDUOMP.exe 0x0049ea40..0x0049ece6;
  * coduo_lnxded 0x080c4342..0x080c4512.
  * Name: same-module Mac symbol XSurfaceGetVerts. */
-#if defined(WINDOWS_BEHAVIOR)
 void XSurfaceGetVerts(const XSurface *surface,
                       const DObjSkelMat *basePose,
                       vec3_t *outVerts, vec2_t *outTexCoords,
@@ -1645,115 +1435,6 @@ void XSurfaceGetVerts(const XSurface *surface,
         --verticesRemaining;
     }
 }
-#else
-/*
- * The Linux compiler retains source-level calls to the shared math
- * primitives and its binary32 spill points affect finite inputs.  Keep this
- * complete body separate from the Windows inlined x87 operation graph.
- */
-void XSurfaceGetVerts(const XSurface *surface,
-                      const DObjSkelMat *basePose,
-                      vec3_t *outVerts, vec2_t *outTexCoords,
-                      vec3_t *outNormals)
-{
-    /* NOT_FROM_ORIGINAL_SOURCE: keep the sink a no-op for every nonpositive
-     * vertex count before copying or starting positive countdowns. */
-    if (surface->vertexCount <= 0) {
-        return;
-    }
-
-    if (outTexCoords != NULL) {
-        /* The original target-dword multiplication remains safe because the
-         * nonpositive sink guard has excluded its wrapping input domain. */
-        memcpy(outTexCoords, surface->texCoords,
-               (size_t)((uint32_t)(int32_t)surface->vertexCount *
-                        (uint32_t)sizeof(surface->texCoords[0])));
-    }
-
-    /* Both Linux vertex paths and every nonzero additive-weight path use
-     * signed nonzero dword countdowns. Loader validation and the function-
-     * entry guard bound those retained loops. */
-    if (XSurfaceGetBoneIndex(surface) == XMODEL_NO_SINGLE_BONE) {
-        const uint8_t *primaryVertexCursor =
-            surface->vertexData.blendPrimaryStream;
-        const XSurfaceWeightedPoint *additiveVerts =
-            (const XSurfaceWeightedPoint *)
-                surface->weightedPoints;
-
-        int32_t remainingVertices = surface->vertexCount;
-        int32_t vertexIndex = 0;
-        while (remainingVertices > 0) {
-            const XSurfaceBlendVert *primary =
-                (const XSurfaceBlendVert *)
-                    primaryVertexCursor;
-            const DObjSkelMat *primaryPose =
-                (const DObjSkelMat
-                     *)((const uint8_t *)basePose +
-                        primary->blend.boneMatrixOffset);
-
-            if (outNormals != NULL) {
-                XSurfaceTransformNormal43(primary->normal, primaryPose,
-                                          outNormals[vertexIndex]);
-            }
-
-            XSurfaceTransformPoint43(primary->blend.position, primaryPose,
-                                     outVerts[vertexIndex]);
-
-            if (primary->additiveWeightCount > 0) {
-                outVerts[vertexIndex][0] *= primary->primaryWeight;
-                outVerts[vertexIndex][1] *= primary->primaryWeight;
-                outVerts[vertexIndex][2] *= primary->primaryWeight;
-
-                int32_t remainingWeights = primary->additiveWeightCount;
-                do {
-                    const XSurfaceWeightedPoint *additive =
-                        additiveVerts++;
-                    const DObjSkelMat *additivePose =
-                        (const DObjSkelMat *)(
-                            (const uint8_t *)basePose +
-                            additive->blend.boneMatrixOffset);
-
-                    XSurfaceAccumulateWeightedPoint43(
-                        additive->blend.position, additive->weight,
-                        additivePose, outVerts[vertexIndex]);
-                    --remainingWeights;
-                } while (remainingWeights > 0);
-
-                primaryVertexCursor +=
-                    sizeof(XSurfaceBlendVert);
-            } else {
-                primaryVertexCursor +=
-                    sizeof(XSurfaceBlendVertNoWeight);
-            }
-
-            ++vertexIndex;
-            --remainingVertices;
-        }
-
-        return;
-    }
-
-    const DObjSkelMat *rigidPose =
-        (const DObjSkelMat *)((const uint8_t *)basePose +
-                                           surface->boneIndex);
-    const XSurfaceRigidVert *rigidVerts =
-        surface->vertexData.rigidVertices;
-
-    int32_t remainingVertices = surface->vertexCount;
-    int32_t vertexIndex = 0;
-        while (remainingVertices > 0) {
-        if (outNormals != NULL) {
-            XSurfaceTransformNormal43(rigidVerts[vertexIndex].normal,
-                                      rigidPose, outNormals[vertexIndex]);
-        }
-
-        XSurfaceTransformPoint43(rigidVerts[vertexIndex].position,
-                                 rigidPose, outVerts[vertexIndex]);
-        ++vertexIndex;
-        --remainingVertices;
-    }
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x0049cd50..0x0049cd55.
  * Name: exact same-module Mac symbol XModelEnforceExist. The destination is
@@ -2188,7 +1869,6 @@ fileData_t *XModelPartsPrecache(const char *name,
             (long double)centerSumZ * (long double)0.5f);
         const float deltaX = (float)(
             (long double)collision->maxs[0] - collision->center[0]);
-#if defined(WINDOWS_BEHAVIOR)
         /* Windows stores deltaX as binary32 but retains deltaY and deltaZ in
          * the PC=53 x87 stack through the squared-radius expression. */
         const long double deltaY =
@@ -2199,18 +1879,6 @@ fileData_t *XModelPartsPrecache(const char *name,
         collision->radiusSq = (float)(
             (deltaZ * deltaZ + deltaY * deltaY) +
             (long double)deltaX * (long double)deltaX);
-#else
-        /* Linux stores all three deltas as binary32 before folding X, Y, Z;
-         * coduo_lnxded 0x080c320b..0x080c3287. */
-        const float deltaY = (float)(
-            (long double)collision->maxs[1] - collision->center[1]);
-        const float deltaZ = (float)(
-            (long double)collision->maxs[2] - collision->center[2]);
-        collision->radiusSq = (float)(
-            ((long double)deltaX * (long double)deltaX +
-             (long double)deltaY * (long double)deltaY) +
-            (long double)deltaZ * (long double)deltaZ);
-#endif
 
         if (partsLayout == CODUO_XMODEL_PARTS_LAYOUT_INLINE_STATE) {
             parts->partStateIndices[partIndex] = *cursor++;

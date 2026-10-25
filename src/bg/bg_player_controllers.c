@@ -21,17 +21,11 @@
 #include "bg_vehicle.h"
 
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <math.h>
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 #define PLAYER_LEAN_SWING_FRACTION 0.925f
 
@@ -48,67 +42,30 @@ enum {
 static float bg_compat_controller_add_product(float addend, float left,
                                                float right)
 {
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(left), x87f_load_f32(right)),
-        x87f_load_f32(addend)));
-#else
     return (float)((long double)left * (long double)right +
                    (long double)addend);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: subtraction companion for unspilled x87 chains. */
 static float bg_compat_controller_subtract_product(float minuend, float left,
                                                     float right)
 {
-#if EMULATE_X87
-    return x87f_store_f32(x87f_sub(
-        x87f_load_f32(minuend),
-        x87f_mul(x87f_load_f32(left), x87f_load_f32(right))));
-#else
     return (float)((long double)minuend -
                    (long double)left * (long double)right);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: three-factor subtraction chain used by the prone
  * lean offset. */
-#if !defined(LINUX_BEHAVIOR)
 static float bg_compat_controller_subtract_triple_product(
     float minuend, float first, float second, float third)
 {
-#if EMULATE_X87
-    return x87f_store_f32(x87f_sub(
-        x87f_load_f32(minuend),
-        x87f_mul(x87f_mul(x87f_load_f32(first), x87f_load_f32(second)),
-                 x87f_load_f32(third))));
-#else
     return (float)((long double)minuend -
                    (long double)first * (long double)second *
                        (long double)third);
-#endif
 }
-#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: addition form of the three-factor chain retained
  * by the unoptimized Linux controller body. */
-#if defined(LINUX_BEHAVIOR)
-static float bg_compat_controller_add_triple_product(
-    float addend, float first, float second, float third)
-{
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_mul(x87f_mul(x87f_load_f32(first), x87f_load_f32(second)),
-                 x87f_load_f32(third)),
-        x87f_load_f32(addend)));
-#else
-    return (float)((long double)first * (long double)second *
-                       (long double)third +
-                   (long double)addend);
-#endif
-}
-#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: retain the two-product x87 subtraction used by
  * the prone spine-yaw outputs without introducing a binary32 spill between
@@ -116,69 +73,34 @@ static float bg_compat_controller_add_triple_product(
 static float bg_compat_controller_product_subtract_product(
     float left0, float right0, float left1, float right1)
 {
-#if EMULATE_X87
-    return x87f_store_f32(x87f_sub(
-        x87f_mul(x87f_load_f32(left0), x87f_load_f32(right0)),
-        x87f_mul(x87f_load_f32(left1), x87f_load_f32(right1))));
-#else
     return (float)((long double)left0 * (long double)right0 -
                    (long double)left1 * (long double)right1);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: Windows reloads the rounded spine-roll slot for
  * this subtraction; Linux instead retains a second product in x87. */
-#if !defined(LINUX_BEHAVIOR)
 static float bg_compat_controller_product_subtract(
     float left, float right, float subtrahend)
 {
-#if EMULATE_X87
-    return x87f_store_f32(x87f_sub(
-        x87f_mul(x87f_load_f32(left), x87f_load_f32(right)),
-        x87f_load_f32(subtrahend)));
-#else
     return (float)((long double)left * (long double)right -
                    (long double)subtrahend);
-#endif
 }
-#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: preserve the extended comparison of an unspilled
  * product against positive zero. */
 static qboolean bg_compat_controller_product_is_positive(float left,
                                                           float right)
 {
-#if EMULATE_X87
-    return x87f_lt(x87f_load_f32(0.0f),
-                   x87f_mul(x87f_load_f32(left), x87f_load_f32(right)))
-               ? qtrue : qfalse;
-#else
     return (long double)left * (long double)right > 0.0L
                ? qtrue : qfalse;
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: retain the original constant load widths in the
  * multiply/divide chain feeding FSINCOS. */
 static float bg_compat_controller_yaw_radians(float yaw)
 {
-#if EMULATE_X87
-#if defined(LINUX_BEHAVIOR)
-    return x87f_store_f32(x87f_div(
-        x87f_mul(x87f_load_f32(yaw),
-                 x87f_load_f64(3.141592653589793)),
-        x87f_load_f64(180.0)));
-#else
-    return x87f_store_f32(x87f_div(
-        x87f_mul(x87f_load_f32(yaw), x87f_load_f32(3.1415927f)),
-        x87f_load_f32(180.0f)));
-#endif
-#elif defined(LINUX_BEHAVIOR)
-    return (float)((long double)yaw * 3.141592653589793L / 180.0L);
-#else
     return (float)((long double)yaw * (long double)3.1415927f /
                    (long double)180.0f);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: cgame-only debug motion still executes the
@@ -190,19 +112,11 @@ static float bg_compat_controller_debug_sin(int32_t time, int32_t clientNum)
     const float clientNumAsFloat = (float)clientNum;
     float phaseSin;
 
-#if EMULATE_X87
-    const x87f phase = x87f_add(
-        x87f_mul(x87f_load_f32(timeAsFloat), x87f_load_f32(0.003f)),
-        x87f_load_f32(clientNumAsFloat));
-    phaseSin = (float)sin(x87f_store_f64(phase));
-    return phaseSin;
-#else
     const long double phase =
         (long double)timeAsFloat * (long double)0.003f +
         (long double)clientNumAsFloat;
     phaseSin = (float)sin((double)phase);
     return phaseSin;
-#endif
 }
 
 void BG_Player_DoControllersInternal(clientInfo_t *anim,
@@ -279,28 +193,13 @@ void BG_Player_DoControllersInternal(clientInfo_t *anim,
     /* Windows inlines GetLeanFraction as integer sign clear plus FSUB/FMUL;
      * Linux calls the same shared leaf and spills its binary32 return. */
     const float leanPhase = GetLeanFraction(leanInput);
-#if defined(LINUX_BEHAVIOR)
-#if EMULATE_X87
-    float leanSwing = x87f_store_f32(x87f_mul(
-        x87f_mul(x87f_load_f32(leanPhase), x87f_load_f32(50.0f)),
-        x87f_load_f32(PLAYER_LEAN_SWING_FRACTION)));
-#else
-    float leanSwing = (float)((long double)leanPhase * 50.0L * (long double)PLAYER_LEAN_SWING_FRACTION);
-#endif
-#else
     float leanSwing = (float)((long double)leanPhase * 46.25L);
-#endif
     float secondaryLeanSwing = leanSwing;
     float originOffsetX = 0.0f;
     /* 0x30004fb5..0x30004fc5: FMUL 2.5f then FSUBR from the 0.0f constant --
      * 0 - x, not a negated-constant multiply (matches the zero-sign edge). */
-#if defined(LINUX_BEHAVIOR)
-    float originOffsetY =
-        bg_compat_controller_add_product(0.0f, -leanPhase, 2.5f);
-#else
     float originOffsetY =
         bg_compat_controller_subtract_product(0.0f, leanPhase, 2.5f);
-#endif
 
     if ((entityFlags & EF_DEAD) == 0 && !specialView) {
         /* 0x30004fe0: the wrapped legs-versus-view delta replaces
@@ -336,29 +235,17 @@ void BG_Player_DoControllersInternal(clientInfo_t *anim,
         /* 0x3000506f: the cosine slot is overwritten with 1-yawCos, which
          * both the X offset and the lean term below consume. */
         const float yawCosInv = 1.0f - yawCos;
-#if defined(LINUX_BEHAVIOR)
-        originOffsetX = bg_compat_controller_add_product(
-            originOffsetX, yawCosInv, -24.0f);
-        originOffsetY = bg_compat_controller_add_product(
-            originOffsetY, yawSin, -12.0f);
-#else
         originOffsetX =
             bg_compat_controller_subtract_product(0.0f, yawCosInv, 24.0f);
         originOffsetY =
             bg_compat_controller_subtract_product(originOffsetY, yawSin,
                                                    12.0f);
-#endif
         /* FMUL remains in ST0 for the comparison; do not round a tiny product
          * to binary32 before deciding its sign. */
         if (bg_compat_controller_product_is_positive(yawSin, leanPhase)) {
-#if defined(LINUX_BEHAVIOR)
-            originOffsetY = bg_compat_controller_add_triple_product(
-                originOffsetY, yawCosInv, -leanPhase, 16.0f);
-#else
             originOffsetY =
                 bg_compat_controller_subtract_triple_product(
                     originOffsetY, yawCosInv, leanPhase, 16.0f);
-#endif
         }
 
         spine0Pitch = 0.0f;
@@ -368,14 +255,8 @@ void BG_Player_DoControllersInternal(clientInfo_t *anim,
         /* 0x300051d2/0x300051e4: leanSwing * 0.2f is rounded to a float slot
          * (the roll value) and that rounded value is what the yaw subtracts. */
         spine1Roll = leanSwing * 0.2f;
-#if defined(LINUX_BEHAVIOR)
-        spine1Yaw =
-            bg_compat_controller_product_subtract_product(
-                originYawDelta, 0.1f, leanSwing, 0.2f);
-#else
         spine1Yaw = bg_compat_controller_product_subtract(
             originYawDelta, 0.1f, spine1Roll);
-#endif
         spine2Pitch = originPitchDelta;
         /* 0x300051fa multiplies leanSwing by the .rdata -1.0f at 0x3007bdb0
          * before the subtract, i.e. spine2Yaw adds the full lean swing. */
@@ -396,23 +277,9 @@ void BG_Player_DoControllersInternal(clientInfo_t *anim,
             secondaryLeanSwing *= stanceScale;
         }
 
-#if defined(LINUX_BEHAVIOR)
-#if EMULATE_X87
-        originAngles[2] = x87f_store_f32(x87f_add(
-            x87f_mul(x87f_mul(x87f_load_f32(leanPhase),
-                              x87f_load_f32(50.0f)),
-                     x87f_load_f32(0.075f)),
-            x87f_load_f32(originAngles[2])));
-#else
-        originAngles[2] =
-            (float)((long double)originAngles[2] +
-                    (long double)leanPhase * 50.0L * 0.075L);
-#endif
-#else
         originAngles[2] =
             bg_compat_controller_add_product(originAngles[2], leanPhase,
                                               3.7500002f);
-#endif
         spine0Pitch = originPitchDelta * 0.2f;
         spine0Yaw = originYawDelta * 0.40000001f;
         spine0Roll = leanSwing * 0.5f;

@@ -37,20 +37,11 @@
 
 #include "bg_weapon.h"
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 
-#if defined(LINUX_BEHAVIOR)
-#include "compat/libm/coduo_libm.h"
-#endif
 
 #include <math.h>
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /* Instruction-provenance constants (all proven from .rdata bytes at the cited
  * addresses; see the FMUL/FLD sites in the .mcode). */
@@ -65,7 +56,6 @@
  * effective stance when no viewheight lerp is in flight
  * (0x300088b2..0x300088d6 EBX selector).
  */
-#if defined(WINDOWS_BEHAVIOR)
 float PM_CmdScale_Walk(const usercmd_t *cmd)
 {
     int32_t forwardmove = cmd->forwardmove; /* +0x14 signed */
@@ -259,166 +249,3 @@ float PM_CmdScale_Walk(const usercmd_t *cmd)
 
     return (float)scale;
 }
-#else
-/* Linux stores each named magnitude, scale, lerp, water, weapon, and aim
- * result as binary32.  Its exported pm_waterSwimScale and
- * pm_shellshockScale constants contain the same 0.5f and 0.4f values folded
- * into both Windows DLLs. */
-float PM_CmdScale_Walk(const usercmd_t *command)
-{
-    const playerState_t *ps = pm->ps;
-    int32_t forwardMove = command->forwardmove;
-    const int32_t rightMove = command->rightmove;
-    float forwardMagnitude;
-    float strafeMagnitude;
-    float moveMagnitude;
-    float length;
-    float scale;
-    uint32_t flags;
-
-    if (forwardMove < 0) {
-        forwardMagnitude = fabsf(
-            (float)((long double)forwardMove *
-                    (long double)ps->backSpeedScale));
-    } else {
-        forwardMagnitude = fabsf((float)forwardMove);
-    }
-    strafeMagnitude = fabsf(
-        (float)((long double)rightMove *
-                (long double)ps->strafeSpeedScale));
-    moveMagnitude = strafeMagnitude;
-    if (moveMagnitude < forwardMagnitude) {
-        moveMagnitude = forwardMagnitude;
-    }
-    if (moveMagnitude == 0.0f) {
-        return 0.0f;
-    }
-
-    length = (float)CoduoLibm_SqrtGlibc((double)(
-        forwardMove * forwardMove + rightMove * rightMove));
-#if EMULATE_X87
-    scale = x87f_store_f32(x87f_div(
-        x87f_mul(x87f_load_i32(ps->speed),
-                 x87f_load_f32(moveMagnitude)),
-        x87f_mul(x87f_load_f32(length),
-                 x87f_load_f32(PM_WALK_MOVE_FULLSCALE))));
-#else
-    scale = (float)(
-        ((long double)ps->speed * (long double)moveMagnitude) /
-        ((long double)length * (long double)PM_WALK_MOVE_FULLSCALE));
-#endif
-
-    flags = ps->playerStateFlags;
-    if ((flags & PMF_WALKING) != 0 || ps->leanFraction != 0.0f ||
-        (ps->weaponState == WEAPON_STATE_BREAKING_DOWN &&
-         BG_GetInfoForWeapon(ps->currentWeapon)->weaponClass ==
-             WEAPCLASS_LMG)) {
-        scale = (float)((long double)scale *
-                        (long double)ps->walkSpeedScale);
-    } else if ((flags & PMF_SPRINTING) != 0) {
-        scale = (float)((long double)scale *
-                        (long double)ps->sprintSpeedScale);
-    } else {
-        scale = (float)((long double)scale *
-                        (long double)ps->runSpeedScale);
-    }
-
-    if (ps->pmType == PM_TYPE_NOCLIP) {
-        scale = (float)((long double)scale * 3.0L);
-    } else if (ps->pmType == PM_TYPE_UFO) {
-        scale = (float)((long double)scale * 6.0L);
-    } else {
-        const effectiveStance_t stance = PM_GetEffectiveStance(ps);
-        float lerp = (float)PM_GetViewHeightLerp(
-            ps->crouchViewHeight, ps->proneViewHeight);
-
-        if (lerp != 0.0f) {
-#if EMULATE_X87
-            scale = x87f_store_f32(x87f_mul(
-                x87f_load_f32(scale),
-                x87f_add(
-                    x87f_mul(
-                        x87f_sub(x87f_load_f32(1.0f),
-                                 x87f_load_f32(lerp)),
-                        x87f_load_f32(ps->crouchSpeedScale)),
-                    x87f_mul(x87f_load_f32(lerp),
-                             x87f_load_f32(ps->proneSpeedScale)))));
-#else
-            scale = (float)((long double)scale *
-                ((1.0L - (long double)lerp) *
-                     (long double)ps->crouchSpeedScale +
-                 (long double)lerp *
-                     (long double)ps->proneSpeedScale));
-#endif
-        } else {
-            lerp = (float)PM_GetViewHeightLerp(
-                ps->proneViewHeight, ps->crouchViewHeight);
-            if (lerp != 0.0f) {
-#if EMULATE_X87
-                scale = x87f_store_f32(x87f_mul(
-                    x87f_load_f32(scale),
-                    x87f_add(
-                        x87f_mul(
-                            x87f_sub(x87f_load_f32(1.0f),
-                                     x87f_load_f32(lerp)),
-                            x87f_load_f32(ps->proneSpeedScale)),
-                        x87f_mul(x87f_load_f32(lerp),
-                                 x87f_load_f32(ps->crouchSpeedScale)))));
-#else
-                scale = (float)((long double)scale *
-                    ((1.0L - (long double)lerp) *
-                         (long double)ps->proneSpeedScale +
-                     (long double)lerp *
-                         (long double)ps->crouchSpeedScale));
-#endif
-            } else if (stance == EFFECTIVE_STANCE_PRONE) {
-                scale = (float)((long double)scale *
-                                (long double)ps->proneSpeedScale);
-            } else if (stance == EFFECTIVE_STANCE_CROUCH) {
-                scale = (float)((long double)scale *
-                                (long double)ps->crouchSpeedScale);
-            }
-        }
-
-        if (pm->waterlevel != 0) {
-            float waterFraction;
-            float waterScale;
-#if EMULATE_X87
-            waterFraction = x87f_store_f32(x87f_div(
-                x87f_load_i32(pm->waterlevel), x87f_load_f32(3.0f)));
-            waterScale = x87f_store_f32(x87f_sub(
-                x87f_load_f32(1.0f),
-                x87f_mul(
-                    x87f_sub(x87f_load_f32(1.0f),
-                             x87f_load_f32(PM_WALK_WATER_HALF)),
-                    x87f_load_f32(waterFraction))));
-            scale = x87f_store_f32(x87f_mul(
-                x87f_load_f32(scale), x87f_load_f32(waterScale)));
-#else
-            waterFraction = (float)((long double)pm->waterlevel / 3.0L);
-            waterScale = (float)(
-                1.0L - (1.0L - (long double)PM_WALK_WATER_HALF) *
-                           (long double)waterFraction);
-            scale = (float)((long double)scale *
-                            (long double)waterScale);
-#endif
-        }
-    }
-
-    {
-        const int32_t weapon = ps->currentWeapon;
-        const weaponInfo_t *weaponInfo = BG_GetInfoForWeapon(weapon);
-        if (weapon != 0 && weaponInfo->moveSpeedScale > 0.0f &&
-            (flags & PMF_SPRINTING) == 0) {
-            scale = (float)((long double)scale *
-                            (long double)weaponInfo->moveSpeedScale);
-        }
-    }
-
-    if ((command->wbuttons & PM_WBUTTON_WALK) != 0) {
-        scale = (float)((long double)scale *
-                        (long double)PM_WALK_AIM_SLOWDOWN);
-    }
-    return scale;
-}
-#endif

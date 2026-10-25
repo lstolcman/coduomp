@@ -1,13 +1,6 @@
 #include "script_error_exception.hpp"
 #include "script_runtime_host.h"
 
-#if defined(LINUX_BEHAVIOR)
-/* The Linux compiler retains this empty constructor as the original leaf at
- * coduo_lnxded 0x080b0892; MSVC inlines the corresponding no-op. */
-ScriptErrorClass::ScriptErrorClass()
-{
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x00488490..0x004884c9.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00488490_004884ca.mcode.

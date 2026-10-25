@@ -31,7 +31,6 @@ void BG_FindAnims(void)
     Scr_FindAnim("multiplayer", "turning", &bgs.turningAnimHandle);
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 XAnim *BG_FindAnimTree(const char *treeName, qboolean errorIfMissing)
 {
     XAnim *tree = Scr_FindAnimTree(treeName);
@@ -42,27 +41,10 @@ XAnim *BG_FindAnimTree(const char *treeName, qboolean errorIfMissing)
     }
     return tree;
 }
-#else
-script_anim_tree_ref_t BG_FindAnimTree(const char *treeName,
-                                       qboolean errorIfMissing)
-{
-    script_anim_tree_ref_t tree = Scr_FindAnimTree(treeName);
-
-    if (tree.tree == NULL && errorIfMissing != qfalse) {
-        Com_Error(ERR_DROP,
-                  "\x15" "Could not find animation tree '%s'", treeName);
-    }
-    return tree;
-}
-#endif
 
 void BG_FindAnimTrees(void)
 {
-#if defined(WINDOWS_BEHAVIOR)
     bgs.multiplayerAnimTree = BG_FindAnimTree("multiplayer", qtrue);
-#else
-    bgs.multiplayerAnimTree = BG_FindAnimTree("multiplayer", qtrue).tree;
-#endif
     bgs.animationTable.animTreeHandle = bgs.multiplayerAnimTree;
     bgs.resolvedTorsoAnimHandle = bgs.torsoAnimHandle;
     bgs.resolvedLegsAnimHandle = bgs.legsAnimHandle;

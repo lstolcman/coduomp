@@ -1,5 +1,4 @@
 #include "server/standalone/bindings/coduo_engine_structs.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_int32_bits.h"
 #include "qcommon/vm_runtime.h"
 #include "../animation/xanim_private.h"

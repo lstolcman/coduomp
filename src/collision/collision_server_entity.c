@@ -1,7 +1,6 @@
 #include "collision_server_entity.h"
 
 #include "compat/coduo_fp_conversion.h"
-#include "compat/coduo_x87emu.h"
 #include "collision_box_trace.h"
 #include "collision_leaf_queries.h"
 #include "collision_queries.h"
@@ -84,20 +83,11 @@ void SV_UnlinkEntity(sharedEntity_t *entity)
     SV_UnlinkEntityFromWorldSector(serverEntity);
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 void SV_SnapVector(vec3_t vector)
 {
     for (int32_t axis = 0; axis < 3; ++axis) {
         const int32_t rounded = FastRound(vector[axis]);
 
-#if EMULATE_X87
-        const x87f difference = x87f_sub(
-            x87f_load_i32(rounded), x87f_load_f32(vector[axis]));
-        const x87f squared = x87f_mul(difference, difference);
-        if (x87f_lt(squared, x87f_load_f32(sv_snapVectorEpsilon))) {
-            vector[axis] = (float)rounded;
-        }
-#else
         /* CoDUOMP.exe 0x00467021 keeps the difference and its square live
          * under the process PC=53 policy until the binary32 comparison. */
         const long double difference =
@@ -106,36 +96,8 @@ void SV_SnapVector(vec3_t vector)
             (long double)sv_snapVectorEpsilon) {
             vector[axis] = (float)rounded;
         }
-#endif
     }
 }
-#else
-void SV_SnapVector(vec3_t vector)
-{
-    for (int32_t axis = 0; axis < 3; ++axis) {
-        const int32_t rounded = FastRound(vector[axis]);
-
-#if EMULATE_X87
-        const float difference = x87f_store_f32(x87f_sub(
-            x87f_load_i32(rounded), x87f_load_f32(vector[axis])));
-        const x87f squared = x87f_mul(
-            x87f_load_f32(difference), x87f_load_f32(difference));
-        if (x87f_lt(squared, x87f_load_f32(sv_snapVectorEpsilon))) {
-            vector[axis] = (float)rounded;
-        }
-#else
-        /* coduo_lnxded 0x08099dba stores the difference to binary32 before
-         * reloading and squaring it under the Linux PC=64 policy. */
-        const float difference = (float)(
-            (long double)rounded - (long double)vector[axis]);
-        if ((long double)difference * (long double)difference <
-            (long double)sv_snapVectorEpsilon) {
-            vector[axis] = (float)rounded;
-        }
-#endif
-    }
-}
-#endif
 
 void SV_LinkEntity(sharedEntity_t *entity)
 {
@@ -152,7 +114,7 @@ void SV_LinkEntity(sharedEntity_t *entity)
     } else {
         /* Windows consumes the low dword of `_ftol2`'s signed-qword result;
          * Linux stores a signed dword under a temporary truncate control word.
-         * The shared adapter preserves the platform-selected invalid result.
+         * The shared adapter preserves the Windows invalid result.
          * These three operation graphs contain only exact float/integer
          * widening and addition/subtraction before the conversion. */
         int32_t x = coduo_fp_to_i32_extended(

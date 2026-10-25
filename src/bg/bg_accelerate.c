@@ -1,14 +1,7 @@
 #include "bg_pmove.h"
 
-#include "compat/coduo_x87emu.h"
-
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 // Sources: uo_cgame_mp_x86.dll 0x300085d0..0x3000868d,
 //          uo_game_mp_x86.dll  0x20008380..0x2000843d,
@@ -55,7 +48,6 @@
 // arguments. The lone PUSH ECX/PUSH ESI is register/scratch preservation; the pushed
 // ECX slot ([ESP+0x4]) is reused as the `addspeed` temporary.
 
-#if defined(WINDOWS_BEHAVIOR)
 void PM_Accelerate(vec3_t wishdir, float wishspeed, float accel)
 {
     pmove_t *move = pm; /* ESI is loaded once and retained. */
@@ -114,83 +106,3 @@ void PM_Accelerate(vec3_t wishdir, float wishspeed, float accel)
     playerState_t *psZ = move->ps; /* 0x3000867f reloads [ESI] */
     psZ->velocity[2] += accelspeed * wishdir[2];
 }
-#else
-/* Linux stores the dot product, add speed, acceleration, grounded-friction
- * result, and each velocity lane as binary32. */
-void PM_Accelerate(vec3_t wishdir, float wishspeed, float accel)
-{
-    float currentSpeed;
-    float addSpeed;
-    float accelSpeed;
-    int32_t lane;
-
-#if EMULATE_X87
-    currentSpeed = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(pm->ps->velocity[0]),
-                          x87f_load_f32(wishdir[0])),
-                 x87f_mul(x87f_load_f32(pm->ps->velocity[1]),
-                          x87f_load_f32(wishdir[1]))),
-        x87f_mul(x87f_load_f32(pm->ps->velocity[2]),
-                 x87f_load_f32(wishdir[2]))));
-#else
-    currentSpeed = (float)(
-        ((long double)pm->ps->velocity[0] *
-             (long double)wishdir[0] +
-         (long double)pm->ps->velocity[1] *
-             (long double)wishdir[1]) +
-        (long double)pm->ps->velocity[2] *
-            (long double)wishdir[2]);
-#endif
-    addSpeed = (float)((long double)wishspeed -
-                       (long double)currentSpeed);
-    if (addSpeed <= 0.0f) {
-        return;
-    }
-
-    if (wishspeed < 100.0f) {
-        wishspeed = 100.0f;
-    }
-#if EMULATE_X87
-    accelSpeed = x87f_store_f32(x87f_mul(
-        x87f_mul(x87f_load_f32(accel),
-                 x87f_load_f32(pml.frametime)),
-        x87f_load_f32(wishspeed)));
-#else
-    accelSpeed = (float)(
-        (long double)accel * (long double)pml.frametime *
-        (long double)wishspeed);
-#endif
-    if (accelSpeed > addSpeed) {
-        accelSpeed = addSpeed;
-    }
-
-    if (pm->ps->groundEntityNum != ENTITYNUM_NONE) {
-#if EMULATE_X87
-        accelSpeed = x87f_store_f32(x87f_mul(
-            x87f_load_f32(accelSpeed),
-            x87f_div(x87f_load_f32(1.0f),
-                     x87f_load_f32(pm->ps->friction))));
-#else
-        accelSpeed = (float)(
-            (long double)accelSpeed *
-            (1.0L / (long double)pm->ps->friction));
-#endif
-    }
-    if (accelSpeed > addSpeed) {
-        accelSpeed = addSpeed;
-    }
-
-    for (lane = 0; lane < 3; ++lane) {
-#if EMULATE_X87
-        pm->ps->velocity[lane] = x87f_store_f32(x87f_add(
-            x87f_load_f32(pm->ps->velocity[lane]),
-            x87f_mul(x87f_load_f32(accelSpeed),
-                     x87f_load_f32(wishdir[lane]))));
-#else
-        pm->ps->velocity[lane] = (float)(
-            (long double)pm->ps->velocity[lane] +
-            (long double)accelSpeed * (long double)wishdir[lane]);
-#endif
-    }
-}
-#endif

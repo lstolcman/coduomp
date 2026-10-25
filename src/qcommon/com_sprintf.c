@@ -3,11 +3,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /* Source: CoDUOMP.exe 0x0044fa30..0x0044fa49.
  * Source: uo_cgame_mp_x86.dll 0x3004e820..0x3004e839.
@@ -33,14 +28,14 @@ int32_t Com_sprintf(char *destination, size_t destinationSize,
     }
 
     va_start(arguments, format);
-#if defined(WINDOWS_BEHAVIOR) && defined(_WIN32)
+#if defined(_WIN32)
     result = _vsnprintf(destination, destinationSize, format, arguments);
 #else
     result = vsnprintf(destination, destinationSize, format, arguments);
 #endif
     va_end(arguments);
 
-#if defined(WINDOWS_BEHAVIOR) && !defined(_WIN32)
+#if !defined(_WIN32)
     /* ORIGINAL_PLATFORM_DIFFERENCE: the embedded Windows formatter returns
      * the size for an exact fit and -1 only when output exceeds the size.
      * C99 returns the required length, so supporting non-Windows client builds

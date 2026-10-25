@@ -31,13 +31,9 @@ enum {
      * though maintained path scratch storage is larger than retail. */
     SYS_LISTFILES_MAX_RECURSION_DEPTH = 128,
     SYS_PROCESSOR_X86 = 1,
-#if defined(_WIN32)
-    /* Retail Win32 startup selects x87 double precision (_PC_53). */
+    /* Retail Win32 startup selects x87 double precision (_PC_53) on every
+     * host that executes the recovered arithmetic in hardware x87. */
     SYS_FRAME_X87_CONTROL_WORD = 0x127f
-#else
-    /* The recovered Linux frame loop reloads x87 extended precision. */
-    SYS_FRAME_X87_CONTROL_WORD = 0x137f
-#endif
 };
 
 #define SYS_PROCESS_HAS_X87_INLINE_ASM CODUO_ENGINE_HAS_X87_INLINE_ASM

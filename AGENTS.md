@@ -2,6 +2,14 @@
 
 ## Branch contract
 
+- The original Windows client and server binaries are the sole behavioral
+  authority on every supported host. Linux and macOS remain supported host
+  platforms; their original binaries do not define alternate behavior.
+- Do not add platform-behavior selectors or software x87 emulation. Use native
+  x87 where available and the widest appropriate native C types elsewhere.
+  Preserve `WIDE_FLOAT` intermediates and explicit float/double rounding and
+  integer truncation boundaries; removing emulation does not justify narrowing
+  live arithmetic to float.
 - Read `docs/branch-policy.md` before changing behavior or moving code between
   branches.
 - `stock` is the hardened stock-compatible baseline. Preserve legitimate

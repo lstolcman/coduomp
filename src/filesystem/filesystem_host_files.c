@@ -348,7 +348,6 @@ qboolean FS_Delete(const char *qpath)
     return remove(osPath) != -1 ? qtrue : qfalse;
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 /* Source: CoDUOMP.exe 0x0042e130..0x0042e1bb.
  * Evidence: repaired executable-gap boundary and exact same-module Mac symbol
  * FS_MakeReadOnly. Win32 toggles FILE_ATTRIBUTE_READONLY and deliberately
@@ -390,34 +389,3 @@ qboolean FS_MakeReadOnly(const char *qpath, qboolean makeReadOnly)
 
     return qtrue;
 }
-#else
-/* coduo_lnxded 0x08062782..0x08062852 uses the owner-read bit rather than
- * the owner-write bit.  This is a retained original Linux-port discrepancy. */
-qboolean FS_MakeReadOnly(const char *qpath, qboolean makeReadOnly)
-{
-    struct stat fileStat;
-    mode_t mode;
-    char osPath[MAX_OSPATH];
-
-    filesystem_compat_check_started();
-    FS_BuildOSPath(filesystem_compat_state_root(fs_homepath->string),
-                   fs_currentGameDir, qpath, osPath);
-
-    if (Sys_Stat(osPath, &fileStat) == -1) {
-        return qfalse;
-    }
-
-    if (makeReadOnly == qfalse) {
-        mode = fileStat.st_mode | S_IRUSR;
-    } else {
-        mode = fileStat.st_mode & ~S_IRUSR;
-    }
-
-    fileStat.st_mode = mode;
-    if (chmod(osPath, fileStat.st_mode) == -1) {
-        return qfalse;
-    }
-
-    return qtrue;
-}
-#endif

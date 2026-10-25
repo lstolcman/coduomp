@@ -52,9 +52,8 @@ CLIENT_ENGINE_OUTPUT := $(CLIENT_NATIVE_DIR)/CoDUOMP
 CLIENT_BASEGAME_DIR := $(CLIENT_NATIVE_DIR)/uo
 CLIENT_CGAME_OUTPUT := $(CLIENT_BASEGAME_DIR)/uo_cgame_mp_$(CLIENT_NATIVE_ARCH).$(CLIENT_NATIVE_EXT)
 CLIENT_UI_OUTPUT := $(CLIENT_BASEGAME_DIR)/uo_ui_mp_$(CLIENT_NATIVE_ARCH).$(CLIENT_NATIVE_EXT)
-# Client game modules select Windows behavior even on native macOS and Linux.
-# Keep their objects and artifacts separate from Linux-behavior standalone
-# server modules so incremental builds cannot silently reuse the wrong policy.
+# Keep client game objects separate from standalone module output because the
+# launchers stage them under different architecture-specific module names.
 CLIENT_GAME_BUILD_DIR ?= $(BUILD_DIR)/game/client-native-windows
 CLIENT_GAME_OUTPUT := $(CLIENT_BASEGAME_DIR)/uo_game_mp_$(CLIENT_NATIVE_ARCH).$(CLIENT_NATIVE_EXT)
 CLIENT_DATA_PATH ?=
@@ -87,7 +86,7 @@ LINUX64_PACKAGE_OUTPUT ?= $(BUILD_DIR)/linux/opencoduo-linux-x86_64-$(shell prin
 	client-windows-x86_64-package \
 	server server64 server32 server-engine64 server-engine32 \
 	server-game64 server-game32 server-windows server-windows-i386 \
-	server-windows-i686 check-linux-host check-macos-host softfloat \
+	server-windows-i686 check-linux-host check-macos-host \
 	macos-app macos-package-check macos-zip clean help
 
 all: client
@@ -95,37 +94,34 @@ all: client
 policy-check:
 	tools/check-source-policy.sh
 
-softfloat:
-	$(MAKE) -C vendor/softfloat/build/coduo-x87
-
 ifeq ($(HOST_OS),Darwin)
 CLIENT_PLATFORM_TARGETS := client-game
 endif
 
 client: client-engine client-cgame client-ui $(CLIENT_PLATFORM_TARGETS)
 
-client-engine: softfloat
+client-engine:
 	$(MAKE) $(MAKE_JOBS) -f build-mk/client-targets.mk \
 		CC="$(CC)" CXX="$(CXX)" PKG_CONFIG="$(PKG_CONFIG)" \
 		CODUOMP_NATIVE_BUILD_DIR="$(abspath $(CLIENT_NATIVE_DIR))" \
 		CODUOMP_NATIVE_EXECUTABLE="$(abspath $(CLIENT_ENGINE_OUTPUT))" \
 		coduomp-native-link
 
-client-cgame: softfloat
+client-cgame:
 	$(MAKE) -f build-mk/client-targets.mk \
 		CC="$(CC)" \
 		CLIENT_NATIVE_LIBRARY="$(abspath $(CLIENT_CGAME_OUTPUT))" \
 		client-native-link
 
-client-ui: softfloat
+client-ui:
 	$(MAKE) -f build-mk/ui.mk \
 		CC="$(CC)" \
 		NATIVE_LIBRARY="$(abspath $(CLIENT_UI_OUTPUT))" \
 		native-link
 
-client-game: check-macos-host softfloat
+client-game: check-macos-host
 	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk \
-		CC="$(CC)" CODUO_BEHAVIOR=windows CODUO_FP_FAITHFUL=relaxed \
+		CC="$(CC)" CODUO_FP_FAITHFUL=relaxed \
 		NATIVE64_SHARED_BUILD_DIR="$(abspath $(CLIENT_GAME_BUILD_DIR))" \
 		NATIVE64_SHARED_TARGET="$(abspath $(CLIENT_GAME_OUTPUT))" \
 		native64-shared
@@ -223,7 +219,7 @@ client-linux32:
 		CXX="$(LINUX32_CXX) -m32 -msse" \
 		PKG_CONFIG="$(LINUX32_PKG_CONFIG)"
 	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk \
-		CC="$(LINUX32_CC)" CODUO_BEHAVIOR=windows \
+		CC="$(LINUX32_CC)" \
 		I386_SHARED_BUILD_DIR="$(abspath $(dir $(LINUX32_GAME_OUTPUT)))" \
 		I386_SHARED_TARGET="$(abspath $(LINUX32_GAME_OUTPUT))" shared-i386
 
@@ -238,7 +234,7 @@ client-linux64:
 		CC="$(LINUX64_CC) -m64" CXX="$(LINUX64_CXX) -m64" \
 		PKG_CONFIG="$(LINUX64_PKG_CONFIG)"
 	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk \
-		CC="$(LINUX64_CC)" CODUO_BEHAVIOR=windows \
+		CC="$(LINUX64_CC)" \
 		NATIVE64_SHARED_BUILD_DIR="$(abspath $(dir $(LINUX64_GAME_OUTPUT)))" \
 		NATIVE64_SHARED_TARGET="$(abspath $(LINUX64_GAME_OUTPUT))" native64-shared
 
@@ -283,7 +279,6 @@ client-windows-i686:
 		WIN32_LIBRARY="$(abspath $(BUILD_DIR)/client/windows-i686/uo_ui_mp_x86.dll)"
 	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk windows-i686 \
 		MINGW32_CC="$(MINGW32_CC)" \
-		CODUO_BEHAVIOR=windows \
 		WINDOWS_I686_BUILD_DIR="$(abspath $(dir $(WINDOWS_GAME_OUTPUT)))" \
 		WINDOWS_I686_TARGET="$(abspath $(WINDOWS_GAME_OUTPUT))"
 
@@ -300,7 +295,7 @@ client-windows-x86_64:
 		WINDOWS_CC="$(MINGW64_CC)" \
 		WINDOWS_LIBRARY="$(abspath $(BUILD_DIR)/client/windows-x86_64/uo_ui_mp_x86.dll)"
 	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk windows-x86_64 \
-		MINGW64_CC="$(MINGW64_CC)" CODUO_BEHAVIOR=windows \
+		MINGW64_CC="$(MINGW64_CC)" \
 		WINDOWS_X86_64_BUILD_DIR="$(abspath $(dir $(WINDOWS64_GAME_OUTPUT)))" \
 		WINDOWS_X86_64_TARGET="$(abspath $(WINDOWS64_GAME_OUTPUT))"
 

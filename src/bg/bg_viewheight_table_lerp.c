@@ -21,15 +21,8 @@
 #include "bg_pmove.h"
 
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select exactly one PM_ViewHeightTableLerp behavior mode"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select exactly one PM_ViewHeightTableLerp behavior mode"
-#endif
 
-#if defined(WINDOWS_BEHAVIOR)
 long double PM_ViewHeightTableLerp(int32_t percent,
                                    const pmLerpEntry_t *table, float *out)
 {
@@ -96,75 +89,3 @@ long double PM_ViewHeightTableLerp(int32_t percent,
     *out = (float)table[0].originAdjust; // FILD [EDI+8] ; FSTP [EBX]
     return (long double)table[0].height; // FLD  [EDI+4]
 }
-#else
-/* Linux game.mp.uo.i386.so RVA 0x00061a85 stores the interpolation fraction
- * and the returned height through binary32 locals before reloading ST0. */
-long double PM_ViewHeightTableLerp(int32_t percent,
-                                   const pmLerpEntry_t *table,
-                                   float *outOriginAdjust)
-{
-    float viewHeight;
-    const pmLerpEntry_t *entry;
-    int32_t index;
-
-    if (percent == 0) {
-        *outOriginAdjust = (float)table[0].originAdjust;
-        viewHeight = table[0].height;
-    } else {
-        entry = &table[1];
-        index = 1;
-        for (;;) {
-            if (entry->percent == PM_LERP_TABLE_END) {
-                *outOriginAdjust = (float)table[0].originAdjust;
-                viewHeight = table[0].height;
-                break;
-            }
-            if (percent < entry->percent) {
-                const pmLerpEntry_t *previous = &entry[-1];
-                int32_t percentDelta = coduo_int32_from_bits(
-                    (uint32_t)percent - (uint32_t)previous->percent);
-                int32_t percentSpan = coduo_int32_from_bits(
-                    (uint32_t)entry->percent -
-                    (uint32_t)previous->percent);
-                int32_t originAdjustSpan = coduo_int32_from_bits(
-                    (uint32_t)entry->originAdjust -
-                    (uint32_t)previous->originAdjust);
-#if EMULATE_X87
-                float fraction = x87f_store_f32(x87f_div(
-                    x87f_load_i32(percentDelta),
-                    x87f_load_i32(percentSpan)));
-                *outOriginAdjust = x87f_store_f32(x87f_add(
-                    x87f_mul(x87f_load_i32(originAdjustSpan),
-                             x87f_load_f32(fraction)),
-                    x87f_load_i32(previous->originAdjust)));
-                viewHeight = x87f_store_f32(x87f_add(
-                    x87f_mul(x87f_sub(x87f_load_f32(entry->height),
-                                      x87f_load_f32(previous->height)),
-                             x87f_load_f32(fraction)),
-                    x87f_load_f32(previous->height)));
-#else
-                float fraction =
-                    (float)((long double)percentDelta /
-                            (long double)percentSpan);
-
-                *outOriginAdjust =
-                    (float)((long double)originAdjustSpan *
-                                (long double)fraction +
-                            (long double)previous->originAdjust);
-                viewHeight = (entry->height - previous->height) * fraction +
-                             previous->height;
-#endif
-                break;
-            }
-            if (percent == entry->percent) {
-                *outOriginAdjust = (float)entry->originAdjust;
-                viewHeight = entry->height;
-                break;
-            }
-            ++index;
-            entry = &table[index];
-        }
-    }
-    return viewHeight;
-}
-#endif

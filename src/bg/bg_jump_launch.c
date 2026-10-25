@@ -1,11 +1,7 @@
 #include "bg_pmove.h"
 
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 
-#if defined(LINUX_BEHAVIOR)
-#include "compat/libm/coduo_libm.h"
-#endif
 
 #include <math.h>
 #include <stdint.h>
@@ -70,13 +66,7 @@
 // ABI: __cdecl, single float arg (caller pushes then `add esp,4`); RET with no
 // immediate. EBP is not used; the lone PUSH ESI/POP ESI is register preservation.
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#if defined(WINDOWS_BEHAVIOR)
 void PM_Jump(float jumpHeight)
 {
     pmove_t *move = pm; /* 0x30008c70: EAX is retained throughout. */
@@ -124,46 +114,3 @@ void PM_Jump(float jumpHeight)
     playerState_t *originPs = move->ps; /* 0x30008cef */
     originPs->jumpOriginZ = originPs->psOrigin[2];
 }
-#else
-void PM_Jump(float jumpHeight)
-{
-    playerState_t *const ps = pm->ps;
-    float launchEnergy;
-
-    pml.groundPlane = 0;
-    pml.groundLiftFlag = 0;
-    pml.walking = 0;
-    ps->groundEntityNum = ENTITYNUM_NONE;
-
-    /* Linux stores the doubled-height/gravity product as binary32 before the
-     * wall-jump gate, and stores the optional division back to the same slot. */
-#if EMULATE_X87
-    launchEnergy = x87f_store_f32(x87f_mul(
-        x87f_load_i32(ps->gravity),
-        x87f_add(x87f_load_f32(jumpHeight),
-                 x87f_load_f32(jumpHeight))));
-#else
-    launchEnergy = (float)(
-        (long double)ps->gravity *
-        ((long double)jumpHeight + (long double)jumpHeight));
-#endif
-
-    if ((ps->playerStateFlags & PMF_WALLJUMP) != 0 &&
-        ps->pmTime <= 1800) {
-#if EMULATE_X87
-        launchEnergy = x87f_store_f32(x87f_div(
-            x87f_load_f32(launchEnergy),
-            x87f_load_f32((float)PM_GetJumpFactor())));
-#else
-        launchEnergy = (float)(
-            (long double)launchEnergy / PM_GetJumpFactor());
-#endif
-    }
-
-    ps->velocity[2] =
-        (float)CoduoLibm_SqrtGlibc((double)launchEnergy);
-    ps->playerStateFlags |= PMF_WALLJUMP | PMF_JUMP_HELD;
-    ps->pmTime = 0;
-    ps->jumpOriginZ = ps->psOrigin[2];
-}
-#endif

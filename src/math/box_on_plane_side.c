@@ -1,16 +1,10 @@
 #include "q_math.h"
 
-#include "compat/coduo_x87emu.h"
 #include "qcommon/q_shared_types.h"
 
 #include <signal.h>
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "box_on_plane_side.c requires a platform behavior mode"
-#endif
 
 enum {
     BOX_PLANE_SIGNBITS_COUNT = 8,
@@ -32,23 +26,6 @@ void Com_Error(errorParm_t code, const char *format, ...);
  * in x87 registers through their comparisons.  The process control word is
  * the only valid-input Windows/Linux precision difference.
  */
-#if EMULATE_X87
-typedef x87f box_plane_distance_t;
-#define BOX_FRONT_DOT(cx, cy, cz)                                            \
-    x87f_add(                                                               \
-        x87f_add(x87f_mul(x87f_load_f32(plane->normal[0]),                  \
-                          x87f_load_f32(cx)),                               \
-                 x87f_mul(x87f_load_f32(plane->normal[1]),                  \
-                          x87f_load_f32(cy))),                              \
-        x87f_mul(x87f_load_f32(plane->normal[2]), x87f_load_f32(cz)))
-#define BOX_BACK_DOT(cx, cy, cz)                                             \
-    x87f_add(                                                               \
-        x87f_mul(x87f_load_f32(plane->normal[2]), x87f_load_f32(cz)),       \
-        x87f_add(x87f_mul(x87f_load_f32(plane->normal[0]),                  \
-                          x87f_load_f32(cx)),                               \
-                 x87f_mul(x87f_load_f32(plane->normal[1]),                  \
-                          x87f_load_f32(cy))))
-#else
 typedef long double box_plane_distance_t;
 #define BOX_FRONT_DOT(cx, cy, cz)                                            \
     (((long double)plane->normal[0] * (long double)(cx) +                   \
@@ -58,7 +35,6 @@ typedef long double box_plane_distance_t;
     ((long double)plane->normal[2] * (long double)(cz) +                    \
      ((long double)plane->normal[0] * (long double)(cx) +                   \
       (long double)plane->normal[1] * (long double)(cy)))
-#endif
 
 int32_t BoxOnPlaneSide(const vec3_t mins, const vec3_t maxs,
                        const cplane_t *plane)
@@ -68,7 +44,6 @@ int32_t BoxOnPlaneSide(const vec3_t mins, const vec3_t maxs,
     int32_t sides = 0;
 
     if (plane->signbits >= BOX_PLANE_SIGNBITS_COUNT) {
-#if defined(WINDOWS_BEHAVIOR)
         /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
 #if defined(_MSC_VER)
         __debugbreak();
@@ -89,11 +64,6 @@ int32_t BoxOnPlaneSide(const vec3_t mins, const vec3_t maxs,
 #else
         raise(SIGTRAP);
         __builtin_unreachable();
-#endif
-#else
-        /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-        return *(volatile const int32_t *)(uintptr_t)
-            BOX_PLANE_INVALID_READ_ADDRESS;
 #endif
     }
 
@@ -133,24 +103,12 @@ int32_t BoxOnPlaneSide(const vec3_t mins, const vec3_t maxs,
         break;
     }
 
-#if EMULATE_X87
-    if (x87f_le(x87f_load_f32(plane->dist), frontDistance)) {
-        sides = BOX_ON_PLANE_SIDE_FRONT;
-    }
-    /* The original tests C0 after FCOM rather than using an ordered C
-     * comparison.  C0 is set for both less-than and unordered, so preserve
-     * the NaN case as !(back >= distance). */
-    if (!x87f_le(x87f_load_f32(plane->dist), backDistance)) {
-        sides |= BOX_ON_PLANE_SIDE_BACK;
-    }
-#else
     if (frontDistance >= (long double)plane->dist) {
         sides = BOX_ON_PLANE_SIDE_FRONT;
     }
     if (!(backDistance >= (long double)plane->dist)) {
         sides |= BOX_ON_PLANE_SIDE_BACK;
     }
-#endif
     return sides;
 }
 

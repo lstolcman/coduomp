@@ -172,10 +172,6 @@ CLIENT_ALL_C_SOURCES := $(CLIENT_C_SOURCES) $(CLIENT_SHARED_QCOMMON_C_SOURCES) \
 	$(SHARED_CLIENT_COMMON_C_SOURCES) \
 	$(CLIENT_SHARED_BG_C_SOURCES) \
 	$(CLIENT_SHARED_UI_C_SOURCES)
-# Client targets use native floating-point arithmetic.  Set this at the
-# compile boundary because shared translation units can include the generic
-# platform policy before a client-owned umbrella header establishes it.
-override CLIENT_FP_CPPFLAGS := -DEMULATE_X87=0
 CLIENT_INCLUDE_FLAGS := -iquote src/client/cgame/bindings \
 	-iquote src/qcommon/bindings/default \
 	-Isrc
@@ -255,12 +251,6 @@ SHARED_SERVER_C_SOURCES := $(LAYOUT_SERVER_ENGINE_C_SOURCES)
 SHARED_SCRIPT_DIR := src/scripting
 SHARED_SCRIPT_C_SOURCES := $(LAYOUT_SCRIPT_C_SOURCES)
 SHARED_SCRIPT_CXX_SOURCES := $(LAYOUT_SCRIPT_CXX_SOURCES)
-CODUO_DEFAULT_BEHAVIOR := windows
-# The retail client and its embedded server are one Windows executable. Do not
-# permit a command-line override to compile shared server code as Linux inside
-# a client build.
-override CODUO_BEHAVIOR := windows
-include build-mk/platform-behavior.mk
 RECOVERY_POLICY_CPPFLAGS :=
 AUDIO_BACKEND_CPPFLAGS := -DAUDIO_BACKEND_MINIAUDIO \
 	-DAUDIO_BACKEND_OPENAL
@@ -308,10 +298,8 @@ CODUOMP_INCLUDE_FLAGS := -Isrc \
 CODUOMP_NATIVE_CFLAGS := -g -O0 $(CODUOMP_INTEGER_FLAGS) \
 	$(CODUOMP_FLOAT_FLAGS) $(CODUOMP_STORAGE_FLAGS) \
 	$(CLIENT_WARNING_FLAGS) \
-	$(CLIENT_FP_CPPFLAGS) \
 	$(RECOVERY_POLICY_CPPFLAGS) \
 	$(AUDIO_BACKEND_CPPFLAGS) \
-	$(PLATFORM_BEHAVIOR_CPPFLAGS) \
 	$(CODUOMP_RENDERER_GPU_PROFILE_CPPFLAGS) \
 	$(CODUOMP_INCLUDE_FLAGS) \
 	$(CODUOMP_JPEG_CFLAGS) $(CODUOMP_SDL_CFLAGS) \
@@ -357,22 +345,21 @@ endif
 CLIENT_NATIVE_FLOAT_FLAGS := -ffp-contract=off
 client-native-link:
 	@mkdir -p $(dir $(CLIENT_NATIVE_LIBRARY))
-	$(CC) -std=c11 $(CLIENT_FP_CPPFLAGS) $(RECOVERY_POLICY_CPPFLAGS) $(PLATFORM_BEHAVIOR_CPPFLAGS) $(CLIENT_WARNING_FLAGS) $(CLIENT_C_TYPE_ERRORS) -g -O0 $(CLIENT_NATIVE_FLOAT_FLAGS) -fno-common -fPIC -fvisibility=hidden $(CLIENT_INCLUDE_FLAGS) $(CLIENT_ALL_C_SOURCES) $(CLIENT_NATIVE_LDFLAGS) -lm -o $(CLIENT_NATIVE_LIBRARY)
+	$(CC) -std=c11 $(RECOVERY_POLICY_CPPFLAGS) $(CLIENT_WARNING_FLAGS) $(CLIENT_C_TYPE_ERRORS) -g -O0 $(CLIENT_NATIVE_FLOAT_FLAGS) -fno-common -fPIC -fvisibility=hidden $(CLIENT_INCLUDE_FLAGS) $(CLIENT_ALL_C_SOURCES) $(CLIENT_NATIVE_LDFLAGS) -lm -o $(CLIENT_NATIVE_LIBRARY)
 
 client-windows-cross-link:
 	@mkdir -p $(dir $(CLIENT_WINDOWS_LIBRARY))
-	$(CLIENT_WINDOWS_CC) -std=c11 $(CLIENT_FP_CPPFLAGS) $(RECOVERY_POLICY_CPPFLAGS) -DWINDOWS_BEHAVIOR $(CLIENT_WARNING_FLAGS) $(CLIENT_C_TYPE_ERRORS) $(CLIENT_INCLUDE_FLAGS) $(CLIENT_ALL_C_SOURCES) -shared -static-libgcc $(CLIENT_WINDOWS_DEF) -Wl,--no-undefined -lm -o $(CLIENT_WINDOWS_LIBRARY)
+	$(CLIENT_WINDOWS_CC) -std=c11 $(RECOVERY_POLICY_CPPFLAGS) $(CLIENT_WARNING_FLAGS) $(CLIENT_C_TYPE_ERRORS) $(CLIENT_INCLUDE_FLAGS) $(CLIENT_ALL_C_SOURCES) -shared -static-libgcc $(CLIENT_WINDOWS_DEF) -Wl,--no-undefined -lm -o $(CLIENT_WINDOWS_LIBRARY)
 
 client-win32-abi-link:
 	@mkdir -p $(dir $(CLIENT_WIN32_LIBRARY))
-	$(CLIENT_WIN32_CC) -std=c11 $(CLIENT_FP_CPPFLAGS) $(RECOVERY_POLICY_CPPFLAGS) -DWINDOWS_BEHAVIOR $(CLIENT_WARNING_FLAGS) $(CLIENT_C_TYPE_ERRORS) $(CLIENT_INCLUDE_FLAGS) $(CLIENT_ALL_C_SOURCES) -shared -static-libgcc $(CLIENT_WINDOWS_DEF) -Wl,--no-undefined -lm -o $(CLIENT_WIN32_LIBRARY)
+	$(CLIENT_WIN32_CC) -std=c11 $(RECOVERY_POLICY_CPPFLAGS) $(CLIENT_WARNING_FLAGS) $(CLIENT_C_TYPE_ERRORS) $(CLIENT_INCLUDE_FLAGS) $(CLIENT_ALL_C_SOURCES) -shared -static-libgcc $(CLIENT_WINDOWS_DEF) -Wl,--no-undefined -lm -o $(CLIENT_WIN32_LIBRARY)
 
 # Compiler-policy changes in these files must invalidate existing native
 # objects.  Dependency files cover source/header changes but do not record the
 # command-line flags that produced an object.
 CODUOMP_NATIVE_CONFIG_INPUTS := build-mk/client-targets.mk \
-	build-mk/sources/client-engine.mk \
-	build-mk/platform-behavior.mk
+	build-mk/sources/client-engine.mk
 $(CODUOMP_NATIVE_C_OBJECTS) $(CODUOMP_NATIVE_CXX_OBJECTS) \
 	$(CODUOMP_NATIVE_OBJC_OBJECTS): \
 	$(CODUOMP_NATIVE_CONFIG_INPUTS)

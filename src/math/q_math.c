@@ -8,13 +8,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 /* Canonical Quake all-zero vector.  The original images retain identical
  * three-binary32 storage at CoDUOMP.exe 0x0058ec58,
@@ -69,7 +63,6 @@ float Q_acos(float value)
  * binary32 even though native i386 returns the unspilled x87 value in ST0.
  * None of the supporting PowerPC images retains a standalone traceback body.
  */
-#if defined(WINDOWS_BEHAVIOR)
 #if defined(__i386__) && defined(__GNUC__) && !defined(__clang__)
 /* The original i386 body returns its binary32 expression without first
  * spilling ST0.  Keep that excess-precision return even in callers whose
@@ -88,25 +81,6 @@ float _DotProduct(const vec3_t left, const vec3_t right)
                    (double)left[0] * (double)right[0]);
 #endif
 }
-#else
-float _DotProduct(const vec3_t left, const vec3_t right)
-{
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(left[0]), x87f_load_f32(right[0])),
-                 x87f_mul(x87f_load_f32(left[1]), x87f_load_f32(right[1]))),
-        x87f_mul(x87f_load_f32(left[2]), x87f_load_f32(right[2]))));
-#elif defined(__i386__) && (defined(__GNUC__) || defined(__clang__))
-    /* FLT_EVAL_METHOD=2 leaves this source-level float return live in ST0. */
-    return (left[0] * right[0] + left[1] * right[1]) +
-           left[2] * right[2];
-#else
-    return (float)(((long double)left[0] * (long double)right[0] +
-                    (long double)left[1] * (long double)right[1]) +
-                   (long double)left[2] * (long double)right[2]);
-#endif
-}
-#endif
 
 /*
  * The four authoritative Windows _VectorLength bodies are instruction-
@@ -130,15 +104,7 @@ float _VectorLength(const vec3_t vector)
 {
     double squaredLength;
 
-#if EMULATE_X87
-    squaredLength = x87f_store_f64(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(vector[0]),
-                          x87f_load_f32(vector[0])),
-                 x87f_mul(x87f_load_f32(vector[1]),
-                          x87f_load_f32(vector[1]))),
-        x87f_mul(x87f_load_f32(vector[2]), x87f_load_f32(vector[2]))));
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
+#if   (defined(__i386__) || defined(__x86_64__)) &&        (defined(__GNUC__) || defined(__clang__))
     __asm__ __volatile__("flds %1\n\t"
                          "fmuls %1\n\t"
                          "flds %2\n\t"
@@ -203,7 +169,6 @@ float VectorMax(const vec3_t vector)
  * 0x0003a0e9.  Only the three-term 3D folds require distinct source bodies;
  * the two-term 2D forms are normalized below.
  */
-#if defined(WINDOWS_BEHAVIOR)
 float VectorDistance(const vec3_t first, const vec3_t second)
 {
     const float differenceX = first[0] - second[0];
@@ -254,105 +219,6 @@ WIDE_FLOAT VectorDistanceSquared(const vec3_t first, const vec3_t second)
            (WIDE_FLOAT)differenceX * (WIDE_FLOAT)differenceX;
 }
 
-#else
-float VectorDistance(const vec3_t first, const vec3_t second)
-{
-#if EMULATE_X87
-    const float differenceX = x87f_store_f32(
-        x87f_sub(x87f_load_f32(second[0]), x87f_load_f32(first[0])));
-    const float differenceY = x87f_store_f32(
-        x87f_sub(x87f_load_f32(second[1]), x87f_load_f32(first[1])));
-    const float differenceZ = x87f_store_f32(
-        x87f_sub(x87f_load_f32(second[2]), x87f_load_f32(first[2])));
-    const x87f squaredDistance = x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(differenceX),
-                          x87f_load_f32(differenceX)),
-                 x87f_mul(x87f_load_f32(differenceY),
-                          x87f_load_f32(differenceY))),
-        x87f_mul(x87f_load_f32(differenceZ),
-                 x87f_load_f32(differenceZ)));
-
-    return (float)coduomp_math_sqrt(x87f_store_f64(squaredDistance));
-#elif (defined(__i386__) || defined(__x86_64__)) && \
-      (defined(__GNUC__) || defined(__clang__))
-    float differenceX;
-    float differenceY;
-    float differenceZ;
-    double squaredDistance;
-
-    __asm__ __volatile__("flds %[secondX]\n\t"
-                         "fsubs %[firstX]\n\t"
-                         "fstps %[x]\n\t"
-                         "flds %[secondY]\n\t"
-                         "fsubs %[firstY]\n\t"
-                         "fstps %[y]\n\t"
-                         "flds %[secondZ]\n\t"
-                         "fsubs %[firstZ]\n\t"
-                         "fstps %[z]\n\t"
-                         "flds %[x]\n\t"
-                         "fmuls %[x]\n\t"
-                         "flds %[y]\n\t"
-                         "fmuls %[y]\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "flds %[z]\n\t"
-                         "fmuls %[z]\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fstpl %[sum]"
-                         : [x] "=&m"(differenceX),
-                           [y] "=&m"(differenceY),
-                           [z] "=&m"(differenceZ),
-                           [sum] "=m"(squaredDistance)
-                         : [firstX] "m"(first[0]),
-                           [firstY] "m"(first[1]),
-                           [firstZ] "m"(first[2]),
-                           [secondX] "m"(second[0]),
-                           [secondY] "m"(second[1]),
-                           [secondZ] "m"(second[2])
-                         : "st", "st(1)", "memory");
-    return (float)coduomp_math_sqrt(squaredDistance);
-#else
-    const float differenceX = second[0] - first[0];
-    const float differenceY = second[1] - first[1];
-    const float differenceZ = second[2] - first[2];
-    const double squaredDistance = (double)(
-        ((long double)differenceX * (long double)differenceX +
-         (long double)differenceY * (long double)differenceY) +
-        (long double)differenceZ * (long double)differenceZ);
-
-    return (float)coduomp_math_sqrt(squaredDistance);
-#endif
-}
-
-WIDE_FLOAT VectorDistanceSquared(const vec3_t first, const vec3_t second)
-{
-#if EMULATE_X87
-    const float differenceX = x87f_store_f32(
-        x87f_sub(x87f_load_f32(second[0]), x87f_load_f32(first[0])));
-    const float differenceY = x87f_store_f32(
-        x87f_sub(x87f_load_f32(second[1]), x87f_load_f32(first[1])));
-    const float differenceZ = x87f_store_f32(
-        x87f_sub(x87f_load_f32(second[2]), x87f_load_f32(first[2])));
-
-    return x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(differenceX),
-                          x87f_load_f32(differenceX)),
-                 x87f_mul(x87f_load_f32(differenceY),
-                          x87f_load_f32(differenceY))),
-        x87f_mul(x87f_load_f32(differenceZ),
-                 x87f_load_f32(differenceZ))));
-#else
-    volatile float differenceX = second[0] - first[0];
-    volatile float differenceY = second[1] - first[1];
-    volatile float differenceZ = second[2] - first[2];
-
-    /* Wide evaluation retains the original unspilled ST0 return. */
-    return ((WIDE_FLOAT)differenceX * (WIDE_FLOAT)differenceX +
-            (WIDE_FLOAT)differenceY * (WIDE_FLOAT)differenceY) +
-           (WIDE_FLOAT)differenceZ * (WIDE_FLOAT)differenceZ;
-#endif
-}
-
-#endif
 
 /*
  * The 2D pair has the same computation on both platforms. Windows reverses
@@ -362,19 +228,6 @@ WIDE_FLOAT VectorDistanceSquared(const vec3_t first, const vec3_t second)
  */
 float VectorDistance2D(const vec3_t first, const vec3_t second)
 {
-#if EMULATE_X87
-    const float differenceX = x87f_store_f32(
-        x87f_sub(x87f_load_f32(first[0]), x87f_load_f32(second[0])));
-    const float differenceY = x87f_store_f32(
-        x87f_sub(x87f_load_f32(first[1]), x87f_load_f32(second[1])));
-    const x87f squaredDistance = x87f_add(
-        x87f_mul(x87f_load_f32(differenceX),
-                 x87f_load_f32(differenceX)),
-        x87f_mul(x87f_load_f32(differenceY),
-                 x87f_load_f32(differenceY)));
-
-    return (float)coduomp_math_sqrt(x87f_store_f64(squaredDistance));
-#else
     volatile float differenceX = first[0] - second[0];
     volatile float differenceY = first[1] - second[1];
     const double squaredDistance = (double)(
@@ -382,7 +235,6 @@ float VectorDistance2D(const vec3_t first, const vec3_t second)
         (long double)differenceY * (long double)differenceY);
 
     return (float)coduomp_math_sqrt(squaredDistance);
-#endif
 }
 
 #if defined(__i386__) && defined(__GNUC__) && !defined(__clang__)
@@ -391,24 +243,11 @@ __attribute__((optimize("-fexcess-precision=fast")))
 #endif
 float VectorDistanceSquared2D(const vec3_t first, const vec3_t second)
 {
-#if EMULATE_X87
-    const float differenceX = x87f_store_f32(
-        x87f_sub(x87f_load_f32(first[0]), x87f_load_f32(second[0])));
-    const float differenceY = x87f_store_f32(
-        x87f_sub(x87f_load_f32(first[1]), x87f_load_f32(second[1])));
-
-    return x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(differenceX),
-                 x87f_load_f32(differenceX)),
-        x87f_mul(x87f_load_f32(differenceY),
-                 x87f_load_f32(differenceY))));
-#else
     volatile float differenceX = first[0] - second[0];
     volatile float differenceY = first[1] - second[1];
 
     return (float)((long double)differenceX * (long double)differenceX +
                    (long double)differenceY * (long double)differenceY);
-#endif
 }
 
 /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
@@ -523,18 +362,9 @@ void _VectorCopy(const vec3_t source, vec3_t destination)
  */
 void _VectorScale(const vec3_t vector, float scale, vec3_t result)
 {
-#if EMULATE_X87
-    result[0] = x87f_store_f32(
-        x87f_mul(x87f_load_f32(vector[0]), x87f_load_f32(scale)));
-    result[1] = x87f_store_f32(
-        x87f_mul(x87f_load_f32(vector[1]), x87f_load_f32(scale)));
-    result[2] = x87f_store_f32(
-        x87f_mul(x87f_load_f32(vector[2]), x87f_load_f32(scale)));
-#else
     result[0] = vector[0] * scale;
     result[1] = vector[1] * scale;
     result[2] = vector[2] * scale;
-#endif
 }
 
 /*
@@ -550,21 +380,9 @@ void _VectorScale(const vec3_t vector, float scale, vec3_t result)
 void _VectorMA(const vec3_t start, float scale, const vec3_t direction,
                vec3_t result)
 {
-#if EMULATE_X87
-    result[0] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(scale), x87f_load_f32(direction[0])),
-        x87f_load_f32(start[0])));
-    result[1] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(scale), x87f_load_f32(direction[1])),
-        x87f_load_f32(start[1])));
-    result[2] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(scale), x87f_load_f32(direction[2])),
-        x87f_load_f32(start[2])));
-#else
     result[0] = (float)((WIDE_FLOAT)start[0] + (WIDE_FLOAT)scale * (WIDE_FLOAT)direction[0]);
     result[1] = (float)((WIDE_FLOAT)start[1] + (WIDE_FLOAT)scale * (WIDE_FLOAT)direction[1]);
     result[2] = (float)((WIDE_FLOAT)start[2] + (WIDE_FLOAT)scale * (WIDE_FLOAT)direction[2]);
-#endif
 }
 
 /*
@@ -595,21 +413,10 @@ void VectorInverse(vec3_t vector)
  */
 void Vector4Scale(const vec4_t input, float scale, vec4_t output)
 {
-#if EMULATE_X87
-    output[0] = x87f_store_f32(
-        x87f_mul(x87f_load_f32(input[0]), x87f_load_f32(scale)));
-    output[1] = x87f_store_f32(
-        x87f_mul(x87f_load_f32(input[1]), x87f_load_f32(scale)));
-    output[2] = x87f_store_f32(
-        x87f_mul(x87f_load_f32(input[2]), x87f_load_f32(scale)));
-    output[3] = x87f_store_f32(
-        x87f_mul(x87f_load_f32(input[3]), x87f_load_f32(scale)));
-#else
     output[0] = input[0] * scale;
     output[1] = input[1] * scale;
     output[2] = input[2] * scale;
     output[3] = input[3] * scale;
-#endif
 }
 
 /*
@@ -661,21 +468,11 @@ void AddPointToBounds(const vec3_t point, vec3_t mins, vec3_t maxs)
     for (int32_t lane = 0; lane < 3; ++lane) {
         uint32_t component;
 
-#if EMULATE_X87
-        if (x87f_lt(x87f_load_f32(point[lane]),
-                    x87f_load_f32(mins[lane]))) {
-#else
         if (point[lane] < mins[lane]) {
-#endif
             memcpy(&component, &point[lane], sizeof(component));
             memcpy(&mins[lane], &component, sizeof(component));
         }
-#if EMULATE_X87
-        if (x87f_lt(x87f_load_f32(maxs[lane]),
-                    x87f_load_f32(point[lane]))) {
-#else
         if (maxs[lane] < point[lane]) {
-#endif
             memcpy(&component, &point[lane], sizeof(component));
             memcpy(&maxs[lane], &component, sizeof(component));
         }
@@ -705,21 +502,11 @@ void ExpandBounds(const vec3_t addMins, const vec3_t addMaxs,
     for (int32_t lane = 0; lane < 3; ++lane) {
         uint32_t component;
 
-#if EMULATE_X87
-        if (x87f_lt(x87f_load_f32(addMins[lane]),
-                    x87f_load_f32(mins[lane]))) {
-#else
         if (addMins[lane] < mins[lane]) {
-#endif
             memcpy(&component, &addMins[lane], sizeof(component));
             memcpy(&mins[lane], &component, sizeof(component));
         }
-#if EMULATE_X87
-        if (x87f_lt(x87f_load_f32(maxs[lane]),
-                    x87f_load_f32(addMaxs[lane]))) {
-#else
         if (maxs[lane] < addMaxs[lane]) {
-#endif
             memcpy(&component, &addMaxs[lane], sizeof(component));
             memcpy(&maxs[lane], &component, sizeof(component));
         }

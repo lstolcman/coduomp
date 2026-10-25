@@ -34,11 +34,7 @@ enum {
 
 typedef float xanim_delta_t[XANIM_DELTA_LANE_COUNT];
 
-#if defined(WINDOWS_BEHAVIOR)
 typedef long double xanim_eval_fraction_t;
-#else
-typedef float xanim_eval_fraction_t;
-#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: the original evaluator repeats these arithmetic
  * shapes at each lane.  These helpers preserve the target-specific x87 store
@@ -46,280 +42,68 @@ typedef float xanim_eval_fraction_t;
 static float xanim_eval_madd_store(float destination, float left,
                                    float right)
 {
-#if defined(WINDOWS_BEHAVIOR)
     return (float)((long double)destination +
                    (long double)left * (long double)right);
-#elif EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_load_f32(destination),
-        x87f_mul(x87f_load_f32(left), x87f_load_f32(right))));
-#else
-    return destination + left * right;
-#endif
 }
 
 static float xanim_eval_mul_store(float left, float right)
 {
-#if defined(WINDOWS_BEHAVIOR)
     return (float)((long double)left * (long double)right);
-#elif EMULATE_X87
-    return x87f_store_f32(
-        x87f_mul(x87f_load_f32(left), x87f_load_f32(right)));
-#else
-    return left * right;
-#endif
 }
 
 static float xanim_eval_sub_store(float left, float right)
 {
-#if defined(WINDOWS_BEHAVIOR)
     return (float)((long double)left - (long double)right);
-#elif EMULATE_X87
-    return x87f_store_f32(
-        x87f_sub(x87f_load_f32(left), x87f_load_f32(right)));
-#else
-    return left - right;
-#endif
 }
 
 static float xanim_eval_add_store(float left, float right)
 {
-#if defined(WINDOWS_BEHAVIOR)
     return (float)((long double)left + (long double)right);
-#elif EMULATE_X87
-    return x87f_store_f32(
-        x87f_add(x87f_load_f32(left), x87f_load_f32(right)));
-#else
-    return left + right;
-#endif
 }
 
-#if !defined(WINDOWS_BEHAVIOR)
-static float xanim_eval_div_store(float numerator, float denominator)
-{
-#if EMULATE_X87
-    return x87f_store_f32(
-        x87f_div(x87f_load_f32(numerator), x87f_load_f32(denominator)));
-#else
-    return numerator / denominator;
-#endif
-}
-
-static float xanim_eval_sumsq2_store(float lane0, float lane1)
-{
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(lane0), x87f_load_f32(lane0)),
-        x87f_mul(x87f_load_f32(lane1), x87f_load_f32(lane1))));
-#else
-    return lane0 * lane0 + lane1 * lane1;
-#endif
-}
-
-static float xanim_eval_sumsq4_store(float lane0, float lane1,
-                                     float lane2, float lane3)
-{
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_add(
-            x87f_add(
-                x87f_mul(x87f_load_f32(lane0), x87f_load_f32(lane0)),
-                x87f_mul(x87f_load_f32(lane1), x87f_load_f32(lane1))),
-            x87f_mul(x87f_load_f32(lane2), x87f_load_f32(lane2))),
-        x87f_mul(x87f_load_f32(lane3), x87f_load_f32(lane3))));
-#else
-    return ((lane0 * lane0 + lane1 * lane1) + lane2 * lane2) +
-           lane3 * lane3;
-#endif
-}
-
-static float xanim_eval_mul3_store(float first, float second, float third)
-{
-#if EMULATE_X87
-    return x87f_store_f32(x87f_mul(
-        x87f_mul(x87f_load_f32(first), x87f_load_f32(second)),
-        x87f_load_f32(third)));
-#else
-    return first * second * third;
-#endif
-}
-
-static float xanim_eval_sub_two_products_store(
-    float destination, float left0, float right0,
-    float left1, float right1)
-{
-#if EMULATE_X87
-    return x87f_store_f32(x87f_sub(
-        x87f_load_f32(destination),
-        x87f_add(
-            x87f_mul(x87f_load_f32(left0), x87f_load_f32(right0)),
-            x87f_mul(x87f_load_f32(left1), x87f_load_f32(right1)))));
-#else
-    return destination - (left0 * right0 + left1 * right1);
-#endif
-}
-
-static float xanim_eval_reflection_lane0_store(
-    float reflection01, float oldLane1,
-    float reflection00, float oldLane0)
-{
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(reflection01),
-                 x87f_load_f32(oldLane1)),
-        x87f_mul(x87f_sub(x87f_load_f32(1.0f),
-                          x87f_load_f32(reflection00)),
-                 x87f_load_f32(oldLane0))));
-#else
-    return reflection01 * oldLane1 +
-           (1.0f - reflection00) * oldLane0;
-#endif
-}
-
-static float xanim_eval_rotation_cross_store(
-    float destination, const vec2_t endRotation,
-    const vec2_t startRotation, float scaledWeight)
-{
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_load_f32(destination),
-        x87f_mul(
-            x87f_sub(
-                x87f_mul(x87f_load_f32(endRotation[0]),
-                         x87f_load_f32(startRotation[1])),
-                x87f_mul(x87f_load_f32(endRotation[1]),
-                         x87f_load_f32(startRotation[0]))),
-            x87f_load_f32(scaledWeight))));
-#else
-    return destination +
-           (endRotation[0] * startRotation[1] -
-            endRotation[1] * startRotation[0]) * scaledWeight;
-#endif
-}
-
-static float xanim_eval_rotation_dot_store(
-    float destination, const vec2_t endRotation,
-    const vec2_t startRotation, float scaledWeight)
-{
-#if EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_load_f32(destination),
-        x87f_mul(
-            x87f_add(
-                x87f_mul(x87f_load_f32(endRotation[1]),
-                         x87f_load_f32(startRotation[1])),
-                x87f_mul(x87f_load_f32(endRotation[0]),
-                         x87f_load_f32(startRotation[0]))),
-            x87f_load_f32(scaledWeight))));
-#else
-    return destination +
-           (endRotation[1] * startRotation[1] +
-            endRotation[0] * startRotation[0]) * scaledWeight;
-#endif
-}
-#endif
 
 static float xanim_eval_frame_time(int32_t frameCount, float time,
                                    int32_t *roundedFrame)
 {
-#if defined(WINDOWS_BEHAVIOR)
     const long double raw =
         (long double)frameCount * (long double)time;
 
     *roundedFrame = (int32_t)raw;
     return (float)raw;
-#elif EMULATE_X87
-    const x87f raw =
-        x87f_mul(x87f_load_i32(frameCount), x87f_load_f32(time));
-    const float stored = x87f_store_f32(raw);
-
-    *roundedFrame = x87f_store_i32_trunc(x87f_load_f32(stored));
-    return stored;
-#else
-    const float stored = time * (float)frameCount;
-
-    *roundedFrame = (int32_t)stored;
-    return stored;
-#endif
 }
 
 static float xanim_eval_lerp_i32(int32_t first, int32_t second,
                                  xanim_eval_fraction_t fraction)
 {
-#if defined(WINDOWS_BEHAVIOR)
     return (float)((long double)(second - first) * fraction +
                    (long double)first);
-#elif EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_i32(second - first),
-                 x87f_load_f32(fraction)),
-        x87f_load_i32(first)));
-#else
-    return (float)(second - first) * fraction + (float)first;
-#endif
 }
 
 static float xanim_eval_lerp_f32(float first, float second,
                                  xanim_eval_fraction_t fraction)
 {
-#if defined(WINDOWS_BEHAVIOR)
     return (float)(((long double)second - (long double)first) * fraction +
                    (long double)first);
-#elif EMULATE_X87
-    return x87f_store_f32(x87f_add(
-        x87f_mul(x87f_sub(x87f_load_f32(second), x87f_load_f32(first)),
-                 x87f_load_f32(fraction)),
-        x87f_load_f32(first)));
-#else
-    return (second - first) * fraction + first;
-#endif
 }
 
 static float xanim_eval_accumulate_lerp_i32(
     float destination, int32_t first, int32_t second,
     xanim_eval_fraction_t fraction, float weight)
 {
-#if defined(WINDOWS_BEHAVIOR)
     return (float)((long double)destination +
                    ((long double)(second - first) * fraction +
                     (long double)first) *
                        (long double)weight);
-#elif EMULATE_X87
-    const x87f interpolated = x87f_add(
-        x87f_mul(x87f_load_i32(second - first),
-                 x87f_load_f32(fraction)),
-        x87f_load_i32(first));
-
-    return x87f_store_f32(x87f_add(
-        x87f_load_f32(destination),
-        x87f_mul(interpolated, x87f_load_f32(weight))));
-#else
-    return destination +
-           ((float)(second - first) * fraction + (float)first) * weight;
-#endif
 }
 
 static float xanim_eval_accumulate_lerp_f32(
     float destination, float first, float second,
     xanim_eval_fraction_t fraction, float weight)
 {
-#if defined(WINDOWS_BEHAVIOR)
     return (float)((long double)destination +
                    (((long double)second - (long double)first) * fraction +
                     (long double)first) *
                        (long double)weight);
-#elif EMULATE_X87
-    const x87f interpolated = x87f_add(
-        x87f_mul(x87f_sub(x87f_load_f32(second), x87f_load_f32(first)),
-                 x87f_load_f32(fraction)),
-        x87f_load_f32(first));
-
-    return x87f_store_f32(x87f_add(
-        x87f_load_f32(destination),
-        x87f_mul(interpolated, x87f_load_f32(weight))));
-#else
-    return destination + ((second - first) * fraction + first) * weight;
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of the terminal primary
@@ -371,22 +155,10 @@ static xanim_eval_fraction_t xanim_eval_byte_key_frame_fraction(
 {
     *frameIndex = XAnimFindByteKey(
         time, keys, keyCount, targetKey);
-#if defined(WINDOWS_BEHAVIOR)
     return ((long double)frameTime -
             (long double)keys[*frameIndex]) /
            (long double)((int32_t)keys[*frameIndex + 1] -
                          (int32_t)keys[*frameIndex]);
-#elif EMULATE_X87
-    return x87f_store_f32(x87f_div(
-        x87f_sub(x87f_load_f32(frameTime),
-                 x87f_load_i32(keys[*frameIndex])),
-        x87f_load_i32((int32_t)keys[*frameIndex + 1] -
-                      (int32_t)keys[*frameIndex])));
-#else
-    return (frameTime - (float)keys[*frameIndex]) /
-           (float)((int32_t)keys[*frameIndex + 1] -
-                   (int32_t)keys[*frameIndex]);
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of short-key interval
@@ -397,35 +169,16 @@ static xanim_eval_fraction_t xanim_eval_short_key_frame_fraction(
 {
     *frameIndex = XAnimFindShortKey(
         time, keys, keyCount, targetKey);
-#if defined(WINDOWS_BEHAVIOR)
     return ((long double)frameTime -
             (long double)keys[*frameIndex]) /
            (long double)((int32_t)keys[*frameIndex + 1] -
                          (int32_t)keys[*frameIndex]);
-#elif EMULATE_X87
-    return x87f_store_f32(x87f_div(
-        x87f_sub(x87f_load_f32(frameTime),
-                 x87f_load_i32(keys[*frameIndex])),
-        x87f_load_i32((int32_t)keys[*frameIndex + 1] -
-                      (int32_t)keys[*frameIndex])));
-#else
-    return (frameTime - (float)keys[*frameIndex]) /
-           (float)((int32_t)keys[*frameIndex + 1] -
-                   (int32_t)keys[*frameIndex]);
-#endif
 }
 
 static xanim_eval_fraction_t xanim_eval_unkeyed_frame_fraction(
     float frameTime, int32_t roundedFrame)
 {
-#if defined(WINDOWS_BEHAVIOR)
     return (long double)frameTime - (long double)roundedFrame;
-#elif EMULATE_X87
-    return x87f_store_f32(x87f_sub(
-        x87f_load_f32(frameTime), x87f_load_i32(roundedFrame)));
-#else
-    return frameTime - (float)roundedFrame;
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of primary-stream
@@ -872,7 +625,6 @@ static void xanim_eval_normalize_eval_parts(DObjAnimMat *parts)
             continue;
         }
 
-#if defined(WINDOWS_BEHAVIOR)
         const long double scale =
             (long double)1.0f / (long double)part->accumulatedWeight;
         for (int32_t lane = 0; lane < 4; ++lane) {
@@ -883,18 +635,6 @@ static void xanim_eval_normalize_eval_parts(DObjAnimMat *parts)
             part->translation[lane] = (float)(
                 scale * (long double)part->translation[lane]);
         }
-#else
-        const float scale =
-            xanim_eval_div_store(1.0f, part->accumulatedWeight);
-        for (int32_t lane = 0; lane < 4; ++lane) {
-            part->quat[lane] =
-                xanim_eval_mul_store(part->quat[lane], scale);
-        }
-        for (int32_t lane = 0; lane < 3; ++lane) {
-            part->translation[lane] =
-                xanim_eval_mul_store(part->translation[lane], scale);
-        }
-#endif
     }
 }
 
@@ -911,7 +651,6 @@ static void xanim_eval_merge_normalized_eval_parts(
             continue;
         }
 
-#if defined(WINDOWS_BEHAVIOR)
         const long double quatLengthSquared =
             (((long double)child[partIndex].quat[3] *
                   (long double)child[partIndex].quat[3] +
@@ -943,32 +682,6 @@ static void xanim_eval_merge_normalized_eval_parts(
                         scale);
             }
         }
-#else
-        const float quatLengthSquared = xanim_eval_sumsq4_store(
-            child[partIndex].quat[0], child[partIndex].quat[1],
-            child[partIndex].quat[2], child[partIndex].quat[3]);
-        if (quatLengthSquared != 0.0f) {
-            const float scale = xanim_eval_div_store(
-                weight, (float)sqrt((double)quatLengthSquared));
-            for (int32_t lane = 0; lane < 4; ++lane) {
-                dest[partIndex].quat[lane] = xanim_eval_madd_store(
-                    dest[partIndex].quat[lane],
-                    child[partIndex].quat[lane], scale);
-            }
-        }
-
-        if (child[partIndex].accumulatedWeight != 0.0f) {
-            const float scale = xanim_eval_div_store(
-                weight, child[partIndex].accumulatedWeight);
-            dest[partIndex].accumulatedWeight += weight;
-            for (int32_t lane = 0; lane < 3; ++lane) {
-                dest[partIndex].translation[lane] =
-                    xanim_eval_madd_store(
-                        dest[partIndex].translation[lane],
-                        child[partIndex].translation[lane], scale);
-            }
-        }
-#endif
     }
 }
 
@@ -986,7 +699,6 @@ static void xanim_eval_scale_normalized_eval_parts(
             continue;
         }
 
-#if defined(WINDOWS_BEHAVIOR)
         const long double quatLengthSquared =
             (((long double)part->quat[3] *
                   (long double)part->quat[3] +
@@ -1015,29 +727,6 @@ static void xanim_eval_scale_normalized_eval_parts(
                     scale * (long double)part->translation[lane]);
             }
         }
-#else
-        const float quatLengthSquared = xanim_eval_sumsq4_store(
-            part->quat[0], part->quat[1],
-            part->quat[2], part->quat[3]);
-        if (quatLengthSquared != 0.0f) {
-            const float scale = xanim_eval_div_store(
-                weight, (float)sqrt((double)quatLengthSquared));
-            for (int32_t lane = 0; lane < 4; ++lane) {
-                part->quat[lane] =
-                    xanim_eval_mul_store(part->quat[lane], scale);
-            }
-        }
-
-        if (part->accumulatedWeight != 0.0f) {
-            const float scale = xanim_eval_div_store(
-                weight, part->accumulatedWeight);
-            part->accumulatedWeight = weight;
-            for (int32_t lane = 0; lane < 3; ++lane) {
-                part->translation[lane] =
-                    xanim_eval_mul_store(part->translation[lane], scale);
-            }
-        }
-#endif
     }
 }
 
@@ -1342,7 +1031,6 @@ static void xanim_eval_normalize_delta_translation(
     float *delta)
 {
     if (delta[XANIM_DELTA_TRANSLATION_WEIGHT] != 0.0f) {
-#if defined(WINDOWS_BEHAVIOR)
         const long double scale =
             (long double)1.0f /
             (long double)delta[XANIM_DELTA_TRANSLATION_WEIGHT];
@@ -1352,17 +1040,6 @@ static void xanim_eval_normalize_delta_translation(
             scale * (long double)delta[XANIM_DELTA_TRANSLATION_1]);
         delta[XANIM_DELTA_TRANSLATION_2] = (float)(
             scale * (long double)delta[XANIM_DELTA_TRANSLATION_2]);
-#else
-        const float scale =
-            xanim_eval_div_store(
-                1.0f, delta[XANIM_DELTA_TRANSLATION_WEIGHT]);
-        delta[XANIM_DELTA_TRANSLATION_0] = xanim_eval_mul_store(
-            delta[XANIM_DELTA_TRANSLATION_0], scale);
-        delta[XANIM_DELTA_TRANSLATION_1] = xanim_eval_mul_store(
-            delta[XANIM_DELTA_TRANSLATION_1], scale);
-        delta[XANIM_DELTA_TRANSLATION_2] = xanim_eval_mul_store(
-            delta[XANIM_DELTA_TRANSLATION_2], scale);
-#endif
     }
 }
 
@@ -1372,7 +1049,6 @@ static void xanim_eval_merge_weighted_delta(
     float *dest, float *source,
     float weight)
 {
-#if defined(WINDOWS_BEHAVIOR)
     const long double rotationLengthSquared =
         (long double)source[XANIM_DELTA_ROTATION_0] *
             (long double)source[XANIM_DELTA_ROTATION_0] +
@@ -1404,36 +1080,6 @@ static void xanim_eval_merge_weighted_delta(
             (long double)dest[XANIM_DELTA_TRANSLATION_2] +
             (long double)source[XANIM_DELTA_TRANSLATION_2] * scale);
     }
-#else
-    const float rotationLengthSquared = xanim_eval_sumsq2_store(
-        source[XANIM_DELTA_ROTATION_1],
-        source[XANIM_DELTA_ROTATION_0]);
-    if (rotationLengthSquared != 0.0f) {
-        const float scale = xanim_eval_div_store(
-            weight, (float)sqrt((double)rotationLengthSquared));
-        dest[XANIM_DELTA_ROTATION_0] = xanim_eval_madd_store(
-            dest[XANIM_DELTA_ROTATION_0],
-            source[XANIM_DELTA_ROTATION_0], scale);
-        dest[XANIM_DELTA_ROTATION_1] = xanim_eval_madd_store(
-            dest[XANIM_DELTA_ROTATION_1],
-            source[XANIM_DELTA_ROTATION_1], scale);
-    }
-
-    if (source[XANIM_DELTA_TRANSLATION_WEIGHT] != 0.0f) {
-        const float scale = xanim_eval_div_store(
-            weight, source[XANIM_DELTA_TRANSLATION_WEIGHT]);
-        dest[XANIM_DELTA_TRANSLATION_WEIGHT] += weight;
-        dest[XANIM_DELTA_TRANSLATION_0] = xanim_eval_madd_store(
-            dest[XANIM_DELTA_TRANSLATION_0],
-            source[XANIM_DELTA_TRANSLATION_0], scale);
-        dest[XANIM_DELTA_TRANSLATION_1] = xanim_eval_madd_store(
-            dest[XANIM_DELTA_TRANSLATION_1],
-            source[XANIM_DELTA_TRANSLATION_1], scale);
-        dest[XANIM_DELTA_TRANSLATION_2] = xanim_eval_madd_store(
-            dest[XANIM_DELTA_TRANSLATION_2],
-            source[XANIM_DELTA_TRANSLATION_2], scale);
-    }
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of the weighted scale
@@ -1441,7 +1087,6 @@ static void xanim_eval_merge_weighted_delta(
 static void xanim_eval_scale_weighted_delta(
     float *delta, float weight)
 {
-#if defined(WINDOWS_BEHAVIOR)
     const long double rotationLengthSquared =
         (long double)delta[XANIM_DELTA_ROTATION_0] *
             (long double)delta[XANIM_DELTA_ROTATION_0] +
@@ -1468,31 +1113,6 @@ static void xanim_eval_scale_weighted_delta(
         delta[XANIM_DELTA_TRANSLATION_2] = (float)(
             scale * (long double)delta[XANIM_DELTA_TRANSLATION_2]);
     }
-#else
-    const float rotationLengthSquared = xanim_eval_sumsq2_store(
-        delta[XANIM_DELTA_ROTATION_1],
-        delta[XANIM_DELTA_ROTATION_0]);
-    if (rotationLengthSquared != 0.0f) {
-        const float scale = xanim_eval_div_store(
-            weight, (float)sqrt((double)rotationLengthSquared));
-        delta[XANIM_DELTA_ROTATION_0] = xanim_eval_mul_store(
-            delta[XANIM_DELTA_ROTATION_0], scale);
-        delta[XANIM_DELTA_ROTATION_1] = xanim_eval_mul_store(
-            delta[XANIM_DELTA_ROTATION_1], scale);
-    }
-
-    if (delta[XANIM_DELTA_TRANSLATION_WEIGHT] != 0.0f) {
-        const float scale = xanim_eval_div_store(
-            weight, delta[XANIM_DELTA_TRANSLATION_WEIGHT]);
-        delta[XANIM_DELTA_TRANSLATION_WEIGHT] = weight;
-        delta[XANIM_DELTA_TRANSLATION_0] = xanim_eval_mul_store(
-            delta[XANIM_DELTA_TRANSLATION_0], scale);
-        delta[XANIM_DELTA_TRANSLATION_1] = xanim_eval_mul_store(
-            delta[XANIM_DELTA_TRANSLATION_1], scale);
-        delta[XANIM_DELTA_TRANSLATION_2] = xanim_eval_mul_store(
-            delta[XANIM_DELTA_TRANSLATION_2], scale);
-    }
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of the leaf path in
@@ -1702,7 +1322,6 @@ void XAnimGetAbsDelta(XAnim *tree, uint32_t animIndex,
  * Name: exact same-module Mac symbol TransformToQuatRefFrame. */
 void TransformToQuatRefFrame(const vec2_t rotation, vec2_t vector)
 {
-#if defined(WINDOWS_BEHAVIOR)
     const long double lane0Squared =
         (long double)rotation[0] * (long double)rotation[0];
     const long double lengthSquared =
@@ -1730,29 +1349,6 @@ void TransformToQuatRefFrame(const vec2_t rotation, vec2_t vector)
         vector[1] = (float)((long double)oldLane1 - reflectedLane1);
         vector[0] = (float)newLane0;
     }
-#else
-    const float lane0Squared =
-        xanim_eval_mul_store(rotation[0], rotation[0]);
-    const float lengthSquared = xanim_eval_madd_store(
-        lane0Squared, rotation[1], rotation[1]);
-
-    if (lengthSquared != 0.0f) {
-        const float inverseScale =
-            xanim_eval_div_store(2.0f, lengthSquared);
-        const float reflection00 =
-            xanim_eval_mul_store(lane0Squared, inverseScale);
-        const float reflection01 = xanim_eval_mul3_store(
-            rotation[0], rotation[1], inverseScale);
-        const float oldLane0 = vector[0];
-        const float oldLane1 = vector[1];
-
-        vector[1] = xanim_eval_sub_two_products_store(
-            oldLane1, reflection00, oldLane1,
-            reflection01, oldLane0);
-        vector[0] = xanim_eval_reflection_lane0_store(
-            reflection01, oldLane1, reflection00, oldLane0);
-    }
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x004980b0..0x00498124.
@@ -1825,7 +1421,6 @@ void XAnimCalcRelDeltaParts(XAnimParts *record, float weight,
 
     float scaledWeight =
         xanim_eval_mul_store(weight, packedShortScaleSquared);
-#if defined(WINDOWS_BEHAVIOR)
     delta[XANIM_DELTA_ROTATION_0] = (float)(
         (long double)delta[XANIM_DELTA_ROTATION_0] +
         (((long double)endRotation[0] *
@@ -1840,14 +1435,6 @@ void XAnimCalcRelDeltaParts(XAnimParts *record, float weight,
           (long double)endRotation[0] *
               (long double)startRotation[0]) *
          (long double)scaledWeight));
-#else
-    delta[XANIM_DELTA_ROTATION_0] = xanim_eval_rotation_cross_store(
-        delta[XANIM_DELTA_ROTATION_0], endRotation,
-        startRotation, scaledWeight);
-    delta[XANIM_DELTA_ROTATION_1] = xanim_eval_rotation_dot_store(
-        delta[XANIM_DELTA_ROTATION_1], endRotation,
-        startRotation, scaledWeight);
-#endif
 
     moveDelta[0] = xanim_eval_sub_store(endMove[0], startMove[0]);
     moveDelta[1] = xanim_eval_sub_store(endMove[1], startMove[1]);

@@ -3,16 +3,10 @@
 #include "bg_player_state.h"
 #include "compat/coduo_int32_bits.h"
 #include "compat/coduo_x87_eval.h"
-#include "compat/coduo_x87emu.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /*
  * The complete PM trace/touch primitive cluster is shared by Windows cgame,
@@ -23,8 +17,8 @@
  *   uo_game_mp_x86.dll   0x20008030..0x20008187
  *
  * Linux retains the same operations at RVAs 0x00023174..0x000233e0.  Its
- * PM_ClipVelocity alone has a different floating-point realization, preserved
- * below as a complete behavior-selected body.
+ * PM_ClipVelocity alone has a different floating-point realization. The
+ * maintained body below follows the Windows arithmetic graph.
  */
 
 void PM_trace(trace_t *results, const vec3_t start, const vec3_t mins,
@@ -75,37 +69,12 @@ void PM_AddTouchEnt(int32_t entityNum)
     pm->numtouch = coduo_int32_from_bits((uint32_t)pm->numtouch + 1u);
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 void PM_ClipVelocity(const vec3_t input, const vec3_t normal, vec3_t output,
                      float overbounce)
 {
     /* Both Windows modules accumulate Y, Z, X and retain the x87 value through
      * the scale and three output expressions.  The original process control
      * word supplies PC=53; the native intermediate must retain x87 precision. */
-#if EMULATE_X87
-    x87f backoff = x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(input[1]),
-                          x87f_load_f32(normal[1])),
-                 x87f_mul(x87f_load_f32(normal[2]),
-                          x87f_load_f32(input[2]))),
-        x87f_mul(x87f_load_f32(input[0]), x87f_load_f32(normal[0])));
-
-    if (x87f_lt_signaling(backoff, x87f_load_f32(0.0f))) {
-        backoff = x87f_mul(backoff, x87f_load_f32(overbounce));
-    } else {
-        backoff = x87f_div(backoff, x87f_load_f32(overbounce));
-    }
-
-    output[0] = x87f_store_f32(x87f_sub(
-        x87f_load_f32(input[0]),
-        x87f_mul(backoff, x87f_load_f32(normal[0]))));
-    output[1] = x87f_store_f32(x87f_sub(
-        x87f_load_f32(input[1]),
-        x87f_mul(backoff, x87f_load_f32(normal[1]))));
-    output[2] = x87f_store_f32(x87f_sub(
-        x87f_load_f32(input[2]),
-        x87f_mul(backoff, x87f_load_f32(normal[2]))));
-#else
     WIDE_FLOAT backoff =
         (WIDE_FLOAT)input[1] * normal[1] +
         (WIDE_FLOAT)normal[2] * input[2] +
@@ -120,59 +89,7 @@ void PM_ClipVelocity(const vec3_t input, const vec3_t normal, vec3_t output,
     output[0] = (float)(input[0] - normal[0] * backoff);
     output[1] = (float)(input[1] - normal[1] * backoff);
     output[2] = (float)(input[2] - normal[2] * backoff);
-#endif
 }
-#else
-void PM_ClipVelocity(const vec3_t input, const vec3_t normal, vec3_t output,
-                     float overbounce)
-{
-    float backoff;
-    int32_t index;
-
-    /* Linux accumulates X, Y, Z at wide precision, stores the complete backoff
-     * as binary32 before the branch, and stores each normal*backoff product
-     * before subtracting it. */
-#if EMULATE_X87
-    backoff = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(input[0]),
-                          x87f_load_f32(normal[0])),
-                 x87f_mul(x87f_load_f32(input[1]),
-                          x87f_load_f32(normal[1]))),
-        x87f_mul(x87f_load_f32(input[2]), x87f_load_f32(normal[2]))));
-    if (backoff < 0.0f) {
-        backoff = x87f_store_f32(
-            x87f_mul(x87f_load_f32(backoff), x87f_load_f32(overbounce)));
-    } else {
-        backoff = x87f_store_f32(
-            x87f_div(x87f_load_f32(backoff), x87f_load_f32(overbounce)));
-    }
-#else
-    backoff = (float)(
-        ((WIDE_FLOAT)input[0] * normal[0] + (WIDE_FLOAT)input[1] * normal[1]) +
-        (WIDE_FLOAT)input[2] * normal[2]);
-    if (backoff < 0.0f) {
-        backoff *= overbounce;
-    } else {
-        backoff /= overbounce;
-    }
-#endif
-
-    for (index = 0; index < 3; ++index) {
-        float change;
-
-#if EMULATE_X87
-        change = x87f_store_f32(
-            x87f_mul(x87f_load_f32(normal[index]),
-                     x87f_load_f32(backoff)));
-        output[index] = x87f_store_f32(
-            x87f_sub(x87f_load_f32(input[index]), x87f_load_f32(change)));
-#else
-        change = normal[index] * backoff;
-        output[index] = input[index] - change;
-#endif
-    }
-}
-#endif
 
 #if UINTPTR_MAX == UINT32_MAX
 typedef char bg_pmove_trace_mask_offset[

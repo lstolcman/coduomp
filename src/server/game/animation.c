@@ -20,7 +20,6 @@
 #include "compat/coduo_ctype_compat.h"
 #include "game_globals.h"
 #include "g_syscalls.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
 #include "compat/libm/coduo_libm.h"
 #include "qcommon/q_bits.h"

@@ -1,32 +1,12 @@
 #include "q_math.h"
 
-#include "compat/coduo_x87emu.h"
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#if EMULATE_X87
-#define MATRIX34_DOT3(a, b, c, d, e, f) \
-    x87f_store_f32(x87f_add( \
-        x87f_add(x87f_mul(x87f_load_f32(a), x87f_load_f32(b)), \
-                 x87f_mul(x87f_load_f32(c), x87f_load_f32(d))), \
-        x87f_mul(x87f_load_f32(e), x87f_load_f32(f))))
-#define MATRIX34_DOT4(a, b, c, d, e, f, translation) \
-    x87f_store_f32(x87f_add( \
-        x87f_add(x87f_add(x87f_mul(x87f_load_f32(a), x87f_load_f32(b)), \
-                          x87f_mul(x87f_load_f32(c), x87f_load_f32(d))), \
-                 x87f_mul(x87f_load_f32(e), x87f_load_f32(f))), \
-        x87f_load_f32(translation)))
-#else
 #define MATRIX34_DOT3(a, b, c, d, e, f) \
     (((WIDE_FLOAT)(a) * (WIDE_FLOAT)(b) + (WIDE_FLOAT)(c) * (WIDE_FLOAT)(d)) \
      + (WIDE_FLOAT)(e) * (WIDE_FLOAT)(f))
 #define MATRIX34_DOT4(a, b, c, d, e, f, translation) \
     (MATRIX34_DOT3(a, b, c, d, e, f) + (WIDE_FLOAT)(translation))
-#endif
 
 /*
  * The complete 725-byte Linux bodies are instruction-identical:
@@ -48,12 +28,8 @@ void MatrixMultiply34(const float left[3][4], const float right[3][4],
                       float output[3][4])
 {
     for (int row = 0; row < 3; ++row) {
-#if defined(WINDOWS_BEHAVIOR)
         const int first = row == 0 ? 0 : 2;
         const int last = row == 0 ? 2 : 0;
-#else
-        const int first = 0, last = 2;
-#endif
         output[row][0] = MATRIX34_DOT3(
             left[row][first], right[first][0], left[row][1], right[1][0], left[row][last], right[last][0]);
         output[row][1] = MATRIX34_DOT3(

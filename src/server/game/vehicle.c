@@ -20,7 +20,6 @@
 #include "game_functions.h"
 #include "qcommon/info.h"
 #include "compat/crt/atof_compat.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "compat/coduo_native_x87.h"
 #include "compat/coduo_fp_conversion.h"
 #include "scr_vm.h"
@@ -275,11 +274,7 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_DAMAGE_SCALE_RADIUS_BLEND  0.7f
 #define VEH_DAMAGE_SCALE_GRENADE_HEIGHT 10.0f
 #define VEH_DAMAGE_SCALE_GRENADE_RADIUS_MULT 0.8f
-#if defined(WINDOWS_BEHAVIOR)
 #define VEH_DAMAGE_SCALE_ANGLE_RADIANS ((double)0.34906587f) /* 20 degrees, rounded to binary32 before cos. */
-#else
-#define VEH_DAMAGE_SCALE_ANGLE_RADIANS 0.3490658503988659 /* 20 degrees; original double64 0x3fd657184ae74487 */
-#endif
 #define VEH_PUSH_AWAY_STEP             4.0f
 #define VEH_PUSH_AWAY_PLAYER_RADIUS    32.0f
 #define VEH_BOUNDS_EXPANSION_SCALE     1.2f
@@ -555,7 +550,7 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
                                  vec3_t linearAccel,
                                  vec3_t angularAccel);
 void VEH_UpdateClient(gentity_t *ent);
-#if !EMULATE_X87 && !defined(__x86_64__)
+#if !defined(__x86_64__)
 static int game_compat_veh_round_to_int(float value);
 #endif
 qboolean VEH_PhysicsNotRequired(gentity_t *ent, qboolean checkNearbyClients);
@@ -756,20 +751,10 @@ static void game_compat_veh_project_velocity_to_local_axis(const vehicle_state_t
                                            vec3_t localVelocity)
 {
     for (int axisIndex = 0; axisIndex < 3; axisIndex++) {
-#if EMULATE_X87
-        localVelocity[axisIndex] = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(axis[axisIndex][0]),
-                              x87f_load_f32(vehicleState->velocity[0])),
-                     x87f_mul(x87f_load_f32(axis[axisIndex][1]),
-                              x87f_load_f32(vehicleState->velocity[1]))),
-            x87f_mul(x87f_load_f32(axis[axisIndex][2]),
-                     x87f_load_f32(vehicleState->velocity[2]))));
-#else
         localVelocity[axisIndex] =
             axis[axisIndex][0] * vehicleState->velocity[0] +
             axis[axisIndex][1] * vehicleState->velocity[1] +
             axis[axisIndex][2] * vehicleState->velocity[2];
-#endif
     }
 }
 
@@ -777,18 +762,9 @@ static void game_compat_veh_project_velocity_to_local_axis(const vehicle_state_t
 static void game_compat_veh_add_scaled_axis(vec3_t velocity, axis_t axis,
                               int axisIndex, float scale)
 {
-#if EMULATE_X87
-    for (int i = 0; i < 3; i++) {
-        velocity[i] = x87f_store_f32(x87f_add(
-            x87f_load_f32(velocity[i]),
-            x87f_mul(x87f_load_f32(axis[axisIndex][i]),
-                     x87f_load_f32(scale))));
-    }
-#else
     velocity[0] += axis[axisIndex][0] * scale;
     velocity[1] += axis[axisIndex][1] * scale;
     velocity[2] += axis[axisIndex][2] * scale;
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
@@ -909,17 +885,10 @@ static float game_compat_veh_clamp_abs(float value, float maxAbs)
  * (e.g. 0x7da9b/0x7dbad: fstp QWORD; call sqrt), never sqrtf. */
 static float game_compat_veh_length3(const vec3_t value)
 {
-#if EMULATE_X87
-    return (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(value[0]), x87f_load_f32(value[0])),
-                 x87f_mul(x87f_load_f32(value[1]), x87f_load_f32(value[1]))),
-        x87f_mul(x87f_load_f32(value[2]), x87f_load_f32(value[2])))));
-#else
     return (float)CoduoLibm_Sqrt((double)(
         (long double)value[0] * (long double)value[0] +
         (long double)value[1] * (long double)value[1] +
         (long double)value[2] * (long double)value[2]));
-#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
@@ -1115,7 +1084,7 @@ static void game_compat_veh_set_wheel_surface_at(vehicle_state_t *vehicleState,
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-#if !EMULATE_X87 && !defined(__x86_64__)
+#if !defined(__x86_64__)
 static int game_compat_veh_round_to_int(float value)
 {
     /* The original converts an already-rounded binary32 value. */
@@ -1129,20 +1098,10 @@ static float game_compat_veh_non_pvs_tank_delta_scale(int delta)
     if (delta > VEH_NONPVS_TANK_ENCODE_MAX) {
         /* single float/float divide: x87 forms the 80-bit quotient and rounds
          * once at the float return store, where SSE divides in 32 bits -> shim */
-#if EMULATE_X87
-        return x87f_store_f32(x87f_div(x87f_load_f32(VEH_NONPVS_TANK_ORIGIN_LIMIT_POS),
-                                       x87f_load_f32((float)delta)));
-#else
         return VEH_NONPVS_TANK_ORIGIN_LIMIT_POS / (float)delta;
-#endif
     }
     if (delta < VEH_NONPVS_TANK_ENCODE_MIN) {
-#if EMULATE_X87
-        return x87f_store_f32(x87f_div(x87f_load_f32(VEH_NONPVS_TANK_ORIGIN_LIMIT_NEG),
-                                       x87f_load_f32((float)delta)));
-#else
         return VEH_NONPVS_TANK_ORIGIN_LIMIT_NEG / (float)delta;
-#endif
     }
 
     return 1.0f;
@@ -1343,29 +1302,15 @@ static void game_compat_veh_player_blend_update_anims(gentity_t *player, gentity
 
         if (vehicleLeanYaw > 0.0f) {
             /* single float/float divide -> shim; fabsf is an exact sign clear */
-#if EMULATE_X87
-            leanWeight = game_compat_veh_clamp_float(
-                x87f_store_f32(x87f_div(x87f_load_f32(vehicleLeanYaw),
-                                        x87f_load_f32(VEH_PLAYER_BLEND_LEAN_YAW_LIMIT))),
-                0.0f, 1.0f);
-#else
             leanWeight =
                 game_compat_veh_clamp_float(vehicleLeanYaw / VEH_PLAYER_BLEND_LEAN_YAW_LIMIT,
                                0.0f, 1.0f);
-#endif
             leanAnim = game_compat_veh_player_blend_last_child(topAnim);
         } else if (vehicleLeanYaw < 0.0f) {
-#if EMULATE_X87
-            leanWeight = game_compat_veh_clamp_float(
-                x87f_store_f32(x87f_div(x87f_load_f32(fabsf(vehicleLeanYaw)),
-                                        x87f_load_f32(VEH_PLAYER_BLEND_LEAN_YAW_LIMIT))),
-                0.0f, 1.0f);
-#else
             leanWeight =
                 game_compat_veh_clamp_float(fabsf(vehicleLeanYaw) /
                                    VEH_PLAYER_BLEND_LEAN_YAW_LIMIT,
                                0.0f, 1.0f);
-#endif
             leanAnim = game_compat_veh_player_blend_first_child(topAnim);
         } else {
             leanWeight = 0.0f;
@@ -1569,11 +1514,7 @@ static int game_compat_veh_motion_byte_from_axis(WIDE_FLOAT value)
      * clamp arms are the doubles 0.0 / 255.0. Windows uses the rounded
      * binary32 127/30 coefficient and keeps the forward axis wide on entry. */
     volatile double scaled;
-#if defined(WINDOWS_BEHAVIOR)
     const WIDE_FLOAT encoded = value * VEH_MOTION_ANIM_ENCODE_SCALE + VEH_MOTION_ANIM_CENTER;
-#else
-    const WIDE_FLOAT encoded = value * VEH_MOTION_ANIM_CENTER / VEH_MOTION_ANIM_DEGREES + VEH_MOTION_ANIM_CENTER;
-#endif
     if (encoded > 0.0f) {
         if (encoded < VEH_MOTION_ANIM_MAX) {
             scaled = (double)encoded;
@@ -2546,12 +2487,7 @@ int G_GetNonPVSTankInfo(gentity_t *viewer, const float *origin,
          * the +0.5f sums feed fistp directly with no float store. */
         diffX = tank->currentOrigin[0] - origin[0];
         diffY = tank->currentOrigin[1] - origin[1];
-#if EMULATE_X87
-        deltaX = x87f_store_i32_trunc(
-            x87f_add(x87f_load_f32(diffX), x87f_load_f32(half)));
-        deltaY = x87f_store_i32_trunc(
-            x87f_add(x87f_load_f32(diffY), x87f_load_f32(half)));
-#elif defined(__x86_64__)
+#if   defined(__x86_64__)
         deltaX = CODUO_X87_TRUNCATE_I32_FIRST(
             &conversionControl,
             (long double)diffX + (long double)half);
@@ -2568,10 +2504,7 @@ int G_GetNonPVSTankInfo(gentity_t *viewer, const float *origin,
         if (xScale < 1.0f || yScale < 1.0f) {
             /* 0x8c19b/0x8c1bb: fild * scale feeds fistp directly. */
             if (xScale < yScale) {
-#if EMULATE_X87
-                deltaY = x87f_store_i32_trunc(
-                    x87f_mul(x87f_load_i32(deltaY), x87f_load_f32(xScale)));
-#elif defined(__x86_64__)
+#if   defined(__x86_64__)
                 deltaY = CODUO_X87_TRUNCATE_I32_NEXT(
                     &conversionControl,
                     (long double)deltaY * (long double)xScale);
@@ -2579,10 +2512,7 @@ int G_GetNonPVSTankInfo(gentity_t *viewer, const float *origin,
                 deltaY = (int)(deltaY * xScale);
 #endif
             } else if (yScale < xScale) {
-#if EMULATE_X87
-                deltaX = x87f_store_i32_trunc(
-                    x87f_mul(x87f_load_i32(deltaX), x87f_load_f32(yScale)));
-#elif defined(__x86_64__)
+#if   defined(__x86_64__)
                 deltaX = CODUO_X87_TRUNCATE_I32_NEXT(
                     &conversionControl,
                     (long double)deltaX * (long double)yScale);
@@ -2595,11 +2525,7 @@ int G_GetNonPVSTankInfo(gentity_t *viewer, const float *origin,
         deltaX = game_compat_veh_clamp_non_pvs_tank_delta(deltaX);
         deltaY = game_compat_veh_clamp_non_pvs_tank_delta(deltaY);
         /* 0x8c289: the yaw product feeds fistp directly (no float store). */
-#if EMULATE_X87
-        yaw = (uint32_t)x87f_store_i32_trunc(x87f_mul(
-            x87f_load_f32(tank->currentAngles[1]),
-            x87f_load_f32(yawScale)));
-#elif defined(__x86_64__)
+#if   defined(__x86_64__)
         yaw = (uint32_t)CODUO_X87_TRUNCATE_I32_NEXT(
             &conversionControl,
             (long double)tank->currentAngles[1] *
@@ -2761,15 +2687,9 @@ void Scr_Vehicle_Controller(gentity_t *ent, uint32_t *partBits)
      * Each angle is stored to float before the bone update. Windows uses a
      * rounded coefficient; Linux keeps the multiply and divide separate. */
     const vec3_t bodyAngles = {
-#if defined(WINDOWS_BEHAVIOR)
         (float)(((WIDE_FLOAT)ent->s.vehicleBodyPitchPacked - VEH_MOTION_ANIM_CENTER) * VEH_MOTION_ANIM_DECODE_SCALE),
         0.0f,
         (float)(((WIDE_FLOAT)ent->s.vehicleBodyRollPacked - VEH_MOTION_ANIM_CENTER) * VEH_MOTION_ANIM_DECODE_SCALE)
-#else
-        (float)(((WIDE_FLOAT)ent->s.vehicleBodyPitchPacked - VEH_MOTION_ANIM_CENTER) * VEH_MOTION_ANIM_DEGREES / VEH_MOTION_ANIM_CENTER),
-        0.0f,
-        (float)(((WIDE_FLOAT)ent->s.vehicleBodyRollPacked - VEH_MOTION_ANIM_CENTER) * VEH_MOTION_ANIM_DEGREES / VEH_MOTION_ANIM_CENTER)
-#endif
     };
     int boneIndex;
 
@@ -2914,15 +2834,9 @@ float VEH_TrackValue(float target, float current, float speed)
 float VEH_LerpValue(float target, float current, float speed)
 {
     const float delta = target - current;
-#if EMULATE_X87
-    const float step = x87f_store_f32(x87f_mul(
-        x87f_mul(x87f_load_f32(speed), x87f_load_f32(delta)),
-        x87f_load_f32(VEH_APPROACH_FRAME_SECONDS)));
-#else
     const float step =
         (float)((long double)speed * (long double)delta *
                 (long double)VEH_APPROACH_FRAME_SECONDS);
-#endif
 
     if (!(fabsf(delta) > VEH_APPROACH_EPSILON)) {
         return target;
@@ -3212,17 +3126,8 @@ void Scr_Vehicle_Think(gentity_t *ent)
      * Linux converts directly to a signed dword.
      */
     /* 0x8cc1a: the product feeds fistp directly (no float store). */
-#if EMULATE_X87
-    ent->s.time2 = x87f_store_i32_trunc(x87f_mul(
-        x87f_load_f32(vehicleInfo->suspensionTravel),
-        x87f_load_f32(millisecondsPerSecond)));
-#elif defined(LINUX_BEHAVIOR) && CODUO_ARCH_HAS_X87
-    ent->s.time2 = CODUO_X87_TRUNCATE_I32(
-        (WIDE_FLOAT)vehicleInfo->suspensionTravel * millisecondsPerSecond);
-#else
     ent->s.time2 = coduo_fp_to_i32_extended(
         (WIDE_FLOAT)vehicleInfo->suspensionTravel * millisecondsPerSecond);
-#endif
     if (g_vehicleTrafficStressTest.integer < 0) {
         /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
         const int stressCount = game_compat_veh_abs_int(g_vehicleTrafficStressTest.integer);
@@ -3512,19 +3417,10 @@ void VEH_UpdateShaderTime(gentity_t *ent)
      * at 0x86c42 -- NOT spilled to a float -- so the 80-bit product is truncated
      * to int; our -mfpmath=387 build spills it (deviating), so force the 80-bit
      * product with a long double multiply (1000 is exact) and truncate it. */
-#if EMULATE_X87
-    scrollStep = x87f_store_f32(x87f_div(x87f_load_f32(scrollSpeed),
-                                         x87f_load_f32(VEH_TEXTURE_SCROLL_SPEED_SCALE)));
-    scrollStep *= VEH_PHYSICS_FRAME_SECONDS;
-    scrollStep *= scrollScale;
-    ent->s.time += x87f_store_i32_trunc(
-        x87f_mul(x87f_load_f32(scrollStep), x87f_load_f32(1000.0f)));
-#else
     scrollStep = scrollSpeed / VEH_TEXTURE_SCROLL_SPEED_SCALE;
     scrollStep *= VEH_PHYSICS_FRAME_SECONDS;
     scrollStep *= scrollScale;
     ent->s.time += (int)((long double)scrollStep * 1000.0f);
-#endif
 }
 
 /* ------------------------------------------------------------------ */
@@ -3704,9 +3600,7 @@ WIDE_FLOAT Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
         const float dot = coduo_round_f32(rawDot);
         if (axisIndex == 0) {
             forwardDot = rawDot;
-#if defined(WINDOWS_BEHAVIOR)
             forwardDot = dot;
-#endif
         }
 
         if (dominantAxis < 0 || fabsf(dominantDot) < fabsf(dot)) {
@@ -3759,13 +3653,8 @@ WIDE_FLOAT Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
                 goto return_scale;
             }
 
-#if defined(WINDOWS_BEHAVIOR)
             scale = (WIDE_FLOAT)weaponScale * (WIDE_FLOAT)vehicleInfo->damageScaleTop *
                     (WIDE_FLOAT)bulletScale * (WIDE_FLOAT)VEH_DAMAGE_SCALE_PERCENT;
-#else
-            scale = (WIDE_FLOAT)bulletScale * (WIDE_FLOAT)VEH_DAMAGE_SCALE_PERCENT *
-                    (WIDE_FLOAT)vehicleInfo->damageScaleTop * (WIDE_FLOAT)weaponScale;
-#endif
             goto return_scale;
         }
 
@@ -3815,16 +3704,9 @@ WIDE_FLOAT Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
     }
 
     /* The profiles multiply these three operands in different orders. */
-#if defined(WINDOWS_BEHAVIOR)
     scale = (WIDE_FLOAT)bulletScale * scale * (WIDE_FLOAT)VEH_DAMAGE_SCALE_PERCENT;
-#else
-    scale = (WIDE_FLOAT)bulletScale * (WIDE_FLOAT)VEH_DAMAGE_SCALE_PERCENT * scale;
-#endif
 
 return_scale:
-#if defined(LINUX_BEHAVIOR)
-    scale = coduo_round_f32(scale);
-#endif
     return scale;
 }
 
@@ -3982,31 +3864,17 @@ void VEH_UpdateScriptedInput(gentity_t *ent, const vec3_t inputVector,
 
     /* inputVector . axis-row dot: 3-mul/2-add chain kept 80-bit until the field
      * store -> shim (left-assoc (m0+m1)+m2). */
-#if EMULATE_X87
-    vehicleState->localAccel.components.forward = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(inputVector[0]), x87f_load_f32(axis[0][0])),
-                 x87f_mul(x87f_load_f32(inputVector[1]), x87f_load_f32(axis[0][1]))),
-        x87f_mul(x87f_load_f32(inputVector[2]), x87f_load_f32(axis[0][2]))));
-#else
     vehicleState->localAccel.components.forward =
         inputVector[0] * axis[0][0] +
         inputVector[1] * axis[0][1] +
         inputVector[2] * axis[0][2];
-#endif
     /* 0x7d57e..0x7d5a8: the projection multiplies axis row 1, and
      * the negation is a sign-bit flip on the stored float (negate commutes with
      * round-to-nearest, so -store_f32(dot) matches). */
-#if EMULATE_X87
-    vehicleState->localAccel.components.vertical = -x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(inputVector[0]), x87f_load_f32(axis[1][0])),
-                 x87f_mul(x87f_load_f32(inputVector[1]), x87f_load_f32(axis[1][1]))),
-        x87f_mul(x87f_load_f32(inputVector[2]), x87f_load_f32(axis[1][2]))));
-#else
     vehicleState->localAccel.components.vertical =
         -(inputVector[0] * axis[1][0] +
           inputVector[1] * axis[1][1] +
           inputVector[2] * axis[1][2]);
-#endif
 
     vehicleState->throttleScale = clampedScale * VEH_THROTTLE_SCALE_MULTIPLIER;
     vehicleState->throttleScalePrevious = vehicleState->throttleScale;
@@ -4015,20 +3883,6 @@ void VEH_UpdateScriptedInput(gentity_t *ent, const vec3_t inputVector,
     VectorNormalize2D(vehicleState->localAccel.vector);
     /* inputScale * clampedScale * accel: 2-mul chain kept 80-bit until the
      * ClampAbs float arg -> shim ((a*b)*c). */
-#if EMULATE_X87
-    vehicleState->localAccel.components.forward = game_compat_veh_clamp_abs(
-        x87f_store_f32(x87f_mul(
-            x87f_mul(x87f_load_f32(vehicleInfo->forwardInputScale),
-                     x87f_load_f32(clampedScale)),
-            x87f_load_f32(vehicleState->localAccel.components.forward))),
-        VEH_SCRIPTED_INPUT_CLAMP);
-    vehicleState->localAccel.components.vertical = game_compat_veh_clamp_abs(
-        x87f_store_f32(x87f_mul(
-            x87f_mul(x87f_load_f32(vehicleInfo->verticalInputScale),
-                     x87f_load_f32(clampedScale)),
-            x87f_load_f32(vehicleState->localAccel.components.vertical))),
-        VEH_SCRIPTED_INPUT_CLAMP);
-#else
     vehicleState->localAccel.components.forward =
         game_compat_veh_clamp_abs(
             vehicleInfo->forwardInputScale * clampedScale *
@@ -4039,7 +3893,6 @@ void VEH_UpdateScriptedInput(gentity_t *ent, const vec3_t inputVector,
             vehicleInfo->verticalInputScale * clampedScale *
                 vehicleState->localAccel.components.vertical,
             VEH_SCRIPTED_INPUT_CLAMP);
-#endif
 
     /* 0x7d6e5: fld DWORD [ent+0x1f0] - the slot's float BITS are loaded
      * (the current-speed payload), not an integer conversion. */
@@ -4069,13 +3922,7 @@ qboolean Scr_Vehicle_PushAway(gentity_t *player, gentity_t *vehicle)
     /* origin delta above is a single sub (native); the second store adds the
      * mins delta: (mins_p - mins_v) + direction[2] is sub+add kept 80-bit until
      * the store -> shim. */
-#if EMULATE_X87
-    direction[2] = x87f_store_f32(x87f_add(
-        x87f_sub(x87f_load_f32(player->mins[2]), x87f_load_f32(vehicle->mins[2])),
-        x87f_load_f32(direction[2])));
-#else
     direction[2] = (player->mins[2] - vehicle->mins[2]) + direction[2];
-#endif
     VectorNormalize(direction);
 
     pushedOrigin[0] = player->currentOrigin[0];
@@ -4094,36 +3941,17 @@ qboolean Scr_Vehicle_PushAway(gentity_t *player, gentity_t *vehicle)
         {
             const float pushDistance =
                 VectorDistance(pushedOrigin, vehicle->currentOrigin);
-#if EMULATE_X87
-            if (!x87f_lt(
-                    x87f_load_f32(pushDistance),
-                    x87f_add(x87f_add(x87f_load_f32(VEH_PUSH_AWAY_PLAYER_RADIUS),
-                                      x87f_load_f32(vehicleInfo->collisionMaxs[0])),
-                             x87f_load_f32(kVehSafetyBuffer)))) {
-                return qfalse;
-            }
-#else
             if (!(VEH_PUSH_AWAY_PLAYER_RADIUS +
                       vehicleInfo->collisionMaxs[0] + kVehSafetyBuffer >
                   pushDistance)) {
                 return qfalse;
             }
-#endif
         }
 
         /* pushedOrigin += direction*STEP: mul then add-into, 80-bit, one store */
-#if EMULATE_X87
-        for (int i = 0; i < 3; i++) {
-            pushedOrigin[i] = x87f_store_f32(x87f_add(
-                x87f_load_f32(pushedOrigin[i]),
-                x87f_mul(x87f_load_f32(direction[i]),
-                         x87f_load_f32(VEH_PUSH_AWAY_STEP))));
-        }
-#else
         pushedOrigin[0] += direction[0] * VEH_PUSH_AWAY_STEP;
         pushedOrigin[1] += direction[1] * VEH_PUSH_AWAY_STEP;
         pushedOrigin[2] += direction[2] * VEH_PUSH_AWAY_STEP;
-#endif
 
         if (G_TestEntityPosition(player, pushedOrigin) == NULL) {
             break;
@@ -4229,15 +4057,11 @@ void VEH_CheckPushClients(gentity_t *vehicle)
     for (int axis = 0; axis < 3; axis++) {
         WIDE_FLOAT minimum = (WIDE_FLOAT)vehicle->currentOrigin[axis] + vehicleInfo->collisionMins[axis];
         WIDE_FLOAT maximum = (WIDE_FLOAT)vehicle->currentOrigin[axis] + vehicleInfo->collisionMaxs[axis];
-#if defined(WINDOWS_BEHAVIOR)
         if (axis == 2)
-#endif
         {
             minimum = coduo_round_f32(minimum);
         }
-#if defined(WINDOWS_BEHAVIOR)
         if (axis != 0)
-#endif
         {
             maximum = coduo_round_f32(maximum);
         }
@@ -5037,17 +4861,9 @@ static void game_compat_veh_build_turret_muzzle(gentity_t *ent,
 
         /* origin[i] = tagMatrix[12+i] - back*forward[i]: mul then sub, 80-bit,
          * one store per component -> shim. */
-#if EMULATE_X87
-        for (int i = 0; i < 3; i++) {
-            muzzle->origin[i] = x87f_store_f32(x87f_sub(
-                x87f_load_f32(tagMatrix.origin[i]),
-                x87f_mul(x87f_load_f32(back), x87f_load_f32(forward[i]))));
-        }
-#else
         muzzle->origin[0] = tagMatrix.origin[0] - back * forward[0];
         muzzle->origin[1] = tagMatrix.origin[1] - back * forward[1];
         muzzle->origin[2] = tagMatrix.origin[2] - back * forward[2];
-#endif
     }
 
     muzzle->extraVector[0] = 0.0f;      /* +0x30..+0x33, size 0x04; generated 6a8b0/6aaa9 keep this as the muzzle packet's extra vector. */
@@ -5066,17 +4882,10 @@ static qboolean game_compat_veh_fire_turret_muzzle(gentity_t *ent, gentity_t *at
     if (weaponType == WEAPTYPE_BULLET) {
         /* Draw spread from the selected server domain, then apply the original
          * max-spread and hip-spread arithmetic. */
-#if EMULATE_X87
-        const float spread = x87f_store_f32(x87f_add(
-            x87f_load_f32(weaponInfo->hipSpreadStandMin),
-            x87f_mul(x87f_load_f64(coduo_server_rand_unit()),
-                     x87f_load_f32(weaponInfo->maxSpread))));
-#else
         const float spread =
             (float)((long double)weaponInfo->hipSpreadStandMin +
                     (long double)coduo_server_rand_unit() *
                         (long double)weaponInfo->maxSpread);
-#endif
 
         return Bullet_Fire(attacker, spread, weaponInfo->flameDamage, muzzle,
                            ent);
@@ -5512,17 +5321,10 @@ void script_vehicle_owner_enable(gentity_t *ent)
          */
         /* 0x91991..0x919bc: level.time feeds the sum via fild with no
          * float store, and the sum feeds fistp directly. */
-#if EMULATE_X87
-        ent->s.time = x87f_store_i32_trunc(x87f_add(
-            x87f_mul(x87f_load_f32(ent->ownerIconDelaySeconds),
-                     x87f_load_f32(VEH_OWNER_ICON_TIME_SCALE)),
-            x87f_load_i32(level.time)));
-#else
         ent->s.time =
             (int)((long double)ent->ownerIconDelaySeconds *
                       (long double)VEH_OWNER_ICON_TIME_SCALE +
                   (long double)level.time);
-#endif
         /*
          * Owner-icon entities write enemyScanRadius as a float at gentity_t+0x0d8,
          * reusing the player client-info lean-fraction word.
@@ -6194,9 +5996,7 @@ void VEH_UpdateClient(gentity_t *ent)
                      * sine/cosine scale is bounded by 127, so signed-word and
                      * wider truncation agree on the input byte. */
                     WIDE_FLOAT stressTime = level.time;
-#if defined(WINDOWS_BEHAVIOR)
                     stressTime = coduo_round_f32(stressTime);
-#endif
                     const double forwardPhase = (double)(stressTime * forwardTimeScale);
                     const double rightPhase = (double)(stressTime * rightTimeScale);
                     input[0] = (int8_t)coduo_fp_to_i32_extended((WIDE_FLOAT)CoduoLibm_Sin(forwardPhase) * inputScale);
@@ -6266,9 +6066,7 @@ void VEH_UpdateClient(gentity_t *ent)
         /* Windows reuses this float product for heading and turret yaw;
          * Linux retains each product through its addition or subtraction. */
         WIDE_FLOAT yawDelta = (WIDE_FLOAT)vehicleState->acceleration[1] * VEH_PHYSICS_FRAME_SECONDS;
-#if defined(WINDOWS_BEHAVIOR)
         yawDelta = coduo_round_f32(yawDelta);
-#endif
         vehicleState->viewClampTargetAngles[1] =
             AngleNormalize180((float)((WIDE_FLOAT)vehicleState->previousAngles[1] + yawDelta));
         vehicleState->viewClampTargetAngles[0] = 0.0f;
@@ -6381,30 +6179,15 @@ void VEH_ClipVelocity(const vec3_t in, const vec3_t normal, vec3_t out)
     if (!(normal[2] >= VEH_GROUND_NORMAL_MIN_Z &&
           (WIDE_FLOAT)in[0] * in[0] + (WIDE_FLOAT)in[1] * in[1] >= (WIDE_FLOAT)in[2] * in[2])) {
         backoff = ((WIDE_FLOAT)in[0] * normal[0] + (WIDE_FLOAT)in[1] * normal[1]) + (WIDE_FLOAT)in[2] * normal[2];
-#if defined(LINUX_BEHAVIOR)
-        backoff = coduo_round_f32(backoff);
-#endif
         if (backoff < 0.0f) {
             backoff = (WIDE_FLOAT)backoff * VEH_SLIDE_OVERCLIP;
         } else {
-#if defined(WINDOWS_BEHAVIOR)
             /* Windows multiplies by the float-rounded reciprocal and retains the result. */
             backoff *= VEH_SLIDE_OVERCLIP_RECIPROCAL;
-#else
-            backoff = (WIDE_FLOAT)backoff / VEH_SLIDE_OVERCLIP;
-#endif
         }
 
-#if defined(LINUX_BEHAVIOR)
-        backoff = coduo_round_f32(backoff);
-#endif
         for (int axis = 0; axis < 3; axis++) {
             WIDE_FLOAT scaledNormal = (WIDE_FLOAT)normal[axis] * backoff;
-#if defined(LINUX_BEHAVIOR)
-            /* 0x7fa70..0x7fa99: store the product before the subtract.
-             * Windows retains it through the final subtraction. */
-            scaledNormal = coduo_round_f32(scaledNormal);
-#endif
             out[axis] = (WIDE_FLOAT)in[axis] - scaledNormal;
         }
         return;
@@ -7014,24 +6797,18 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
     WIDE_FLOAT baseDotX = (WIDE_FLOAT)wheelPoints[0][0] * groundNormal[0];
     WIDE_FLOAT baseDotY = (WIDE_FLOAT)wheelPoints[0][1] * groundNormal[1];
     WIDE_FLOAT baseDotZ = (WIDE_FLOAT)wheelPoints[0][2] * groundNormal[2];
-#if defined(WINDOWS_BEHAVIOR)
     /* Windows stores the reused X/Y products before adding them to Z. */
     baseDotX = coduo_round_f32(baseDotX);
     baseDotY = coduo_round_f32(baseDotY);
     planeDistance = (baseDotZ + baseDotX) + baseDotY;
-#else
-    planeDistance = (baseDotX + baseDotY) + baseDotZ;
-#endif
 
     for (int wheelIndex = 1; wheelIndex < wheelCount; wheelIndex++) {
         WIDE_FLOAT wheelDot =
             ((WIDE_FLOAT)wheelPoints[wheelIndex][0] * groundNormal[0] +
              (WIDE_FLOAT)wheelPoints[wheelIndex][1] * groundNormal[1]) +
             (WIDE_FLOAT)wheelPoints[wheelIndex][2] * groundNormal[2];
-#if defined(WINDOWS_BEHAVIOR)
         /* Store each dot to float before distance subtraction. */
         wheelDot = coduo_round_f32(wheelDot);
-#endif
         /* Linux 0x819ba..0x81ab7 retains the dot through subtraction. Its
          * update recomputes the same dot minus suspensionTravel; no input
          * changes between those uses, so the retained value serves both. */
@@ -7090,11 +6867,9 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
             projected[wheelIndex][1] = wheelPoints[wheelIndex][1];
             WIDE_FLOAT horizontalDot = (WIDE_FLOAT)projected[wheelIndex][0] * groundNormal[0] +
                                        (WIDE_FLOAT)projected[wheelIndex][1] * groundNormal[1];
-#if defined(WINDOWS_BEHAVIOR)
             if (wheelIndex == 0) {
                 horizontalDot = baseDotX + baseDotY;
             }
-#endif
             projected[wheelIndex][2] = -((horizontalDot - planeDistance) / groundNormal[2]);
         }
 
@@ -7455,11 +7230,7 @@ void VEH_PlayerCollision(gentity_t *vehicle, gentity_t *player)
         VectorNormalize(knockback);
 
         /* Apply damage */
-#if EMULATE_X87
-        VEH_PlayerDamage(
-            player, vehicle,
-            x87f_store_i32_trunc(x87f_load_f32(damageImpulse)));
-#elif defined(__x86_64__)
+#if   defined(__x86_64__)
         VEH_PlayerDamage(
             player, vehicle,
             CODUO_X87_TRUNCATE_I32((long double)damageImpulse));
@@ -8108,13 +7879,7 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
             static const float half = 0.5f;
             /* 0x856ea..0x85721: fistp consumes the 80-bit chain directly;
              * no float rounding before the int truncation. */
-#if EMULATE_X87
-            const x87f halfOffset = x87f_sub(
-                x87f_load_f32(collisionInputScale), x87f_load_f32(half));
-            const int damage = x87f_store_i32_trunc(x87f_mul(
-                x87f_add(halfOffset, halfOffset),
-                x87f_load_f32(vehicleInfo->collisionDamageScale)));
-#elif defined(__x86_64__)
+#if   defined(__x86_64__)
             register long double halfOffset =
                 (long double)collisionInputScale - (long double)half;
             const int damage = CODUO_X87_TRUNCATE_I32(
@@ -8403,34 +8168,16 @@ void VEH_UpdateBody(gentity_t *ent)
 
     if (vehicleState->throttleScale > 0.0f) {
         WIDE_FLOAT throttleRatio = (WIDE_FLOAT)vehicleState->throttleScale / vehicleState->throttleScalePrevious;
-#if defined(WINDOWS_BEHAVIOR)
         /* FSIN receives the live product of two float coefficients. */
         WIDE_FLOAT sine = coduo_x87_sinl((WIDE_FLOAT)vehicleState->brakeScale *
                                        VEH_MOTION_ANIM_PI * VEH_MOTION_ANIM_DEGREE_SCALE);
-#else
-        /* 0x86790..0x867c9: ratio and sine each round to float. The sine
-         * argument uses double pi and division by 180, rounded to double
-         * at the CoduoLibm_Sin call. */
-        throttleRatio = coduo_round_f32(throttleRatio);
-        WIDE_FLOAT sine = coduo_round_f32(CoduoLibm_Sin((double)(
-            (WIDE_FLOAT)vehicleState->brakeScale * 3.141592653589793 / 180.0)));
-#endif
         WIDE_FLOAT phase = sine * throttleRatio;
-#if defined(LINUX_BEHAVIOR)
-        phase = coduo_round_f32(phase);
-#endif
         /* Windows retains the phase for forward motion; vertical motion uses
          * a separate float copy. Linux has already rounded the phase. */
         const float verticalPhase = coduo_round_f32(phase);
         forward = phase * vehicleState->localAccel.components.forward;
-#if defined(LINUX_BEHAVIOR)
-        forward = coduo_round_f32(forward);
-#endif
         vertical = (WIDE_FLOAT)verticalPhase * vehicleState->localAccel.components.vertical;
         WIDE_FLOAT remainingThrottle = (WIDE_FLOAT)vehicleState->throttleScale - VEH_MOTION_ANIM_FRAME_SECONDS;
-#if defined(LINUX_BEHAVIOR)
-        remainingThrottle = coduo_round_f32(remainingThrottle);
-#endif
         vehicleState->throttleScale = remainingThrottle;
         if (remainingThrottle < 0.0f) {
             vehicleState->throttleScale = 0.0f;
@@ -8439,9 +8186,6 @@ void VEH_UpdateBody(gentity_t *ent)
     }
 
     forward += vehicleState->externalVelocity[0];
-#if defined(LINUX_BEHAVIOR)
-    forward = coduo_round_f32(forward);
-#endif
     vertical = (float)((WIDE_FLOAT)vertical + vehicleState->externalVelocity[2]);
 
     ent->s.vehicleBodyPitchPacked = game_compat_veh_motion_byte_from_axis(forward);
@@ -8476,23 +8220,11 @@ void VP_DebugPathSegment(const vec3_t start, const vec3_t end,
     /* direction . vehDebugPathSegmentDir stays 80-bit into a full-width
      * fucompp (no float spill in the ref build).  The branch at
      * 0x95c8d flushes only for ordered dot < K, so unordered values coalesce. */
-#if EMULATE_X87
-    if (!x87f_lt(
-            x87f_add(x87f_add(x87f_mul(x87f_load_f32(direction[0]),
-                                       x87f_load_f32(vehDebugPathSegmentDir[0])),
-                              x87f_mul(x87f_load_f32(direction[1]),
-                                       x87f_load_f32(vehDebugPathSegmentDir[1]))),
-                     x87f_mul(x87f_load_f32(direction[2]),
-                              x87f_load_f32(vehDebugPathSegmentDir[2]))),
-            x87f_load_f32(VEH_PATH_DEBUG_SEGMENT_DOT)) &&
-        !flushSegment) {
-#else
     if (!(direction[0] * vehDebugPathSegmentDir[0] +
               direction[1] * vehDebugPathSegmentDir[1] +
               direction[2] * vehDebugPathSegmentDir[2] <
           VEH_PATH_DEBUG_SEGMENT_DOT) &&
         !flushSegment) {
-#endif
         memcpy(vehDebugPathSegmentEnd, end, sizeof(vehDebugPathSegmentEnd));
         return;
     }
@@ -8761,17 +8493,8 @@ float VP_GetNodeSpeed(int16_t nodeIndex)
         }
         /* distanceSum is a single add stored to a float (native); the divide and
          * the (next-prev)*fraction+prev blend are width-sensitive -> shim. */
-#if EMULATE_X87
-        fraction = x87f_store_f32(x87f_div(x87f_load_f32(previousDistance),
-                                           x87f_load_f32(distanceSum)));
-        return x87f_store_f32(x87f_add(
-            x87f_mul(x87f_sub(x87f_load_f32(nextSpeed), x87f_load_f32(previousSpeed)),
-                     x87f_load_f32(fraction)),
-            x87f_load_f32(previousSpeed)));
-#else
         fraction = previousDistance / distanceSum;
         return (nextSpeed - previousSpeed) * fraction + previousSpeed;
-#endif
     }
 }
 
@@ -8844,19 +8567,9 @@ float VP_GetNodeLookAhead(int16_t nodeIndex)
         }
         /* same shape as VP_GetNodeSpeed: native add + guard, shim the divide and
          * the (next-prev)*fraction+prev blend. */
-#if EMULATE_X87
-        fraction = x87f_store_f32(x87f_div(x87f_load_f32(previousDistance),
-                                           x87f_load_f32(distanceSum)));
-        return x87f_store_f32(x87f_add(
-            x87f_mul(x87f_sub(x87f_load_f32(nextLookAhead),
-                              x87f_load_f32(previousLookAhead)),
-                     x87f_load_f32(fraction)),
-            x87f_load_f32(previousLookAhead)));
-#else
         fraction = previousDistance / distanceSum;
         return (nextLookAhead - previousLookAhead) * fraction +
                previousLookAhead;
-#endif
     }
 }
 
@@ -8941,16 +8654,8 @@ void VP_GetNodeAngles(int16_t nodeIndex, vec3_t outAngles)
         }
 
         /* single divide stored to the game_compat_veh_path_lerp_angles float arg -> shim */
-#if EMULATE_X87
-        game_compat_veh_path_lerp_angles(
-            previousAngles, nextAngles,
-            x87f_store_f32(x87f_div(x87f_load_f32(previousDistance),
-                                    x87f_load_f32(distanceSum))),
-            outAngles);
-#else
         game_compat_veh_path_lerp_angles(previousAngles, nextAngles,
                            previousDistance / distanceSum, outAngles);
-#endif
     }
 }
 
@@ -9038,15 +8743,8 @@ void VP_CalcPathPosition(const vehicle_path_position_t *position,
     /* lookAheadDistance is a single mul stored to a float (native); distance =
      * fraction*segmentLength + lookAheadDistance is mul+add kept 80-bit until the
      * store (reading the stored lookAheadDistance) -> shim. */
-#if EMULATE_X87
-    float distance = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(position->fraction),
-                 x87f_load_f32(node->segmentLength)),
-        x87f_load_f32(lookAheadDistance)));
-#else
     float distance =
         position->fraction * node->segmentLength + lookAheadDistance;
-#endif
 
     for (int16_t count = 0; count < vehPathNodeCount; count++) {
         if (node->nextNodeIndex < 0 || node->segmentLength == 0.0f) {
@@ -9063,18 +8761,9 @@ void VP_CalcPathPosition(const vehicle_path_position_t *position,
     }
 
     /* origin[i] + direction[i]*distance: mul then add, 80-bit, one store */
-#if EMULATE_X87
-    for (int i = 0; i < 3; i++) {
-        outOrigin[i] = x87f_store_f32(x87f_add(
-            x87f_load_f32(node->origin[i]),
-            x87f_mul(x87f_load_f32(node->direction[i]),
-                     x87f_load_f32(distance))));
-    }
-#else
     outOrigin[0] = node->origin[0] + node->direction[0] * distance;
     outOrigin[1] = node->origin[1] + node->direction[1] * distance;
     outOrigin[2] = node->origin[2] + node->direction[2] * distance;
-#endif
 }
 
 /* ------------------------------------------------------------------ */
@@ -9117,35 +8806,15 @@ qboolean VP_ProjectPathPosition(vehicle_path_position_t *position,
         enterDelta[2] = position->origin[2] - node->origin[2];
         /* deltas are single subs stored to floats (native); each dot is a
          * 3-mul/2-add chain kept 80-bit until its store -> shim. */
-#if EMULATE_X87
-        enterDistance = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(enterDelta[0]),
-                              x87f_load_f32(projectDirection[0])),
-                     x87f_mul(x87f_load_f32(enterDelta[1]),
-                              x87f_load_f32(projectDirection[1]))),
-            x87f_mul(x87f_load_f32(enterDelta[2]),
-                     x87f_load_f32(projectDirection[2]))));
-#else
         enterDistance = enterDelta[0] * projectDirection[0] +
                         enterDelta[1] * projectDirection[1] +
                         enterDelta[2] * projectDirection[2];
-#endif
         exitDelta[0] = nextNode->origin[0] - position->origin[0];
         exitDelta[1] = nextNode->origin[1] - position->origin[1];
         exitDelta[2] = nextNode->origin[2] - position->origin[2];
-#if EMULATE_X87
-        exitDistance = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(exitDelta[0]),
-                              x87f_load_f32(projectDirection[0])),
-                     x87f_mul(x87f_load_f32(exitDelta[1]),
-                              x87f_load_f32(projectDirection[1]))),
-            x87f_mul(x87f_load_f32(exitDelta[2]),
-                     x87f_load_f32(projectDirection[2]))));
-#else
         exitDistance = exitDelta[0] * projectDirection[0] +
                        exitDelta[1] * projectDirection[1] +
                        exitDelta[2] * projectDirection[2];
-#endif
 
         if (enterDistance == 0.0f && exitDistance == 0.0f) {
             fraction = 0.0f;
@@ -9158,14 +8827,7 @@ qboolean VP_ProjectPathPosition(vehicle_path_position_t *position,
         if (!(enterDistance < 0.0f) && !(exitDistance < 0.0f)) {
             /* enterDistance / (enterDistance + exitDistance): the sum is an
              * inline 80-bit add, then divide, stored to fraction -> shim. */
-#if EMULATE_X87
-            fraction = x87f_store_f32(x87f_div(
-                x87f_load_f32(enterDistance),
-                x87f_add(x87f_load_f32(enterDistance),
-                         x87f_load_f32(exitDistance))));
-#else
             fraction = enterDistance / (enterDistance + exitDistance);
-#endif
             break;
         }
 
@@ -9782,36 +9444,18 @@ void VEH_UpdatePath(gentity_t *ent)
         if (targetSpeed > game_compat_veh_entity_current_speed(ent)) {
             /* rate*frame + speed / speed - rate*frame: mul then add/sub kept
              * 80-bit until the stored float arg -> shim. */
-#if EMULATE_X87
-            game_compat_veh_set_entity_current_speed(
-                ent,
-                x87f_store_f32(x87f_add(
-                    x87f_mul(x87f_load_f32(vehicleState->viewState[4]),
-                             x87f_load_f32(VEH_PHYSICS_FRAME_SECONDS)),
-                    x87f_load_f32(game_compat_veh_entity_current_speed(ent)))));
-#else
             game_compat_veh_set_entity_current_speed(
                 ent,
                 (WIDE_FLOAT)vehicleState->viewState[4] * VEH_PHYSICS_FRAME_SECONDS +
                     game_compat_veh_entity_current_speed(ent));
-#endif
             if (game_compat_veh_entity_current_speed(ent) > targetSpeed) {
                 game_compat_veh_set_entity_current_speed(ent, targetSpeed);
             }
         } else {
-#if EMULATE_X87
-            game_compat_veh_set_entity_current_speed(
-                ent,
-                x87f_store_f32(x87f_sub(
-                    x87f_load_f32(game_compat_veh_entity_current_speed(ent)),
-                    x87f_mul(x87f_load_f32(vehicleState->viewState[4]),
-                             x87f_load_f32(VEH_PHYSICS_FRAME_SECONDS)))));
-#else
             game_compat_veh_set_entity_current_speed(
                 ent,
                 (WIDE_FLOAT)game_compat_veh_entity_current_speed(ent) -
                     (WIDE_FLOAT)vehicleState->viewState[4] * VEH_PHYSICS_FRAME_SECONDS);
-#endif
             if (targetSpeed > game_compat_veh_entity_current_speed(ent)) {
                 game_compat_veh_set_entity_current_speed(ent, targetSpeed);
             }
@@ -9826,15 +9470,8 @@ void VEH_UpdatePath(gentity_t *ent)
 
     if (cursor->speed > 0.0f) {
         /* speed/cursor->speed divide then add-into, 80-bit, one store -> shim */
-#if EMULATE_X87
-        *cursorFraction = x87f_store_f32(x87f_add(
-            x87f_load_f32(*cursorFraction),
-            x87f_div(x87f_load_f32(game_compat_veh_entity_current_speed(ent)),
-                     x87f_load_f32(cursor->speed))));
-#else
         *cursorFraction +=
             (WIDE_FLOAT)game_compat_veh_entity_current_speed(ent) / cursor->speed;
-#endif
     }
 
     G_VehUpdatePathPos(&nextPosition, vehicleState->pathNodeIndex);
@@ -9884,9 +9521,6 @@ void VEH_UpdatePath(gentity_t *ent)
      * the difference to float first; Windows retains it through scaling. */
     for (int axis = 0; axis < 3; axis++) {
         WIDE_FLOAT delta = (WIDE_FLOAT)vehicleState->origin[axis] - vehicleState->previousOrigin[axis];
-#if defined(LINUX_BEHAVIOR)
-        delta = coduo_round_f32(delta);
-#endif
         vehicleState->velocity[axis] = delta * 20.0f;
     }
     for (int axis = 0; axis < 3; axis++) {
@@ -9913,14 +9547,8 @@ void VEH_UpdatePath(gentity_t *ent)
 
     {
         /* single divide stored to a float -> shim */
-#if EMULATE_X87
-        float speedFraction = x87f_store_f32(x87f_div(
-            x87f_load_f32(game_compat_veh_entity_current_speed(ent)),
-            x87f_load_f32(vehicleInfo->pathSpeedDenom)));
-#else
         float speedFraction =
             game_compat_veh_entity_current_speed(ent) / vehicleInfo->pathSpeedDenom;
-#endif
 
         speedFraction = game_compat_veh_clamp_float(speedFraction, 0.0f, 1.0f);
         vehicleState->runSoundBlendRepeatDelay = speedFraction;
@@ -10050,19 +9678,11 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
         } else {
             direction[0] = (WIDE_FLOAT)origin[0] - vehicleState->origin[0];
             direction[1] = (WIDE_FLOAT)origin[1] - vehicleState->origin[1];
-#if defined(LINUX_BEHAVIOR)
-            direction[0] = coduo_round_f32(direction[0]);
-            direction[1] = coduo_round_f32(direction[1]);
-#endif
         }
         direction[2] = 0.0f;
 
         WIDE_FLOAT directionSquared = direction[0] * direction[0] + direction[1] * direction[1];
-#if defined(WINDOWS_BEHAVIOR)
         WIDE_FLOAT directionLength = coduo_x87_sqrtl(directionSquared);
-#else
-        WIDE_FLOAT directionLength = coduo_round_f32(CoduoLibm_Sqrt((double)directionSquared));
-#endif
         if (directionLength < VEH_DISMOUNT_MIN_DIR_LENGTH) {
             direction[0] = 1.0f;
             direction[1] = 0.0f;
@@ -10070,28 +9690,10 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
 
         /* Dot products retain their intermediates until the float store.
          * Windows keeps the forward dot live through scaling; Linux stores it. */
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-        localRight = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(right[0]), x87f_load_f32(direction[0])),
-                     x87f_mul(x87f_load_f32(right[1]), x87f_load_f32(direction[1]))),
-            x87f_mul(x87f_load_f32(right[2]), x87f_load_f32(direction[2]))));
-        localForwardRaw = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(forward[0]), x87f_load_f32(direction[0])),
-                     x87f_mul(x87f_load_f32(forward[1]), x87f_load_f32(direction[1]))),
-            x87f_mul(x87f_load_f32(forward[2]), x87f_load_f32(direction[2]))));
-        /* SideOffset + maxs[1] + PAD stays wide until one float store. */
-        rightLimit = x87f_store_f32(x87f_add(
-            x87f_add(x87f_load_f32(game_compat_veh_dismount_side_offset(vehicleInfo)),
-                     x87f_load_f32(maxs[1])), x87f_load_f32(VEH_DISMOUNT_SIDE_PAD)));
-#else
         /* Z is zero; exchanging the first two products changes no finite sum. */
         localRight = (right[0] * direction[0] + right[1] * direction[1]) + right[2] * direction[2];
         localForwardRaw = (forward[0] * direction[0] + forward[1] * direction[1]) + forward[2] * direction[2];
-#if defined(LINUX_BEHAVIOR)
-        localForwardRaw = coduo_round_f32(localForwardRaw);
-#endif
         rightLimit = (WIDE_FLOAT)game_compat_veh_dismount_side_offset(vehicleInfo) + maxs[1] + VEH_DISMOUNT_SIDE_PAD;
-#endif
         /* 0x89009..0x8905a: maxs[0] + max(fwd,back) is rounded to its own
          * float slot before the pad is added (pad + sum order). */
         /* 0x88fef..0x89034 is an ordered-greater branch, not fmaxf:
@@ -10102,27 +9704,19 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
                 ? vehicleInfo->dismountBackOffset
                 : vehicleInfo->dismountForwardOffset;
         WIDE_FLOAT forwardExtent = (WIDE_FLOAT)maxs[0] + longitudinalOffset;
-#if defined(LINUX_BEHAVIOR)
-        forwardExtent = coduo_round_f32(forwardExtent);
-#endif
         forwardLimit = forwardExtent + VEH_DISMOUNT_FORWARD_PAD;
 
         const WIDE_FLOAT forwardMagnitude = fabsl(localForwardRaw);
         const WIDE_FLOAT rightMagnitude = fabsl((WIDE_FLOAT)localRight);
         const qboolean scaleFromRight = forwardMagnitude < rightMagnitude;
         WIDE_FLOAT denominator = scaleFromRight ? rightMagnitude : forwardMagnitude;
-#if defined(WINDOWS_BEHAVIOR)
         /* Compare the live magnitude; only the forward-side denominator is
          * reloaded from binary64. Windows retains both scale quotients. */
         if (!scaleFromRight) {
             volatile double storedMagnitude = denominator;
             denominator = storedMagnitude;
         }
-#endif
         WIDE_FLOAT scale = (WIDE_FLOAT)(scaleFromRight ? rightLimit : forwardLimit) / denominator;
-#if defined(LINUX_BEHAVIOR)
-        scale = coduo_round_f32(scale);
-#endif
         localRight = (WIDE_FLOAT)localRight * scale;
         localForward = localForwardRaw * scale;
         if (scaleFromRight) {
@@ -10157,20 +9751,9 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
             /* Windows adds both directional products before the origin and
              * stores once. Linux accumulates each product in a separate store. */
             for (int i = 0; i < 3; i++) {
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-                outOrigin[i] = x87f_store_f32(x87f_add(x87f_load_f32(outOrigin[i]),
-                    x87f_mul(x87f_load_f32(forward[i]), x87f_load_f32(forwardOffset))));
-                outOrigin[i] = x87f_store_f32(x87f_add(x87f_load_f32(outOrigin[i]),
-                    x87f_mul(x87f_load_f32(right[i]), x87f_load_f32(rightOffset))));
-#else
                 WIDE_FLOAT forwardPart = (WIDE_FLOAT)forward[i] * forwardOffset;
                 WIDE_FLOAT rightPart = (WIDE_FLOAT)right[i] * rightOffset;
-#if defined(WINDOWS_BEHAVIOR)
                 outOrigin[i] = (forwardPart + rightPart) + outOrigin[i];
-#else
-                outOrigin[i] = coduo_round_f32((WIDE_FLOAT)outOrigin[i] + forwardPart) + rightPart;
-#endif
-#endif
             }
 
             base[0] = outOrigin[0];
@@ -10266,13 +9849,8 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
         outOrigin[1] = vehicleEnt->currentOrigin[1];
         /* Windows groups (origin + collisionMaxs[2]) + pad. Linux
          * 0x8984b..0x8985d groups (collisionMaxs[2] + pad) + origin. */
-#if defined(WINDOWS_BEHAVIOR)
         outOrigin[2] = (float)(((WIDE_FLOAT)vehicleEnt->currentOrigin[2] + vehicleInfo->collisionMaxs[2]) +
                                VEH_DISMOUNT_FALLBACK_Z_PAD);
-#else
-        outOrigin[2] = (float)(((WIDE_FLOAT)vehicleInfo->collisionMaxs[2] + VEH_DISMOUNT_FALLBACK_Z_PAD) +
-                               vehicleEnt->currentOrigin[2]);
-#endif
     } else {
         DObjSkelMat detachMatrix;
 

@@ -33,7 +33,6 @@
 #include "bg_vehicle.h"
 #include "bg_weapon.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <math.h>
@@ -74,30 +73,10 @@ void BG_CalculateWeaponAngles(pm_weapon_angle_state_t *state,
      * (FLD 2.0f @0x3007bce4, FSUB |lean|, FMUL ST1(=lean), FMUL -2.0f @0x3007c150).
      * 0.0f/2.0f/-2.0f are exactly representable, written as natural float literals. */
     if (ps->leanFraction != 0.0f) {
-#if defined(WINDOWS_BEHAVIOR) && EMULATE_X87
-        const float absLean = fabsf(ps->leanFraction);
-        angles[2] = x87f_store_f32(x87f_mul(
-            x87f_mul(x87f_load_f32(ps->leanFraction),
-                     x87f_sub(x87f_load_f32(2.0f),
-                              x87f_load_f32(absLean))),
-            x87f_load_f32(-2.0f)));
-#elif defined(WINDOWS_BEHAVIOR)
         const float absLean = fabsf(ps->leanFraction);
         angles[2] = (float)(
             ((long double)ps->leanFraction *
              (2.0L - (long double)absLean)) * -2.0L);
-#elif EMULATE_X87
-        angles[2] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(angles[2]),
-            x87f_mul(
-                x87f_mul(
-                    x87f_sub(x87f_load_f32(2.0f),
-                             x87f_abs(x87f_load_f32(ps->leanFraction))),
-                    x87f_load_f32(ps->leanFraction)),
-                x87f_load_f32(2.0f))));
-#else
-        angles[2] -= GetLeanFraction(ps->leanFraction) * 2.0f;
-#endif
     }
 
     /* 0x30015993..0x300159b9: ADS pitch offset -> angles[0].

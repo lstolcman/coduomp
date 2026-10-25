@@ -41,18 +41,9 @@ extern cvar_t *dedicated;
 /* The Linux port stores these dormant diagnostic values beside hunk_state_t;
  * Windows keeps them inside its larger hunk_state_t.  The functions and
  * behavior are common; only the proven target ABI storage owner differs. */
-#if defined(LINUX_BEHAVIOR)
-extern hunk_log_block_t *hunk_logBlocks;
-extern int32_t hunk_logFile;
-extern size_t hunk_totalZoneSize;
-#define HUNK_LOG_BLOCKS hunk_logBlocks
-#define HUNK_LOG_FILE hunk_logFile
-#define HUNK_TOTAL_ZONE_SIZE hunk_totalZoneSize
-#else
 #define HUNK_LOG_BLOCKS hunk.logBlocks
 #define HUNK_LOG_FILE hunk.logFile
 #define HUNK_TOTAL_ZONE_SIZE hunk.totalZoneSize
-#endif
 
 #if UINTPTR_MAX > UINT32_MAX
 #define HUNK_SIZE_FORMAT "%8zu"

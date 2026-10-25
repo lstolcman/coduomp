@@ -8,10 +8,7 @@ BUILD_DIR ?= .workbench/build/server/objects
 TARGET := $(BUILD_DIR)/libcoduo_lnxded_recovered.a
 ifneq ($(filter native-macos-exe,$(MAKECMDGOALS)),)
 CODUO_FP_FAITHFUL ?= relaxed
-EMULATE_X87 ?= 1
-EMU_X87_BACKEND ?= softfloat
-NATIVE_MACOS_X87_VARIANT := $(if $(filter softfloat,$(EMU_X87_BACKEND)),,-$(EMU_X87_BACKEND)$(if $(filter 1,$(EMU_X87_EXACT_GEOMETRY)),-exact-geometry))
-EXE_BUILD_DIR ?= .workbench/build/server/native-macos-x87$(NATIVE_MACOS_X87_VARIANT)
+EXE_BUILD_DIR ?= .workbench/build/server/native-macos
 endif
 EXE_BUILD_DIR ?= .workbench/build/server/native
 EXE_TARGET := $(EXE_BUILD_DIR)/coduo_lnxded_recovered
@@ -47,8 +44,6 @@ SCRIPT_CXXSRCS := $(LAYOUT_SCRIPT_CXX_SOURCES)
 STANDALONE_DIR := src/server/standalone
 POSIX_GENERATED_DIR := src/scripting/generated/posix
 POSIX_GENERATED_CSRCS := $(LAYOUT_POSIX_GENERATED_C_SOURCES)
-CODUO_DEFAULT_BEHAVIOR := linux
-include build-mk/platform-behavior.mk
 ALL_CSRCS := $(STANDALONE_SERVER_C_SOURCES)
 PUNKBUSTER_RECOVERY_SRCS := $(STANDALONE_DIR)/punkbuster/pb_server.c
 PUNKBUSTER_DISABLED_SRCS := $(STANDALONE_DIR)/punkbuster/pb_disabled.c
@@ -143,7 +138,6 @@ DEPS := $(OBJS:.o=.d) $(SHARED_OBJS:.o=.d) $(EXE_OBJS:.o=.d) \
 CPPFLAGS += -iquote $(STANDALONE_DIR)/bindings \
 	-iquote src/qcommon/bindings/default \
 	-Isrc \
-	-Ivendor/softfloat/source/include \
 	-DCODUO_ENABLE_PUNKBUSTER=$(CODUO_ENABLE_PUNKBUSTER) \
 	-DCODUO_DISABLE_SERVER_AUTH=$(CODUO_DISABLE_SERVER_AUTH)
 # Stock i386 uses signed plain char, 32-bit enum-backed domains, and wrapping
@@ -154,7 +148,6 @@ CFLAGS += -std=c11 -Wall -Wextra -Werror -pedantic -fsigned-char \
 CXXFLAGS += -std=c++11 -Wall -Wextra -Werror -pedantic -Wno-c99-extensions \
 	-fsigned-char -fno-short-enums -fwrapv -MMD -MP
 NATIVE_CPPFLAGS ?=
-NATIVE_CPPFLAGS += $(PLATFORM_BEHAVIOR_CPPFLAGS)
 NATIVE_CXXFLAGS ?=
 SHARED_CFLAGS += -fPIC
 SHARED_CXXFLAGS += -fPIC
@@ -170,7 +163,7 @@ MINGW32_CXX ?= i686-w64-mingw32-g++
 WINDOWS_DEP_PREFIX ?=
 WINDOWS_DEP_CPPFLAGS := $(if $(strip $(WINDOWS_DEP_PREFIX)),-I$(WINDOWS_DEP_PREFIX)/include)
 WINDOWS_DEP_LDFLAGS := $(if $(strip $(WINDOWS_DEP_PREFIX)),-L$(WINDOWS_DEP_PREFIX)/lib)
-WINDOWS_COMMON_CPPFLAGS := -D_WIN32_WINNT=0x0601 $(PLATFORM_BEHAVIOR_CPPFLAGS) \
+WINDOWS_COMMON_CPPFLAGS := -D_WIN32_WINNT=0x0601 \
 	$(WINDOWS_DEP_CPPFLAGS)
 WINDOWS_COMMON_FLOAT_FLAGS := -O0 -mfpmath=387 -fexcess-precision=fast
 WINDOWS_COMMON_LDFLAGS := $(WINDOWS_DEP_LDFLAGS) -static-libgcc -static-libstdc++
@@ -192,66 +185,7 @@ X87_POLICY_ARCH := $(HOST_MACHINE)
 X87_POLICY_CC := $(CC)
 include build-mk/x87-policy.mk
 NATIVE_CPPFLAGS += $(X87_ALLOW_CPPFLAGS)
-ifeq ($(CODUO_FP_FAITHFUL),relaxed)
-ifeq ($(X87_POLICY_IS_X86),1)
-EMULATE_X87 ?= 0
-else
-EMULATE_X87 ?= 1
-endif
-else
-EMULATE_X87 ?= 0
-endif
-ifneq ($(filter-out 0 1,$(EMULATE_X87)),)
-$(error EMULATE_X87 must be 0 or 1 (got '$(EMULATE_X87)'))
-endif
-NATIVE_CPPFLAGS += -DEMULATE_X87=$(EMULATE_X87)
 NATIVE_FLOAT_FLAGS := $(X87_FLOAT_FLAGS)
-
-ifeq ($(EMULATE_X87),1)
-include build-mk/x87-backend.mk
-NATIVE_CPPFLAGS += $(X87_BACKEND_CPPFLAGS)
-NATIVE_FLOAT_FLAGS += $(X87_BACKEND_CFLAGS)
-
-ifeq ($(EMU_X87_BACKEND),softfloat)
-NATIVE_NEEDS_SOFTFLOAT := 1
-endif
-ifeq ($(EMU_X87_EXACT_GEOMETRY),1)
-NATIVE_NEEDS_SOFTFLOAT := 1
-endif
-endif
-
-ifeq ($(NATIVE_NEEDS_SOFTFLOAT),1)
-SERVER_SOFTFLOAT_BUILD_DIR ?= .workbench/build/server/softfloat-coduo-x87
-NATIVE_SOFTFLOAT_LIBRARY ?= $(SERVER_SOFTFLOAT_BUILD_DIR)/softfloat.a
-SOFTFLOAT_SOURCE_DIR := $(abspath vendor/softfloat/source)
-SOFTFLOAT_PLATFORM_DIR := $(abspath vendor/softfloat/build/coduo-x87)
-SOFTFLOAT_BUILD_INPUTS := $(SOFTFLOAT_PLATFORM_DIR)/Makefile \
-	$(SOFTFLOAT_PLATFORM_DIR)/platform.h \
-	$(wildcard $(SOFTFLOAT_SOURCE_DIR)/*.c) \
-	$(wildcard $(SOFTFLOAT_SOURCE_DIR)/8086/*.[ch]) \
-	$(wildcard $(SOFTFLOAT_SOURCE_DIR)/include/*.h)
-else
-NATIVE_SOFTFLOAT_LIBRARY ?=
-endif
-
-# Phase-split for the fast (EMU_X87_DOUBLE) backend. The collision-geometry
-# CONSTRUCTION (patch/soup build + its vector helpers) runs ONCE at map load, so
-# its FP cost is amortized to nothing; only the per-frame TRACE path is hot.
-# With EMU_X87_EXACT_GEOMETRY=1 these construction TUs are forced to the exact
-# SoftFloat backend regardless of the query backend, so a double-backend build
-# still loads BIT-IDENTICAL geometry (no ULP drift in the built planes) while
-# traces stay native-double fast. The consumer must still link softfloat.a and
-# add its -I (the construction TUs include softfloat.h). A trailing -D wins, so
-# this overrides the backend the consumer set in CFLAGS for just these files.
-ifeq ($(EMU_X87_EXACT_GEOMETRY),1)
-EMU_X87_GEOMETRY_TUS := src/collision/collision_patch_build \
-    src/collision/collision_triangle_soup \
-    core_math/vector_normalize \
-    core_math/vector_normalize2 math/cross_product
-$(foreach t,$(EMU_X87_GEOMETRY_TUS),$(eval \
-    $(EXE_BUILD_DIR)/$(t).o: NATIVE_FLOAT_FLAGS += \
-        -UEMULATE_X87_BACKEND -DEMULATE_X87_BACKEND=EMU_X87_SOFTFLOAT))
-endif
 
 ifeq ($(UNAME_S),Darwin)
 SHARED_EXT ?= dylib
@@ -311,8 +245,7 @@ help:
 	  'Options: CODUO_ENABLE_PUNKBUSTER=1 compiles PunkBuster recovery code.' \
 	  '         CODUO_DISABLE_SERVER_AUTH=1 (default) skips external CD-key authorization; 0 enables it.' \
 	  '         CODUO_FP_FAITHFUL=auto|strict|relaxed controls x87 float faithfulness;' \
-	  '           native-macos-exe selects relaxed plus EMULATE_X87=1.' \
-	  '         EMU_X87_BACKEND=softfloat|double selects the emulated-site backend.' \
+	  '           native-macos-exe selects relaxed native arithmetic.' \
 	  '         WINDOWS_DEP_PREFIX=/path supplies MinGW zlib headers and libraries.' \
 	  '           See docs/fp-faithfulness.md.'
 
@@ -330,14 +263,6 @@ $(WINDOWS_I386_BUILD_DIR):
 
 $(WINDOWS_I686_BUILD_DIR):
 	mkdir -p $(WINDOWS_I686_BUILD_DIR)
-
-ifeq ($(NATIVE_NEEDS_SOFTFLOAT),1)
-$(NATIVE_SOFTFLOAT_LIBRARY): $(SOFTFLOAT_BUILD_INPUTS)
-	mkdir -p $(dir $@)
-	$(MAKE) -C $(dir $@) -f $(SOFTFLOAT_PLATFORM_DIR)/Makefile \
-		SOURCE_DIR=$(SOFTFLOAT_SOURCE_DIR) \
-		PLATFORM_DIR=$(SOFTFLOAT_PLATFORM_DIR) softfloat.a
-endif
 
 $(BUILD_DIR)/%.o: $(STANDALONE_DIR)/%.c
 	mkdir -p $(dir $@)
@@ -504,68 +429,68 @@ $(EXE_BUILD_DIR)/%.o: $(STANDALONE_DIR)/%.cpp
 $(EXE_I386_BUILD_DIR)/%.o: $(STANDALONE_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/generated-posix/%.o: $(POSIX_GENERATED_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/qcommon/%.o: $(QCOMMON_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/src/compat/crt/%.o: $(CRT_COMPAT_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/math/%.o: $(MATH_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/sound-alias/%.o: $(SOUND_ALIAS_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/src/animation/%.o: $(ANIMATION_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/src/collision/%.o: $(COLLISION_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/src/filesystem/%.o: $(FILESYSTEM_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/shared-server/%.o: $(SERVER_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/src/scripting/%.o: $(SCRIPT_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(EXE_I386_CC) $(CPPFLAGS) $(CFLAGS) -march=i386 \
-		$(PLATFORM_BEHAVIOR_CPPFLAGS) -fexcess-precision=fast -c $< -o $@
+		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/src/scripting/%.o: $(SCRIPT_DIR)/%.cpp
 	mkdir -p $(dir $@)
 	$(EXE_I386_CXX) $(CPPFLAGS) $(filter-out -pedantic,$(CXXFLAGS)) \
-		-Wno-pedantic -march=i386 $(PLATFORM_BEHAVIOR_CPPFLAGS) \
+		-Wno-pedantic -march=i386 \
 		-fexcess-precision=fast -c $< -o $@
 
 $(EXE_I386_BUILD_DIR)/%.o: $(STANDALONE_DIR)/%.cpp
 	mkdir -p $(dir $@)
 	$(EXE_I386_CXX) $(CPPFLAGS) $(filter-out -pedantic,$(CXXFLAGS)) \
-		-Wno-pedantic -march=i386 $(PLATFORM_BEHAVIOR_CPPFLAGS) \
+		-Wno-pedantic -march=i386 \
 		-fexcess-precision=fast -c $< -o $@
 
 $(WINDOWS_I386_BUILD_DIR)/%.o: $(STANDALONE_DIR)/%.c
@@ -706,10 +631,10 @@ $(TARGET): $(OBJS) | $(BUILD_DIR)
 	@if [ -e $@ ]; then rm $@; fi
 	$(AR) rcs $@ $^
 
-$(SHARED_TARGET): $(SHARED_OBJS) $(NATIVE_SOFTFLOAT_LIBRARY) | $(BUILD_DIR)
+$(SHARED_TARGET): $(SHARED_OBJS) | $(BUILD_DIR)
 	$(SHARED_LD) $(SHARED_LDFLAGS) $(UNRESOLVED_ENGINE_LDFLAGS) -o $@ $^ $(ENGINE_IMPORT_LIBS)
 
-$(EXE_TARGET): $(EXE_OBJS) $(NATIVE_SOFTFLOAT_LIBRARY) | $(EXE_BUILD_DIR)
+$(EXE_TARGET): $(EXE_OBJS) | $(EXE_BUILD_DIR)
 	$(EXE_LD) -o $@ $^ $(ENGINE_IMPORT_LIBS)
 
 $(EXE_I386_TARGET): $(EXE_I386_OBJS) | $(EXE_I386_BUILD_DIR)

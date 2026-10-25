@@ -83,15 +83,8 @@ typedef struct {
             &coduo_x87_direct_control_, (expression));                        \
     })
 
-#if defined(LINUX_BEHAVIOR)
-#define CODUO_X87_SCALE_F32_INSTRUCTIONS                                      \
-            "flds %[scale]\n\t"                                               \
-            "fmulp %%st, %%st(1)\n\t"
-#define CODUO_X87_SCALE_F32_CLOBBERS "st", "st(1)"
-#else
 #define CODUO_X87_SCALE_F32_INSTRUCTIONS "fmuls %[scale]\n\t"
 #define CODUO_X87_SCALE_F32_CLOBBERS "st"
-#endif
 
 /*
  * NOT_FROM_ORIGINAL_SOURCE: caller expression adapter for the XAnim length

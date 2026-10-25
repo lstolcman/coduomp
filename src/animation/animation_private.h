@@ -71,11 +71,7 @@ void ScriptSave_WriteData(const void *data, size_t size);
 uint8_t ReadByte(void);
 uint16_t ReadShort(void);
 uint16_t ReadString(void);
-#if defined(WINDOWS_BEHAVIOR)
 float ReadFloat(void);
-#else
-long double ReadFloat(void);
-#endif
 void ScriptLoad_ReadData(void *data, size_t size);
 void Scr_AddConstString(uint16_t value);
 void Scr_NotifyId(uint16_t objectHandle, uint16_t notifyName,

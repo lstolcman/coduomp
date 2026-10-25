@@ -45,13 +45,8 @@ void MT_Error(const char *operation, size_t size);
 /* The retail Windows allocator ignores allocation tags and exposes one-argument
  * entry points.  The retail Linux allocator receives the tag as a second
  * cdecl argument but likewise does not inspect it. */
-#if defined(WINDOWS_BEHAVIOR)
 uint16_t MT_AllocIndex(size_t size);
 void *MT_Alloc(size_t size);
-#else
-uint16_t MT_AllocIndex(size_t size, int32_t type);
-void *MT_Alloc(size_t size, int32_t type);
-#endif
 
 void MT_FreeIndex(uint16_t blockIndex, size_t size);
 void MT_Free(void *ptr, size_t size);

@@ -1,16 +1,10 @@
 #include "q_math.h"
 
 #include "compat/coduo_native_x87.h"
-#include "compat/coduo_x87emu.h"
 
 #include <stdint.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 /*
  * VectorRotate is byte-identical within the four Windows targets at
@@ -20,32 +14,8 @@
  * use X,Y,Z for every row.  Each dot remains in x87 precision until its final
  * binary32 store.
  */
-#if defined(WINDOWS_BEHAVIOR)
 void VectorRotate(const vec3_t input, const axis_t matrix, vec3_t output)
 {
-#if EMULATE_X87
-    output[0] = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(input[1]),
-                          x87f_load_f32(matrix[0][1])),
-                 x87f_mul(x87f_load_f32(input[2]),
-                          x87f_load_f32(matrix[0][2]))),
-        x87f_mul(x87f_load_f32(input[0]),
-                 x87f_load_f32(matrix[0][0]))));
-    output[1] = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(input[0]),
-                          x87f_load_f32(matrix[1][0])),
-                 x87f_mul(x87f_load_f32(input[1]),
-                          x87f_load_f32(matrix[1][1]))),
-        x87f_mul(x87f_load_f32(input[2]),
-                 x87f_load_f32(matrix[1][2]))));
-    output[2] = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(input[0]),
-                          x87f_load_f32(matrix[2][0])),
-                 x87f_mul(x87f_load_f32(input[1]),
-                          x87f_load_f32(matrix[2][1]))),
-        x87f_mul(x87f_load_f32(input[2]),
-                 x87f_load_f32(matrix[2][2]))));
-#else
     output[0] = (float)(
         ((long double)input[1] * matrix[0][1] +
          (long double)input[2] * matrix[0][2]) +
@@ -58,29 +28,7 @@ void VectorRotate(const vec3_t input, const axis_t matrix, vec3_t output)
         ((long double)input[0] * matrix[2][0] +
          (long double)input[1] * matrix[2][1]) +
         (long double)input[2] * matrix[2][2]);
-#endif
 }
-#else
-void VectorRotate(const vec3_t input, const axis_t matrix, vec3_t output)
-{
-    for (int32_t row = 0; row < 3; ++row) {
-#if EMULATE_X87
-        output[row] = x87f_store_f32(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(input[0]),
-                              x87f_load_f32(matrix[row][0])),
-                     x87f_mul(x87f_load_f32(input[1]),
-                              x87f_load_f32(matrix[row][1]))),
-            x87f_mul(x87f_load_f32(input[2]),
-                     x87f_load_f32(matrix[row][2]))));
-#else
-        output[row] = (float)(
-            ((long double)input[0] * matrix[row][0] +
-             (long double)input[1] * matrix[row][1]) +
-            (long double)input[2] * matrix[row][2]);
-#endif
-    }
-}
-#endif
 
 /*
  * RotatePointAroundVector is shared by every image.  The four Windows bodies
@@ -92,10 +40,9 @@ void VectorRotate(const vec3_t input, const axis_t matrix, vec3_t output)
  * Windows forms radians from binary32 pi and 180 constants and uses its
  * characteristic final-row product orders. Linux uses binary64 pi and 180
  * and an X,Y,Z row loop in the game body; the call below preserves that row
- * transform. Complete platform bodies preserve those arithmetic differences.
- * EMULATE_X87 remains independent in both bodies.
+ * transform. The maintained Windows body preserves its arithmetic graph
+ * using native wide intermediates on every host.
  */
-#if defined(WINDOWS_BEHAVIOR)
 void RotatePointAroundVector(vec3_t output, const vec3_t direction,
                              const vec3_t point, float degrees)
 {
@@ -137,52 +84,18 @@ void RotatePointAroundVector(vec3_t output, const vec3_t direction,
     inverse[2][1] = basis[1][2];
     inverse[2][2] = basis[2][2];
 
-#if EMULATE_X87
-    radians = x87f_store_f32(x87f_div(
-        x87f_mul(x87f_load_f32(degrees),
-                 x87f_load_f32(3.1415927410125732f)),
-        x87f_load_f32(180.0f)));
-#else
     radians = (float)(((long double)degrees * 3.1415927410125732f) /
                       180.0f);
-#endif
     coduo_x87_sincosf(radians, &sine, &cosine);
     zRotation[0][0] = cosine;
     zRotation[0][1] = sine;
-#if EMULATE_X87
-    zRotation[1][0] = x87f_store_f32(x87f_neg(x87f_load_f32(sine)));
-#else
     zRotation[1][0] = -sine;
-#endif
     zRotation[1][1] = cosine;
     zRotation[2][2] = 1.0f;
 
     MatrixMultiply(basis, zRotation, temporary);
     MatrixMultiply(temporary, inverse, rotation);
 
-#if EMULATE_X87
-    output[0] = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(rotation[0][2]),
-                          x87f_load_f32(point[2])),
-                 x87f_mul(x87f_load_f32(rotation[0][1]),
-                          x87f_load_f32(point[1]))),
-        x87f_mul(x87f_load_f32(rotation[0][0]),
-                 x87f_load_f32(point[0]))));
-    output[1] = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(rotation[1][1]),
-                          x87f_load_f32(point[1])),
-                 x87f_mul(x87f_load_f32(rotation[1][0]),
-                          x87f_load_f32(point[0]))),
-        x87f_mul(x87f_load_f32(rotation[1][2]),
-                 x87f_load_f32(point[2]))));
-    output[2] = x87f_store_f32(x87f_add(
-        x87f_add(x87f_mul(x87f_load_f32(rotation[2][1]),
-                          x87f_load_f32(point[1])),
-                 x87f_mul(x87f_load_f32(rotation[2][0]),
-                          x87f_load_f32(point[0]))),
-        x87f_mul(x87f_load_f32(rotation[2][2]),
-                 x87f_load_f32(point[2]))));
-#else
     output[0] = (float)(
         ((long double)rotation[0][2] * point[2] +
          (long double)rotation[0][1] * point[1]) +
@@ -195,74 +108,7 @@ void RotatePointAroundVector(vec3_t output, const vec3_t direction,
         ((long double)rotation[2][1] * point[1] +
          (long double)rotation[2][0] * point[0]) +
         (long double)rotation[2][2] * point[2]);
-#endif
 }
-#else
-void RotatePointAroundVector(vec3_t output, const vec3_t direction,
-                             const vec3_t point, float degrees)
-{
-    vec3_t right;
-    vec3_t up;
-    vec3_t forward;
-    axis_t basis;
-    axis_t inverse;
-    axis_t zRotation = {{0.0f, 0.0f, 0.0f},
-                        {0.0f, 0.0f, 0.0f},
-                        {0.0f, 0.0f, 0.0f}};
-    axis_t temporary;
-    axis_t rotation;
-    float radians;
-    float sine;
-    float cosine;
-    uint32_t sineBits;
-
-    memcpy(forward, direction, sizeof(forward));
-    PerpendicularVector(right, direction);
-    CrossProduct(right, forward, up);
-
-    basis[0][0] = right[0];
-    basis[0][1] = up[0];
-    basis[0][2] = forward[0];
-    basis[1][0] = right[1];
-    basis[1][1] = up[1];
-    basis[1][2] = forward[1];
-    basis[2][0] = right[2];
-    basis[2][1] = up[2];
-    basis[2][2] = forward[2];
-
-    inverse[0][0] = basis[0][0];
-    inverse[0][1] = basis[1][0];
-    inverse[0][2] = basis[2][0];
-    inverse[1][0] = basis[0][1];
-    inverse[1][1] = basis[1][1];
-    inverse[1][2] = basis[2][1];
-    inverse[2][0] = basis[0][2];
-    inverse[2][1] = basis[1][2];
-    inverse[2][2] = basis[2][2];
-
-#if EMULATE_X87
-    radians = x87f_store_f32(x87f_div(
-        x87f_mul(x87f_load_f32(degrees),
-                 x87f_load_f64(3.141592653589793)),
-        x87f_load_f64(180.0)));
-#else
-    radians = (float)(((long double)degrees * 3.141592653589793) /
-                      180.0);
-#endif
-    coduo_x87_sincosf(radians, &sine, &cosine);
-    zRotation[0][0] = cosine;
-    zRotation[0][1] = sine;
-    memcpy(&sineBits, &sine, sizeof(sineBits));
-    sineBits ^= UINT32_C(0x80000000);
-    memcpy(&zRotation[1][0], &sineBits, sizeof(zRotation[1][0]));
-    zRotation[1][1] = cosine;
-    zRotation[2][2] = 1.0f;
-
-    MatrixMultiply(basis, zRotation, temporary);
-    MatrixMultiply(temporary, inverse, rotation);
-    VectorRotate(point, (const float (*)[3])rotation, output);
-}
-#endif
 
 /*
  * RotateAroundDirection has the same data dependencies in all six images.

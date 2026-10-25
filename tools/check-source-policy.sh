@@ -28,7 +28,7 @@ else
 fi
 
 scan_paths=("${source_paths[@]}")
-for path in Makefile README.md CDKEY.md CHANGELOG.md docs packaging tools; do
+for path in Makefile CMakeLists.txt CMakePresets.json cmake README.md CDKEY.md CHANGELOG.md docs packaging tools; do
     if [[ -e "$public_frontend/$path" ]]; then
         scan_paths+=("$public_frontend/$path")
     fi
@@ -71,6 +71,11 @@ failed=0
 
 if search_public 'STRICT_STOCK' "${scan_paths[@]}"; then
     echo "error: STRICT_STOCK is retired; use the concrete stock or master branch" >&2
+    failed=1
+fi
+
+if search_public 'EMULATE_X87|EMU_X87_|WINDOWS_BEHAVIOR|LINUX_BEHAVIOR|CODUO_BEHAVIOR|vendor/softfloat|coduo_x87emu' "${scan_paths[@]}"; then
+    echo "error: use canonical Windows behavior and native arithmetic; retired selectors and x87 emulation are unsupported" >&2
     failed=1
 fi
 

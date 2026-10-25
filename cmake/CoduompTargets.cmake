@@ -20,9 +20,6 @@ if(CODUOMP_BUILD_MODULES)
 		OUTPUT_NAME "uo_cgame_mp_x86"
 		PREFIX ""
 		FOLDER "modules")
-	target_compile_definitions(uo_cgame_mp_x86 PRIVATE
-		WINDOWS_BEHAVIOR
-		EMULATE_X87=${CODUOMP_EMULATE_X87})
 	target_include_directories(uo_cgame_mp_x86 PRIVATE
 		"${CMAKE_SOURCE_DIR}/src/client/cgame/bindings"
 		"${CMAKE_SOURCE_DIR}/src/qcommon/bindings/default"
@@ -40,9 +37,6 @@ if(CODUOMP_BUILD_MODULES)
 		OUTPUT_NAME "uo_ui_mp_x86"
 		PREFIX ""
 		FOLDER "modules")
-	target_compile_definitions(uo_ui_mp_x86 PRIVATE
-		WINDOWS_BEHAVIOR
-		EMULATE_X87=${CODUOMP_EMULATE_X87})
 	target_include_directories(uo_ui_mp_x86 PRIVATE
 		"${CMAKE_SOURCE_DIR}/src/client/ui/bindings"
 		"${CMAKE_SOURCE_DIR}/src/qcommon/bindings/default"
@@ -64,11 +58,8 @@ if(CODUOMP_BUILD_MODULES)
 		PREFIX ""
 		FOLDER "modules")
 	# The module exports dllEntry/vmMain through the ABI definition file in
-	# build-mk/abi. Both MSVC targets retain software-x87 source paths; their C
-	# long double is binary64 even when x86 compiler arithmetic uses x87.
-	target_compile_definitions(uo_game_mp_x86 PRIVATE
-		WINDOWS_BEHAVIOR
-		EMULATE_X87=${CODUOMP_EMULATE_X87})
+	# build-mk/abi. MSVC long double is binary64 even when x86 compiler
+	# arithmetic uses native x87.
     if(NOT CODUOMP_CLANG_CL)
         target_compile_definitions(uo_game_mp_x86 PRIVATE
             GAME_REQUIRE_X87_LONG_DOUBLE=0 GAME_ALLOW_NON_EQUIVALENT_LONG_DOUBLE=1)
@@ -76,8 +67,7 @@ if(CODUOMP_BUILD_MODULES)
 	target_include_directories(uo_game_mp_x86 PRIVATE
 		"${CMAKE_SOURCE_DIR}/src/server/game/bindings"
 		"${CMAKE_SOURCE_DIR}/src/qcommon/bindings/default"
-		"${CMAKE_SOURCE_DIR}/src"
-		"${CMAKE_SOURCE_DIR}/vendor/softfloat/source/include")
+		"${CMAKE_SOURCE_DIR}/src")
 	coduomp_group_sources(${CODUOMP_GAME_ABSOLUTE})
 
 endif()
@@ -102,9 +92,7 @@ if(CODUOMP_BUILD_CLIENT)
 		VS_DEBUGGER_WORKING_DIRECTORY "${CODUOMP_BIN_ROOT}/$<CONFIG>")
 
 	target_compile_definitions(CoDUOMP PRIVATE
-		WINDOWS_BEHAVIOR
 		CASE_SENSITIVE_FS=0
-		EMULATE_X87=${CODUOMP_EMULATE_X87}
 		${CODUOMP_AUDIO_DEFINITION}
 		$<$<BOOL:${CODUOMP_CURL_STATIC}>:CURL_STATICLIB>
 		$<$<BOOL:${CODUOMP_RENDERER_GPU_PROFILE}>:CODUOMP_RENDERER_GPU_PROFILE=1>)

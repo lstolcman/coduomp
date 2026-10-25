@@ -9,11 +9,7 @@
 #define bg_debugProneCheck g_debugProneCheck
 /* NOT_FROM_ORIGINAL_SOURCE: game-module binding for invalid fall-height warnings. */
 #define BG_PM_FALL_DAMAGE_WARNING(...) Com_Printf(__VA_ARGS__)
-#if defined(WINDOWS_BEHAVIOR)
 #define BG_PM_WEAPON_INFO(weaponIndex) (bg_weaponInfos[(weaponIndex)])
-#else
-#define BG_PM_WEAPON_INFO(weaponIndex) BG_GetInfoForWeapon((weaponIndex))
-#endif
 
 /*
  * NOT_FROM_ORIGINAL_SOURCE: both original game modules enable the additional

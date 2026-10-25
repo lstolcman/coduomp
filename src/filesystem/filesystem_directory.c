@@ -21,7 +21,6 @@ enum {
  * "." and ".." with exact comparisons.  The host-API branches retain those
  * target behaviors when Windows behavior is built on a POSIX native host.
  */
-#if defined(WINDOWS_BEHAVIOR)
 qboolean FS_DirectoryHasNonDotEntries(const char *path)
 {
 #if defined(_WIN32)
@@ -75,51 +74,3 @@ qboolean FS_DirectoryHasNonDotEntries(const char *path)
     return qfalse;
 #endif
 }
-#else
-qboolean FS_DirectoryHasNonDotEntries(const char *path)
-{
-#if defined(_WIN32)
-    char searchPath[MAX_OSPATH];
-    struct _finddata_t findData;
-    intptr_t findHandle;
-
-    /* NOT_FROM_ORIGINAL_SOURCE: use the Windows host enumeration API while
-     * retaining the Linux-behavior body's exact two-name filter. */
-    Com_sprintf(searchPath, sizeof(searchPath), "%s\\*", path);
-    findHandle = _findfirst(searchPath, &findData);
-    if (findHandle == -1)
-        return qfalse;
-
-    do {
-        if (strcmp(findData.name, ".") != 0 &&
-            strcmp(findData.name, "..") != 0) {
-            (void)_findclose(findHandle);
-            return qtrue;
-        }
-    } while (_findnext(findHandle, &findData) != -1);
-
-    (void)_findclose(findHandle);
-    return qfalse;
-#else
-    DIR *const directory = opendir(path);
-    qboolean hasEntries = qfalse;
-
-    if (directory == NULL)
-        return qfalse;
-
-    for (;;) {
-        const struct dirent *const entry = readdir(directory);
-        if (entry == NULL)
-            break;
-        if (strcmp(entry->d_name, ".") != 0 &&
-            strcmp(entry->d_name, "..") != 0) {
-            hasEntries = qtrue;
-            break;
-        }
-    }
-
-    (void)closedir(directory);
-    return hasEntries;
-#endif
-}
-#endif

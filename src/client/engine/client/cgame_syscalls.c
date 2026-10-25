@@ -1047,7 +1047,7 @@ intptr_t CL_CgameSystemCalls(intptr_t *arguments)
         return XAnimIsPrimitive(
             Scr_GetAnims((uint32_t)CG_ARG(1)), CG_INT(2));
     case CG_XANIM_GET_LENGTH:
-#if !EMULATE_X87 && defined(CODUO_X87_TRUNCATE_I32)
+#if defined(CODUO_X87_TRUNCATE_I32)
         return CODUO_X87_SCALE_F32_TRUNCATE_I32(
             XAnimGetLength(CG_PTR(XAnim, 1), CG_INT(2)),
             cg_xanimMilliseconds);

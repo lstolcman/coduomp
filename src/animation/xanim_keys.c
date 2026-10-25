@@ -2,9 +2,6 @@
 
 #include "compat/coduo_native_x87.h"
 
-#if defined(EMULATE_X87) && EMULATE_X87
-#include "compat/coduo_x87emu.h"
-#endif
 
 /*
  * The Windows client and Linux dedicated server retain the same key-search
@@ -28,10 +25,7 @@ int32_t XAnimFindByteKey(float frameFrac, const uint8_t *keys,
     int32_t low = 0;
     int32_t index;
 
-#if defined(EMULATE_X87) && EMULATE_X87
-    index = x87f_store_i32_trunc(
-        x87f_mul(x87f_load_i32(keyCount), x87f_load_f32(frameFrac)));
-#elif defined(__x86_64__) && \
+#if   defined(__x86_64__) && \
       (defined(__GNUC__) || defined(__clang__))
     index = CODUO_X87_TRUNCATE_I32(
         (long double)keyCount * (long double)frameFrac);
@@ -77,10 +71,7 @@ int32_t XAnimFindShortKey(float frameFrac, const uint16_t *keys,
     int32_t low = 0;
     int32_t index;
 
-#if defined(EMULATE_X87) && EMULATE_X87
-    index = x87f_store_i32_trunc(
-        x87f_mul(x87f_load_i32(keyCount), x87f_load_f32(frameFrac)));
-#elif defined(__x86_64__) && \
+#if   defined(__x86_64__) && \
       (defined(__GNUC__) || defined(__clang__))
     index = CODUO_X87_TRUNCATE_I32(
         (long double)keyCount * (long double)frameFrac);

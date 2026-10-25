@@ -18,7 +18,6 @@
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_native_x87.h"
 #include "compat/coduo_x87_eval.h"
-#include "compat/coduo_x87emu.h" /* defines EMULATE_X87; x87 shim when it is 1 */
 #include "level_locals.h"
 #include "scr_vm.h"
 #include "compat/libm/coduo_libm.h"
@@ -344,16 +343,8 @@ void G_RunMissile(gentity_t *ent)
         if (trace2.fraction != 1.0f && trace2.entityNum == ENTITYNUM_WORLD) {
             trace = trace2;
             /* Adjust entity position based on trace result */
-#if EMULATE_X87
-            ent->s.pos.trBase[2] = x87f_store_f32(x87f_add(
-                x87f_load_f32(ent->s.pos.trBase[2]),
-                x87f_sub(x87f_add(x87f_load_f32(trace.endpos[2]),
-                                  x87f_load_f32(1.5f)),
-                         x87f_load_f32(ent->currentOrigin[2]))));
-#else
             /* Keep the height adjustment live until the trajectory-base store. */
             ent->s.pos.trBase[2] += ((WIDE_FLOAT)trace.endpos[2] + 1.5f) - ent->currentOrigin[2];
-#endif
             ent->currentOrigin[0] = trace.endpos[0];
             ent->currentOrigin[1] = trace.endpos[1];
             ent->currentOrigin[2] = trace.endpos[2];
@@ -386,15 +377,6 @@ void G_RunMissile(gentity_t *ent)
         /* Only zero/nonzero is consumed here. For finite float components,
          * the double sum and float root are zero exactly when all components
          * are zero; retaining the Windows root cannot change this decision. */
-#if EMULATE_X87
-        velocityMag = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(ent->s.pos.trDelta[0]),
-                              x87f_load_f32(ent->s.pos.trDelta[0])),
-                     x87f_mul(x87f_load_f32(ent->s.pos.trDelta[1]),
-                              x87f_load_f32(ent->s.pos.trDelta[1]))),
-            x87f_mul(x87f_load_f32(ent->s.pos.trDelta[2]),
-                     x87f_load_f32(ent->s.pos.trDelta[2])))));
-#else
         /* Linux stores the sum as double for libm, then rounds its result to float. */
         volatile WIDE_FLOAT squareX = (WIDE_FLOAT)ent->s.pos.trDelta[0] * ent->s.pos.trDelta[0];
         volatile WIDE_FLOAT squareY = (WIDE_FLOAT)ent->s.pos.trDelta[1] * ent->s.pos.trDelta[1];
@@ -402,7 +384,6 @@ void G_RunMissile(gentity_t *ent)
         volatile double squaredSpeed = (squareX + squareY) + squareZ;
         volatile float storedSpeed = CoduoLibm_Sqrt(squaredSpeed);
         velocityMag = storedSpeed;
-#endif
         if (velocityMag != 0.0f) {
             ent->s.groundEntityNum = ENTITYNUM_NONE;
         }
@@ -423,15 +404,8 @@ static int game_compat_g_missile_trace_time(const trace_t *trace)
         (uint32_t)level.time - (uint32_t)level.previousTime);
     int32_t elapsed;
 
-#if EMULATE_X87
-    /* (frameMsec * fraction) in x87 width (long double is 64-bit on arm64),
-     * truncated to int, then + previousTime. */
-    elapsed = x87f_store_i32_trunc(x87f_mul(
-        x87f_load_i32(frameMsec), x87f_load_f32(trace->fraction)));
-#else
     elapsed = game_compat_int32_from_long_double_trunc(
         (long double)frameMsec * (long double)trace->fraction);
-#endif
 
     return coduo_int32_from_bits((uint32_t)elapsed +
                                  (uint32_t)level.previousTime);
@@ -464,49 +438,26 @@ void G_MissileLandAngles(gentity_t *ent, trace_t *trace, float *angles,
              * loads (.rodata 0xa1778 = 0.3f, 0xa177c = 0.85f), not long
              * double literals; the arithmetic itself stays 80-bit. */
             if (pitchDeltaAbs < 80.0f) {
-#if EMULATE_X87
-                /* rand/2^31 is exact; *0.3f + 0.85f and the trDelta multiply
-                 * stay 80-bit (0.3/0.85 are DWORD float loads). */
-                double r = coduo_server_rand_unit();
-                ent->s.apos.trDelta[0] = x87f_store_f32(x87f_mul(
-                    x87f_load_f32(ent->s.apos.trDelta[0]),
-                    x87f_neg(x87f_add(x87f_mul(x87f_load_f64(r),
-                                               x87f_load_f32(0.3f)),
-                                      x87f_load_f32(0.85f)))));
-#else
                 ent->s.apos.trDelta[0] =
                     (float)((long double)ent->s.apos.trDelta[0] *
                             -((long double)coduo_server_rand_unit() * 0.3f +
                               0.85f));
-#endif
             } else {
-#if EMULATE_X87
-                double r = coduo_server_rand_unit();
-                ent->s.apos.trDelta[0] = x87f_store_f32(x87f_mul(
-                    x87f_load_f32(ent->s.apos.trDelta[0]),
-                    x87f_add(x87f_mul(x87f_load_f64(r), x87f_load_f32(0.3f)),
-                             x87f_load_f32(0.85f))));
-#else
                 ent->s.apos.trDelta[0] =
                     (float)((long double)ent->s.apos.trDelta[0] *
                             ((long double)coduo_server_rand_unit() * 0.3f +
                              0.85f));
-#endif
             }
         }
 
         angles[0] = AngleNormalize180(angles[0]);
         if (forceAngles != 0 || pitchDeltaAbs < 45.0f) {
             if (fabsf(angles[0]) > 90.0f) {
-#if defined(WINDOWS_BEHAVIOR)
                 /* The Windows half-turn adjustment follows the wide pitch
                  * scale in packed-angle units, before truncation and masking. */
                 volatile WIDE_FLOAT scaledPitch = (WIDE_FLOAT)landPitch * MISSILE_ANGLE_SHORT_SCALE;
                 uint32_t packedPitch = coduo_fp_to_u32_extended(scaledPitch + MISSILE_ANGLE_SHORT_HALF_TURN) & MISSILE_ANGLE_SHORT_MASK;
                 angles[0] = (float)packedPitch * MISSILE_ANGLE_SHORT_TO_DEGREES;
-#else
-                angles[0] = AngleNormalize360(landPitch + 180.0f);
-#endif
             } else {
                 angles[0] = AngleNormalize360(landPitch);
             }
@@ -542,38 +493,18 @@ int G_BounceMissile(gentity_t *ent, trace_t *trace)
     impactTime = game_compat_g_missile_trace_time(trace);
     BG_EvaluateTrajectoryDelta(&ent->s.pos, impactTime, velocity);
 
-#if EMULATE_X87
-    x87f productX = x87f_mul(x87f_load_f32(velocity[0]), x87f_load_f32(trace->normal[0]));
-    x87f productY = x87f_mul(x87f_load_f32(velocity[1]), x87f_load_f32(trace->normal[1]));
-    x87f productZ = x87f_mul(x87f_load_f32(velocity[2]), x87f_load_f32(trace->normal[2]));
-#if defined(WINDOWS_BEHAVIOR)
-    x87f dot = x87f_add(x87f_add(productX, productZ), productY);
-#else
-    x87f dot = x87f_load_f32(x87f_store_f32(x87f_add(x87f_add(productX, productY), productZ)));
-#endif
-    x87f reflection = x87f_mul(dot, x87f_load_f32(-2.0f));
-    for (int i = 0; i < 3; i++) {
-        ent->s.pos.trDelta[i] = x87f_store_f32(x87f_add(
-            x87f_mul(reflection, x87f_load_f32(trace->normal[i])), x87f_load_f32(velocity[i])));
-    }
-#else
     /* Windows keeps the X/Z/Y dot live. Linux folds X/Y/Z and stores the
      * dot as float. Wide products also prevent intermediate float rounding
      * on hosts without x87; volatile separates each multiply from its add. */
     volatile WIDE_FLOAT productX = (WIDE_FLOAT)velocity[0] * trace->normal[0];
     volatile WIDE_FLOAT productY = (WIDE_FLOAT)velocity[1] * trace->normal[1];
     volatile WIDE_FLOAT productZ = (WIDE_FLOAT)velocity[2] * trace->normal[2];
-#if defined(WINDOWS_BEHAVIOR)
     WIDE_FLOAT dot = (productX + productZ) + productY;
-#else
-    WIDE_FLOAT dot = coduo_round_f32((productX + productY) + productZ);
-#endif
     WIDE_FLOAT reflection = dot * -2.0f;
     for (int i = 0; i < 3; i++) {
         volatile WIDE_FLOAT correction = reflection * trace->normal[i];
         ent->s.pos.trDelta[i] = correction + velocity[i];
     }
-#endif
 
     if (trace->normal[2] > 0.7f) {
         ent->s.groundEntityNum = trace->entityNum;
@@ -597,26 +528,11 @@ int G_BounceMissile(gentity_t *ent, trace_t *trace)
         if (trace->normal[2] > 0.7) {
             WIDE_FLOAT speed;
 
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-            speed = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
-                x87f_add(x87f_mul(x87f_load_f32(ent->s.pos.trDelta[0]),
-                                  x87f_load_f32(ent->s.pos.trDelta[0])),
-                         x87f_mul(x87f_load_f32(ent->s.pos.trDelta[1]),
-                                  x87f_load_f32(ent->s.pos.trDelta[1]))),
-                x87f_mul(x87f_load_f32(ent->s.pos.trDelta[2]),
-                         x87f_load_f32(ent->s.pos.trDelta[2])))));
-#else
             volatile WIDE_FLOAT squareX = (WIDE_FLOAT)ent->s.pos.trDelta[0] * ent->s.pos.trDelta[0];
             volatile WIDE_FLOAT squareY = (WIDE_FLOAT)ent->s.pos.trDelta[1] * ent->s.pos.trDelta[1];
             volatile WIDE_FLOAT squareZ = (WIDE_FLOAT)ent->s.pos.trDelta[2] * ent->s.pos.trDelta[2];
-#if defined(WINDOWS_BEHAVIOR)
             /* FSQRT and its comparison consume the live Z/Y/X sum. */
             speed = coduo_x87_sqrtl((squareZ + squareY) + squareX);
-#else
-            volatile double squaredSpeed = (squareX + squareY) + squareZ;
-            speed = coduo_round_f32(CoduoLibm_Sqrt(squaredSpeed));
-#endif
-#endif
             if (speed < MISSILE_STOP_SPEED) {
                 vec3_t angles;
 
@@ -631,9 +547,6 @@ int G_BounceMissile(gentity_t *ent, trace_t *trace)
     /* Only Windows keeps the X product live through the position addition.
      * Both profiles store the Y/Z products before updating the position. */
     WIDE_FLOAT nudgeX = (WIDE_FLOAT)trace->normal[0] * 0.1f;
-#if defined(LINUX_BEHAVIOR)
-    nudgeX = coduo_round_f32(nudgeX);
-#endif
     volatile float nudgeY = (WIDE_FLOAT)trace->normal[1] * 0.1f;
     volatile float nudgeZ = (WIDE_FLOAT)trace->normal[2] * 0.1f;
     if (nudgeZ > 0.0f) {
@@ -661,27 +574,12 @@ int G_BounceMissile(gentity_t *ent, trace_t *trace)
     if (pointContents == 0) {
         for (int axis = 0; axis < 3; axis++) {
             delta[axis] = (WIDE_FLOAT)ent->s.pos.trDelta[axis] - velocity[axis];
-#if defined(LINUX_BEHAVIOR)
-            delta[axis] = coduo_round_f32(delta[axis]);
-#endif
         }
         WIDE_FLOAT speedDelta;
-#if EMULATE_X87 && defined(LINUX_BEHAVIOR)
-        speedDelta = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
-            x87f_add(x87f_mul(x87f_load_f32(delta[0]), x87f_load_f32(delta[0])),
-                     x87f_mul(x87f_load_f32(delta[1]), x87f_load_f32(delta[1]))),
-            x87f_mul(x87f_load_f32(delta[2]), x87f_load_f32(delta[2])))));
-#else
         volatile WIDE_FLOAT squareX = delta[0] * delta[0];
         volatile WIDE_FLOAT squareY = delta[1] * delta[1];
         volatile WIDE_FLOAT squareZ = delta[2] * delta[2];
-#if defined(WINDOWS_BEHAVIOR)
         speedDelta = coduo_x87_sqrtl((squareZ + squareY) + squareX);
-#else
-        volatile double squaredSpeed = (squareX + squareY) + squareZ;
-        speedDelta = coduo_round_f32(CoduoLibm_Sqrt(squaredSpeed));
-#endif
-#endif
         if (speedDelta > MISSILE_BOUNCE_EVENT_SPEED_DELTA) {
             return qtrue;
         }
@@ -795,19 +693,9 @@ void G_MissileImpact(gentity_t *ent, trace_t *trace, float *dir)
                 hitLogged = 1;
             }
             BG_EvaluateTrajectoryDelta(&ent->s.pos, level.time, velocity);
-#if EMULATE_X87
-            speed = (float)CoduoLibm_Sqrt(x87f_store_f64(x87f_add(
-                x87f_add(x87f_mul(x87f_load_f32(velocity[0]),
-                                  x87f_load_f32(velocity[0])),
-                         x87f_mul(x87f_load_f32(velocity[1]),
-                                  x87f_load_f32(velocity[1]))),
-                x87f_mul(x87f_load_f32(velocity[2]),
-                         x87f_load_f32(velocity[2])))));
-#else
             speed = (float)CoduoLibm_Sqrt((double)(velocity[0] * velocity[0] +
                                          velocity[1] * velocity[1] +
                                          velocity[2] * velocity[2]));
-#endif
             if (speed == 0.0f) {
                 velocity[2] = 1.0f;
             }
@@ -1059,9 +947,7 @@ void G_BarrageThink(gentity_t *ent)
          * the delay as float; Linux consumes that integer directly. Keep the
          * sum wide until the platform's final truncating integer conversion. */
         WIDE_FLOAT delayOperand = delay;
-#if defined(WINDOWS_BEHAVIOR)
         delayOperand = coduo_round_f32(delayOperand);
-#endif
         WIDE_FLOAT halfDelay = delayOperand * 0.5f;
         ent->splashDamage = coduo_fp_to_i32_extended(halfDelay + storedWarningTime);
         tempEnt = G_TempEntity(ent->currentOrigin,
@@ -1081,34 +967,14 @@ void G_BarrageThink(gentity_t *ent)
         angles[1] = (float)irand(0, 360);
         AngleVectors(angles, forward, NULL, NULL);
 
-#if EMULATE_X87
-        /* origin[i] = currentOrigin[i] + spread * signedRand * forward[i], the
-         * whole chain in x87 width after a fresh normalized sample per axis. */
-        for (int i = 0; i < 3; i++) {
-            double sr = coduo_server_rand_signed_unit();
-#if defined(WINDOWS_BEHAVIOR)
-            volatile float storedSpread = (float)weaponInfo->artilleryBarrageSpread;
-            x87f spread = x87f_load_f32(storedSpread);
-#else
-            x87f spread = x87f_load_i32(weaponInfo->artilleryBarrageSpread);
-#endif
-            origin[i] = x87f_store_f32(x87f_add(
-                x87f_load_f32(ent->currentOrigin[i]),
-                x87f_mul(x87f_mul(spread, x87f_load_f64(sr)),
-                         x87f_load_f32(forward[i]))));
-        }
-#else
         for (int i = 0; i < 3; i++) {
             WIDE_FLOAT signedRandom = coduo_server_rand_signed_unit();
             WIDE_FLOAT spread = weaponInfo->artilleryBarrageSpread;
-#if defined(WINDOWS_BEHAVIOR)
             spread = coduo_round_f32(spread);
-#endif
             volatile WIDE_FLOAT scaledRandom = signedRandom * spread;
             volatile WIDE_FLOAT offset = scaledRandom * forward[i];
             origin[i] = offset + ent->currentOrigin[i];
         }
-#endif
 
         tempEnt = G_TempEntity(origin, EV_PROJECTILE_INCOMING);
         tempEnt->s.tempEffectId = weaponInfo->projectileExplosionType;
@@ -1300,9 +1166,6 @@ gentity_t *fire_grenade(gentity_t *self, float *start, float *dir, int weapon)
     /* The Windows launch-pitch subtraction remains wide through angle packing;
      * Linux stores the adjusted angle as float before normalization. */
     WIDE_FLOAT adjustedPitch = (WIDE_FLOAT)grenade->s.apos.trBase[0] - GRENADE_LAUNCH_PITCH_ADJUSTMENT;
-#if defined(LINUX_BEHAVIOR)
-    adjustedPitch = coduo_round_f32(adjustedPitch);
-#endif
     uint32_t packedPitch = coduo_fp_to_u32_extended(adjustedPitch * MISSILE_ANGLE_SHORT_SCALE) & MISSILE_ANGLE_SHORT_MASK;
     grenade->s.apos.trBase[0] = (float)packedPitch * MISSILE_ANGLE_SHORT_TO_DEGREES;
     grenade->s.apos.trDelta[0] = 720.0f + flrand(-45.0f, 45.0f);

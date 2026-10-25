@@ -84,15 +84,10 @@ static void game_compat_client_transform_clamp_prone_view(gclient_t *client, vec
         WIDE_FLOAT adjustedYaw = yawDelta > 0.0f ?
             (WIDE_FLOAT)proneYaw - CLIENT_PRONE_YAW_LIMIT :
             (WIDE_FLOAT)proneYaw + CLIENT_PRONE_YAW_LIMIT;
-#if defined(LINUX_BEHAVIOR)
-        adjustedYaw = coduo_round_f32(adjustedYaw);
-#endif
         WIDE_FLOAT packedYaw = adjustedYaw * CLIENT_ANGLE_SHORT_SCALE;
-#if defined(WINDOWS_BEHAVIOR)
         if (!(yawDelta > 0.0f)) {
             packedYaw = (WIDE_FLOAT)proneYaw * CLIENT_ANGLE_SHORT_SCALE + CLIENT_PRONE_YAW_LIMIT_SHORT;
         }
-#endif
         angles[1] = (float)(coduo_fp_to_u32_extended(packedYaw) & 0xffffu) * CLIENT_ANGLE_SHORT_TO_DEGREES;
     }
 

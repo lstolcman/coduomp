@@ -42,13 +42,7 @@ qboolean Com_SkipBracedSection(char **data, int32_t depth);
 void Com_SkipRestOfLine(char **data);
 char *Com_ParseRestOfLine(char **data);
 
-#if defined(WINDOWS_BEHAVIOR)
 long double Com_ParseFloat(char **data);
-#elif defined(LINUX_BEHAVIOR)
-float Com_ParseFloat(char **data);
-#else
-#error "com_parse.h requires WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 int32_t Com_ParseInt(char **data);
 void Com_Parse1DMatrix(char **data, int32_t x, float *matrix);

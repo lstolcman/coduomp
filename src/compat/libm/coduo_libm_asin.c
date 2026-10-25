@@ -36,23 +36,23 @@
  *   |x| > 1   -> indefinite QNaN (TBYTE 0x200b0180), domain error
  *   NaN       -> quieted
  *
- * EMULATION STATUS: none. Both depend on FPATAN, which has no SoftFloat
- * equivalent and awaits the x87 transcendental reverse engineering. On
- * EMULATE_X87 builds these fall through to the platform libm, which is a known
- * and deliberate gap — see the table in coduo_libm.h.
+ * Native x87 builds execute FPATAN directly. Other supported
+ * targets use the shared native wide-math adapters at the same double boundary.
  */
 #include "coduo_libm.h"
-#include "compat/coduo_x87emu.h"
 
 #include <math.h>
 #include <string.h>
+
+#include "coduo_wide_math.h"
+
+#if (defined(__i386__) || defined(__x86_64__)) && (defined(__GNUC__) || defined(__clang__)) && LDBL_MANT_DIG == 64
 
 #define ASIN_HIGH_SIGN_MASK     0x80000000u
 #define ASIN_HIGH_EXPONENT_MASK 0x7ff00000u
 #define ASIN_HIGH_MANTISSA_MASK 0x000fffffu
 #define ASIN_EXPONENT_OF_ONE    0x3ff00000u
 
-#if !EMULATE_X87
 static uint32_t AsinHighDword(double value)
 {
     uint64_t bits;
@@ -119,14 +119,9 @@ static long double AsinRoot(long double x)
     __asm__ __volatile__("fsqrt" : "=t"(t) : "0"(t));
     return t;
 }
-#endif /* !EMULATE_X87 */
 
 double CoduoLibm_Asin(double value)
 {
-#if EMULATE_X87
-    /* No emulation: depends on FPATAN. Documented gap; platform libm is used. */
-    return asin(value);
-#else
     const uint32_t high = AsinHighDword(value);
     const uint32_t low = AsinLowDword(value);
     const uint32_t exponent = high & ASIN_HIGH_EXPONENT_MASK;
@@ -164,15 +159,10 @@ double CoduoLibm_Asin(double value)
     }
     AsinRestoreControlWord(saved);
     return (double)result;
-#endif
 }
 
 double CoduoLibm_Acos(double value)
 {
-#if EMULATE_X87
-    /* No emulation: depends on FPATAN. Documented gap; platform libm is used. */
-    return acos(value);
-#else
     const uint32_t high = AsinHighDword(value);
     const uint32_t low = AsinLowDword(value);
     const uint32_t exponent = high & ASIN_HIGH_EXPONENT_MASK;
@@ -210,5 +200,20 @@ double CoduoLibm_Acos(double value)
     }
     AsinRestoreControlWord(saved);
     return (double)result;
-#endif
 }
+
+#else
+
+/* NOT_FROM_ORIGINAL_SOURCE: native arithmetic adapter for this CRT boundary. */
+double CoduoLibm_Asin(double value)
+{
+    return (double)coduomp_math_asinl((long double)value);
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: native arithmetic adapter for this CRT boundary. */
+double CoduoLibm_Acos(double value)
+{
+    return (double)coduomp_math_acosl((long double)value);
+}
+
+#endif

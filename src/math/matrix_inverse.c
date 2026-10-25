@@ -1,12 +1,6 @@
 #include "q_math.h"
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
-#include "compat/coduo_x87emu.h"
 
 /*
  * The authoritative Windows bodies are instruction-identical except for the
@@ -32,7 +26,6 @@
  * reload source lanes after earlier destination stores, so partially or fully
  * overlapping matrices retain the original progressive overwrite behavior.
  */
-#if defined(WINDOWS_BEHAVIOR)
 void MatrixInverse(axis_t input, axis_t output)
 {
     /* Windows stores this first cofactor to binary32 before using it in both
@@ -85,113 +78,3 @@ void MatrixInverse(axis_t input, axis_t output)
          (double)input[0][1] * (double)input[1][0]) *
         inverseDeterminant);
 }
-#else
-#if EMULATE_X87
-#define MATRIX_INVERSE_MINOR(a, b, c, d)                                      \
-    x87f_sub(x87f_mul(x87f_load_f32(a), x87f_load_f32(b)),                   \
-             x87f_mul(x87f_load_f32(c), x87f_load_f32(d)))
-#else
-#define MATRIX_INVERSE_MINOR(a, b, c, d) \
-    ((WIDE_FLOAT)(a) * (WIDE_FLOAT)(b) - (WIDE_FLOAT)(c) * (WIDE_FLOAT)(d))
-#endif
-
-void MatrixInverse(axis_t input, axis_t output)
-{
-#if EMULATE_X87
-    const x87f determinantTerm0 = x87f_mul(
-        MATRIX_INVERSE_MINOR(input[2][2], input[1][1],
-                             input[2][1], input[1][2]),
-        x87f_load_f32(input[0][0]));
-    const x87f determinantTerm1 = x87f_mul(
-        MATRIX_INVERSE_MINOR(input[2][2], input[0][1],
-                             input[2][1], input[0][2]),
-        x87f_load_f32(input[1][0]));
-    const x87f determinantTerm2 = x87f_mul(
-        MATRIX_INVERSE_MINOR(input[1][2], input[0][1],
-                             input[1][1], input[0][2]),
-        x87f_load_f32(input[2][0]));
-    const float determinant = x87f_store_f32(x87f_add(
-        x87f_sub(determinantTerm0, determinantTerm1), determinantTerm2));
-    const float inverseDeterminant = x87f_store_f32(
-        x87f_div(x87f_load_f32(1.0f), x87f_load_f32(determinant)));
-
-    output[0][0] = x87f_store_f32(x87f_mul(
-        MATRIX_INVERSE_MINOR(input[2][2], input[1][1],
-                             input[2][1], input[1][2]),
-        x87f_load_f32(inverseDeterminant)));
-    output[0][1] = x87f_store_f32(x87f_mul(
-        x87f_neg(MATRIX_INVERSE_MINOR(input[2][2], input[0][1],
-                                      input[2][1], input[0][2])),
-        x87f_load_f32(inverseDeterminant)));
-    output[0][2] = x87f_store_f32(x87f_mul(
-        MATRIX_INVERSE_MINOR(input[1][2], input[0][1],
-                             input[1][1], input[0][2]),
-        x87f_load_f32(inverseDeterminant)));
-    output[1][0] = x87f_store_f32(x87f_mul(
-        x87f_neg(MATRIX_INVERSE_MINOR(input[2][2], input[1][0],
-                                      input[2][0], input[1][2])),
-        x87f_load_f32(inverseDeterminant)));
-    output[1][1] = x87f_store_f32(x87f_mul(
-        MATRIX_INVERSE_MINOR(input[2][2], input[0][0],
-                             input[2][0], input[0][2]),
-        x87f_load_f32(inverseDeterminant)));
-    output[1][2] = x87f_store_f32(x87f_mul(
-        x87f_neg(MATRIX_INVERSE_MINOR(input[1][2], input[0][0],
-                                      input[1][0], input[0][2])),
-        x87f_load_f32(inverseDeterminant)));
-    output[2][0] = x87f_store_f32(x87f_mul(
-        MATRIX_INVERSE_MINOR(input[2][1], input[1][0],
-                             input[2][0], input[1][1]),
-        x87f_load_f32(inverseDeterminant)));
-    output[2][1] = x87f_store_f32(x87f_mul(
-        x87f_neg(MATRIX_INVERSE_MINOR(input[2][1], input[0][0],
-                                      input[2][0], input[0][1])),
-        x87f_load_f32(inverseDeterminant)));
-    output[2][2] = x87f_store_f32(x87f_mul(
-        MATRIX_INVERSE_MINOR(input[1][1], input[0][0],
-                             input[1][0], input[0][1]),
-        x87f_load_f32(inverseDeterminant)));
-#else
-    /* Minors and their products stay wide. Only the determinant, reciprocal
-     * and output assignments narrow the accumulated values to binary32. */
-    const float determinant =
-        (MATRIX_INVERSE_MINOR(input[2][2], input[1][1], input[2][1], input[1][2]) *
-             input[0][0] -
-         MATRIX_INVERSE_MINOR(input[2][2], input[0][1], input[2][1], input[0][2]) *
-             input[1][0]) +
-        MATRIX_INVERSE_MINOR(input[1][2], input[0][1], input[1][1], input[0][2]) *
-            input[2][0];
-    const float inverseDeterminant = (WIDE_FLOAT)1.0f / (WIDE_FLOAT)determinant;
-
-    output[0][0] =
-        MATRIX_INVERSE_MINOR(input[2][2], input[1][1], input[2][1], input[1][2]) *
-        inverseDeterminant;
-    output[0][1] =
-        -MATRIX_INVERSE_MINOR(input[2][2], input[0][1], input[2][1], input[0][2]) *
-        inverseDeterminant;
-    output[0][2] =
-        MATRIX_INVERSE_MINOR(input[1][2], input[0][1], input[1][1], input[0][2]) *
-        inverseDeterminant;
-    output[1][0] =
-        -MATRIX_INVERSE_MINOR(input[2][2], input[1][0], input[2][0], input[1][2]) *
-        inverseDeterminant;
-    output[1][1] =
-        MATRIX_INVERSE_MINOR(input[2][2], input[0][0], input[2][0], input[0][2]) *
-        inverseDeterminant;
-    output[1][2] =
-        -MATRIX_INVERSE_MINOR(input[1][2], input[0][0], input[1][0], input[0][2]) *
-        inverseDeterminant;
-    output[2][0] =
-        MATRIX_INVERSE_MINOR(input[2][1], input[1][0], input[2][0], input[1][1]) *
-        inverseDeterminant;
-    output[2][1] =
-        -MATRIX_INVERSE_MINOR(input[2][1], input[0][0], input[2][0], input[0][1]) *
-        inverseDeterminant;
-    output[2][2] =
-        MATRIX_INVERSE_MINOR(input[1][1], input[0][0], input[1][0], input[0][1]) *
-        inverseDeterminant;
-#endif
-}
-
-#undef MATRIX_INVERSE_MINOR
-#endif

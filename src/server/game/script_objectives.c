@@ -117,7 +117,7 @@ void SetObjectiveIcon(objective_t *objective, uint32_t paramIndex)
 
 static void game_compat_objective_set_rounded_origin(objective_t *objective, uint32_t paramIndex)
 {
-    /* NOT_FROM_ORIGINAL_SOURCE: factored vector read and platform-selected
+    /* NOT_FROM_ORIGINAL_SOURCE: factored vector read and Windows
      * integer conversion. Each binary32 component is loaded independently,
      * converted to the signed low dword, then stored back as binary32. */
     Scr_GetVector(paramIndex, objective->origin);

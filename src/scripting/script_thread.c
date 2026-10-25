@@ -70,9 +70,6 @@ void Scr_AddExecThread(uint32_t codeOffset, uint32_t paramCount)
     }
 
     script_codepos_t codePos = script_codeBase + codeOffset;
-#if defined(LINUX_BEHAVIOR)
-    ScriptCode_IsLoadedCodePos(codePos);
-#endif
     uint16_t thread = VM_ExecuteThread(
         script_levelHandle,
         codePos,
@@ -91,9 +88,6 @@ void Scr_AddExecEntThreadNum(int32_t entityNum, int32_t classNum,
 
     uint16_t object = Scr_GetEntityId(entityNum, classNum);
     script_codepos_t codePos = script_codeBase + codeOffset;
-#if defined(LINUX_BEHAVIOR)
-    ScriptCode_IsLoadedCodePos(codePos);
-#endif
     uint16_t thread = VM_ExecuteThread(object, codePos, paramCount);
     RemoveRefToObject(thread);
 }
@@ -107,9 +101,6 @@ uint16_t Scr_ExecThread(uint32_t codeOffset, uint32_t paramCount)
     }
 
     script_codepos_t codePos = script_codeBase + codeOffset;
-#if defined(LINUX_BEHAVIOR)
-    ScriptCode_IsLoadedCodePos(codePos);
-#endif
     uint16_t thread = VM_ExecuteThread(
         script_levelHandle,
         codePos,
@@ -133,9 +124,6 @@ uint16_t Scr_ExecEntThreadNum(int32_t entityNum, int32_t classNum,
 
     uint16_t object = Scr_GetEntityId(entityNum, classNum);
     script_codepos_t codePos = script_codeBase + codeOffset;
-#if defined(LINUX_BEHAVIOR)
-    ScriptCode_IsLoadedCodePos(codePos);
-#endif
     uint16_t thread = VM_ExecuteThread(object, codePos, paramCount);
 
     RemoveRefToValue(script_valueStackTop);

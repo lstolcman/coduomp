@@ -43,63 +43,14 @@
 #include "bg_vehicle.h"
 #include "bg_weapon.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
 #include <math.h>
 
-#if defined(LINUX_BEHAVIOR)
-#define WEAPON_VIEWKICK_ADS_BASE 0.5f
-#define WEAPON_VIEWKICK_FADE_IN_MS 100.0f
-#define WEAPON_VIEWKICK_FADE_OUT_MS 400.0f
-#define WEAPON_VIEWKICK_ADS_REDUCTION 0.75f
-#define WEAPON_VIEWKICK_PITCH_SCALE 0.5f
-#define WEAPON_VIEWKICK_ROLL_SCALE 0.5f
-
-#if EMULATE_X87
-/* NOT_FROM_ORIGINAL_SOURCE: extended carrier for the inlined lean expression. */
-static x87f bg_compat_get_lean_fraction_x87(float fraction)
-{
-    return x87f_mul(
-        x87f_sub(x87f_load_f32(2.0f),
-                 x87f_abs(x87f_load_f32(fraction))),
-        x87f_load_f32(fraction));
-}
-#endif
-
-/* NOT_FROM_ORIGINAL_SOURCE: local factoring of the three original stores. */
-static void bg_compat_add_view_kick_angles(
-    pm_weapon_angle_state_t *state, vec3_t angles, float fraction)
-{
-#if EMULATE_X87
-    angles[0] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_mul(x87f_load_f32(fraction),
-                          x87f_load_f32(state->viewKickPitch)),
-                 x87f_load_f32(WEAPON_VIEWKICK_PITCH_SCALE)),
-        x87f_load_f32(angles[0])));
-    angles[1] = x87f_store_f32(x87f_sub(
-        x87f_load_f32(angles[1]),
-        x87f_mul(x87f_load_f32(fraction),
-                 x87f_load_f32(state->viewKickYaw))));
-    angles[2] = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_mul(x87f_load_f32(fraction),
-                          x87f_load_f32(state->viewKickYaw)),
-                 x87f_load_f32(WEAPON_VIEWKICK_ROLL_SCALE)),
-        x87f_load_f32(angles[2])));
-#else
-    angles[0] += (WIDE_FLOAT)fraction * state->viewKickPitch *
-                 WEAPON_VIEWKICK_PITCH_SCALE;
-    angles[1] -= (WIDE_FLOAT)fraction * state->viewKickYaw;
-    angles[2] += (WIDE_FLOAT)fraction * state->viewKickYaw *
-                 WEAPON_VIEWKICK_ROLL_SCALE;
-#endif
-}
-#endif
 
 void BG_CalculateWeaponPosition_DamageKick(pm_weapon_angle_state_t *state,
                                            vec3_t angles)
 {
-#if defined(WINDOWS_BEHAVIOR)
     /* 0x300154d4..0x300154d9: skip the whole contribution when no kick is active
      * (viewKickStartTime == 0). `angles` is left untouched. */
     int32_t viewKickStartTime = state->viewKickStartTime;
@@ -192,110 +143,4 @@ void BG_CalculateWeaponPosition_DamageKick(pm_weapon_angle_state_t *state,
     angles[2] = (float)((long double)angles[2] +
                      (long double)0.5f * kick *
                          (long double)state->viewKickYaw);
-#else
-    playerState_t *ps;
-    const weaponInfo_t *weapon;
-    float adsFraction;
-    float scale;
-    float fadeInTime;
-    float fadeOutTime;
-    float elapsed;
-
-    if (state->viewKickStartTime == 0) {
-        return;
-    }
-
-    ps = state->ps;
-    weapon = BG_GetInfoForWeapon(ps->currentWeapon);
-    adsFraction = ps->adsFraction;
-#if EMULATE_X87
-    scale = x87f_store_f32(x87f_add(
-        x87f_mul(x87f_load_f32(adsFraction),
-                 x87f_load_f32(WEAPON_VIEWKICK_ADS_BASE)),
-        x87f_load_f32(WEAPON_VIEWKICK_ADS_BASE)));
-#else
-    scale = adsFraction * WEAPON_VIEWKICK_ADS_BASE +
-            WEAPON_VIEWKICK_ADS_BASE;
-#endif
-    fadeInTime = scale * WEAPON_VIEWKICK_FADE_IN_MS;
-    fadeOutTime = scale * WEAPON_VIEWKICK_FADE_OUT_MS;
-
-    if (adsFraction != 0.0f && weapon->adsOverlayReticle != 0) {
-#if EMULATE_X87
-        scale = x87f_store_f32(x87f_mul(
-            x87f_load_f32(scale),
-            x87f_sub(x87f_load_f32(1.0f),
-                     x87f_mul(x87f_load_f32(adsFraction),
-                              x87f_load_f32(
-                                  WEAPON_VIEWKICK_ADS_REDUCTION)))));
-#else
-        scale *= 1.0f -
-                 (WIDE_FLOAT)adsFraction * WEAPON_VIEWKICK_ADS_REDUCTION;
-#endif
-    }
-
-    elapsed = (float)coduo_int32_from_bits(
-        (uint32_t)state->time - (uint32_t)state->viewKickStartTime);
-    if (elapsed < fadeInTime) {
-#if EMULATE_X87
-        const float leanArg = x87f_store_f32(x87f_div(
-            x87f_load_f32(elapsed), x87f_load_f32(fadeInTime)));
-#else
-        const float leanArg = elapsed / fadeInTime;
-#endif
-        /* The fade-in curve is stored before the separate scale multiply. */
-        const float leanPhase = GetLeanFraction(leanArg);
-#if EMULATE_X87
-        bg_compat_add_view_kick_angles(
-            state, angles,
-            x87f_store_f32(x87f_mul(
-                x87f_load_f32(leanPhase),
-                x87f_load_f32(scale))));
-#else
-        bg_compat_add_view_kick_angles(
-            state, angles, leanPhase * scale);
-#endif
-    } else {
-        float fadeOutFraction;
-
-#if EMULATE_X87
-        fadeOutFraction = x87f_store_f32(x87f_sub(
-            x87f_load_f32(1.0f),
-            x87f_div(
-                x87f_sub(x87f_load_f32(elapsed),
-                         x87f_load_f32(fadeInTime)),
-                x87f_load_f32(fadeOutTime))));
-#else
-        fadeOutFraction =
-            1.0f - ((WIDE_FLOAT)elapsed - fadeInTime) / fadeOutTime;
-#endif
-        if (fadeOutFraction > 0.0f) {
-            float fadeOutLean;
-
-#if EMULATE_X87
-            const float leanArg = x87f_store_f32(x87f_sub(
-                x87f_load_f32(1.0f),
-                x87f_load_f32(fadeOutFraction)));
-            fadeOutLean = x87f_store_f32(x87f_sub(
-                x87f_load_f32(1.0f),
-                bg_compat_get_lean_fraction_x87(leanArg)));
-#else
-            /* Keep the live curve through subtraction on float-return ABIs. */
-            const float leanArg = 1.0f - fadeOutFraction;
-            fadeOutLean = (float)(1.0L - (2.0L - (long double)fabsf(leanArg)) * (long double)leanArg);
-#endif
-            bg_compat_add_view_kick_angles(
-                state, angles, fadeOutLean * scale);
-        }
-    }
-#endif
 }
-
-#if defined(LINUX_BEHAVIOR)
-#undef WEAPON_VIEWKICK_ADS_BASE
-#undef WEAPON_VIEWKICK_FADE_IN_MS
-#undef WEAPON_VIEWKICK_FADE_OUT_MS
-#undef WEAPON_VIEWKICK_ADS_REDUCTION
-#undef WEAPON_VIEWKICK_PITCH_SCALE
-#undef WEAPON_VIEWKICK_ROLL_SCALE
-#endif

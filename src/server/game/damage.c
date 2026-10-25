@@ -15,7 +15,6 @@
 #include "scr_vm.h"
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_x87_eval.h"
-#include "compat/coduo_x87emu.h"
 #include "compat/coduo_native_x87.h"
 #include "qcommon/q_string.h"
 
@@ -165,13 +164,7 @@ void LookAtKiller(gentity_t *self, gentity_t *inflictor, gentity_t *attacker)
         return;
     }
 
-#if EMULATE_X87
-    {
-        const float killerYaw = vectoyaw(dir);
-        self->client->ps.stats[STAT_DEAD_YAW] =
-            x87f_store_i32_trunc(x87f_load_f32(killerYaw));
-    }
-#elif defined(__x86_64__)
+#if   defined(__x86_64__)
     {
         const float killerYaw = vectoyaw(dir);
         self->client->ps.stats[STAT_DEAD_YAW] =

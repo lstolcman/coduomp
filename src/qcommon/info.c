@@ -451,7 +451,6 @@ qboolean ParseConfigStringToStruct(
         case PARSE_FIELD_INT:
         case PARSE_FIELD_BOOL: {
             int32_t parsed;
-#if defined(WINDOWS_BEHAVIOR)
             const unsigned char *cursor = (const unsigned char *)value;
             uint32_t magnitude = 0;
             int32_t negative = 0;
@@ -471,19 +470,6 @@ qboolean ParseConfigStringToStruct(
             }
             bits = negative != 0 ? 0u - magnitude : magnitude;
             memcpy(&parsed, &bits, sizeof(parsed));
-#else
-            long hostValue = strtol(value, NULL, 10);
-
-            /* The original Linux ABI has a 32-bit long. Reapply that range
-             * when this source is built on an LP64 support host. */
-            if (hostValue > INT32_MAX) {
-                parsed = INT32_MAX;
-            } else if (hostValue < INT32_MIN) {
-                parsed = INT32_MIN;
-            } else {
-                parsed = (int32_t)hostValue;
-            }
-#endif
             if (field->type == PARSE_FIELD_BOOL) {
                 parsed = parsed != 0;
             }
@@ -497,24 +483,12 @@ qboolean ParseConfigStringToStruct(
         }
         case PARSE_FIELD_MILLISECONDS: {
             int32_t parsed;
-#if defined(WINDOWS_BEHAVIOR)
             volatile double scaledMilliseconds = coduo_compat_atof(value) * 1000.0;
 
             /* ORIGINAL_PLATFORM_DIFFERENCE: every authoritative Windows body
              * keeps atof's binary64 value through the multiply under the
              * process PC=53 x87 policy, then retains _ftol2's low dword. */
             parsed = coduo_fp_to_i32_f64(scaledMilliseconds);
-#else
-            volatile float seconds = (float)coduo_compat_atof(value);
-            const long double scaledMilliseconds =
-                (long double)seconds * (long double)1000.0f;
-
-            /* ORIGINAL_PLATFORM_DIFFERENCE: both authoritative Linux server
-             * bodies explicitly spill atof to binary32 before multiplying.
-             * Their process x87 policy is PC=64, but this product needs at
-             * most 34 significant bits after that spill. */
-            parsed = coduo_fp_to_i32_extended(scaledMilliseconds);
-#endif
             memcpy(destination, &parsed, sizeof(parsed));
             break;
         }

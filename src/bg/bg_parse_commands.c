@@ -61,13 +61,7 @@
 
 #include "bg_animation.h"
 #include "bg_animation_services.h"
-#if defined(WINDOWS_BEHAVIOR)
 #include "compat/crt/msvc_compat.h"
-#elif defined(LINUX_BEHAVIOR)
-#include <stdlib.h>
-#else
-#error "BG_ParseCommands requires a target behavior"
-#endif
 #include "qcommon/com_parse.h"
 #include "qcommon/q_string.h"
 
@@ -240,13 +234,8 @@ void BG_ParseCommands(char **text, bg_anim_script_t *script,
                         BG_AnimParseError("BG_ParseCommands: expected duration value");
                     }
                     /* 0x300021fd: store Q_atoi(value) as the slot duration word. */
-#if defined(WINDOWS_BEHAVIOR)
                     command->duration[bodyPartSlot] =
                         (int16_t)coduo_crt_atoi(value);
-#else
-                    command->duration[bodyPartSlot] =
-                        (int16_t)atoi(value);
-#endif
                     continue;
                 }
 
@@ -272,12 +261,8 @@ void BG_ParseCommands(char **text, bg_anim_script_t *script,
                     }
                     /* 0x3000228b: only stamped in-game (else the value is dropped). */
                     if (bgRuntimeAnimations == NULL) {
-#if defined(WINDOWS_BEHAVIOR)
                         animations[animIndex].blendTime =
                             coduo_crt_atoi(value);
-#else
-                        animations[animIndex].blendTime = atoi(value);
-#endif
                     }
                     continue;
                 }

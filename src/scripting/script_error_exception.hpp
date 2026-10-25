@@ -3,11 +3,7 @@
 
 class ScriptErrorClass {
 public:
-#if defined(WINDOWS_BEHAVIOR)
     ScriptErrorClass() = default;
-#else
-    ScriptErrorClass();
-#endif
 };
 
 #endif

@@ -30,8 +30,7 @@
 /*
  * CM_LoadMap wall-clock timing (cvar cd_loadTiming 1). Measures the collision
  * load itself — from just after the early-out to just before the digest work —
- * so a build's collision-geometry cost (the part the x87 emulation changes) can
- * be compared across the 32-bit, -mfpmath=387 and EMULATE_X87 builds. Uses
+ * so collision-geometry cost can be compared across supported native builds. Uses
  * CLOCK_MONOTONIC so it is unaffected by wall-clock adjustments.
  */
 static struct timespec cd_loadTimingStart;
@@ -62,7 +61,7 @@ void coduo_engine_collision_load_timing_end(const char *mapName)
     /* Report the terrain/curved split: the two collide builders have very
      * different FP cost. Terrain patches go through CM_GenerateTerrainCollide;
      * curved patches through the much heavier CM_GeneratePatchCollide winding/
-     * bevel chain, which dominates the emulated build's load time. */
+     * bevel chain, which can dominate map-load arithmetic cost. */
     int32_t curvedCount = 0;
     for (int32_t i = 0; i < cm_numTerrainPatches; ++i) {
         if (cm_terrainPatches[i].terrainCollide == NULL) {
@@ -107,9 +106,8 @@ void coduo_engine_collision_digest_bytes_external(const void *data, size_t lengt
  * EVERY float the probe computes MUST come out bit-identical in every build, or
  * the harness feeds each build a different ray and the digests can never match —
  * the divergence would be the probe's, not the engine's. (That exact bug made
- * the trace digest unmatchable until it was found.) This file is not emulated
- * (it is not reconstructed code), so on an EMULATE_X87 build it runs the host's
- * native FP while the reference build runs x87: an expression like
+ * the trace digest unmatchable until it was found.) This diagnostic uses native FP, so x87 and non-x87 hosts can otherwise
+ * evaluate its input construction differently: an expression like
  * `mins + (maxs - mins) * f` then differs by an ULP because x87 keeps the
  * product in an 80-bit register.
  *
@@ -129,13 +127,9 @@ static float coduo_engine_collision_probe_lerp(float lo, float hi, int32_t numer
 
 /*
  * Flip-rate probe (cvar cd_flipProbe 1). When set, coduo_engine_collision_probe_trace prints one
- * deterministic line per trace with the exact result bits. Two builds that
- * differ only in their x87f_* backend (EMU_X87_SOFTFLOAT vs EMU_X87_DOUBLE)
- * fire the identical trace sequence, so diffing the two dumps line-for-line
- * counts how many collision decisions the approximation flips vs the exact
- * backend. That flip count / total is the approximation's quality metric.
- * (Both builds run the same emulated trace source and the same native FP for
- * any not-yet-emulated helper, so the only variable is the backend.)
+ * deterministic line per trace with exact result bits. Supported native builds
+ * fire identical inputs; a line-by-line comparison identifies collision
+ * decisions affected by differences in their floating-point evaluation.
  */
 static int cm_flipDump;
 static int64_t cm_flipSeq;
@@ -189,17 +183,15 @@ static void coduo_engine_collision_probe_trace(const vec3_t start, const vec3_t 
  * cd_capsulePatchDigest 1).
  *
  * The whole-map trace digest cannot isolate this one function: a capsule box
- * trace also runs the capsule-vs-brush / bbox helpers, several of which are not
- * yet x87-emulated, so their divergence swamps the signal. This harness instead
- * calls CM_TraceSphereThroughTerrainCollide DIRECTLY, per soup patch, with
- * build-independent synthetic inputs (every float forced through a volatile slot
- * so both the -mfpmath=387 reference and the EMULATE_X87 build feed identical
- * bits), and hashes only that function's output (fraction / normal / startsolid).
- * A match between the two builds proves this function alone is bit-exact.
+ * trace also runs capsule-vs-brush and bbox helpers, whose differences can
+ * obscure this function. The probe calls CM_TraceSphereThroughTerrainCollide
+ * directly with build-independent synthetic inputs, forcing each construction
+ * step through a volatile float slot, and hashes only its outputs. Matching
+ * digests establish agreement for the sampled inputs.
  *
  * All three hit branches (facet-edge, vertex-sphere, edge-cylinder) match the
  * 32-bit x87 reference bit-for-bit across the map corpus. Reaching that on the
- * cylinder branch also required emulating ProjectPointOnPlane, which builds the
+ * cylinder branch also depended on ProjectPointOnPlane, which builds the
  * edge-cylinder radialAxes at map load (via PerpendicularVector) — an upstream
  * input this function reads. This harness catches regressions in that
  * construction too, since a radialAxes drift shows up as a cylinder-normal
@@ -256,7 +248,7 @@ void coduo_engine_emit_capsule_patch_digest(const char *mapName)
                  * step so the harness math itself is build-independent. Storing
                  * only the final sum to a volatile is NOT enough: the products
                  * and partial sums would still evaluate in the build's native FP
-                 * (x87 80-bit on i386 vs SSE on the emulated build), feeding the
+                 * (x87 on Intel versus native SSE or arm64 arithmetic), feeding the
                  * two builds different inputs. Each op therefore rounds through
                  * its own volatile slot. */
                 for (int32_t a = 0; a < 3; ++a) {
@@ -476,11 +468,9 @@ void coduo_engine_emit_collision_digest(const char *mapName)
      * route through curveCollide, never terrainCollide.
      *
      * NOTE: this probe path exists to VALIDATE CM_TraceSphereThroughTerrainCollide
-     * once its float sites are emulated; that function is not yet emulated, so a
-     * faithful-vs-emulated diff of this digest is EXPECTED to differ until the
-     * emulation lands. Confirm the path actually runs with a poison test (break
-     * the capsule function and watch the digest move) — a probe that cannot fail
-     * is not a probe.
+     * across native builds. Confirm the path actually runs with a poison test
+     * before relying on its digest; a probe that cannot fail does not validate
+     * the sampled path.
      */
     for (int32_t patchIndex = 0; patchIndex < cm_numTerrainPatches;
          ++patchIndex) {
@@ -526,15 +516,13 @@ void coduo_engine_emit_collision_digest(const char *mapName)
 
 /*
  * Per-patch collision-geometry parity dump — the fine-grained tool that drives
- * the x87-emulation work and defines the "FP sufficiently emulated" milestone.
+ * comparison of generated collision data across supported native builds.
  *
  * The trace digest above is one whole-map hash (matches / does-not-match, no
  * localization). This dumps a stable per-terrain-patch line — its bounds and a
  * hash of every generated triangle plane and barycentric vector — so a diff
- * between the emulated build and the x87 reference lists EXACTLY which patches
- * still diverge, pointing at the collision-construction functions that still
- * need emulating. Parity is reached when this dump is identical between the two
- * builds for every map in the corpus. Triggered by cvar `cd_collisionParity 1`.
+ * between native builds identifies the patches and construction functions
+ * that require inspection. Agreement is measured per map in the sampled corpus. Triggered by cvar `cd_collisionParity 1`.
  */
 /* NOT_FROM_ORIGINAL_SOURCE: loaded-collision parity report. */
 void coduo_engine_emit_collision_parity(const char *mapName)
@@ -711,26 +699,12 @@ void coduo_engine_emit_collision_parity(const char *mapName)
 /*
  * Core-math cross-build differential digest (cvar cd_coreMathDigest 1).
  *
- * A "direct unit call" harness for the pure leaf functions in src/core_math:
- * runs each converted function over a fixed battery of inputs and folds the
- * float-projected result into a per-function FNV-1a digest. The x87 reference
- * build (-mfpmath=387) and the EMULATE_X87 build must print identical digests;
- * a mismatch means the x87f transcription of that function diverges from x87.
- *
- * Only x87-EMULATED functions belong here. An un-emulated core_math function
- * runs native host FP on the EMULATE build (SSE/NEON) versus x87 on the
- * reference, so it would mismatch for a reason that is not a transcription bug —
- * add each function to the battery as it is converted, not before.
- *
- * Results are projected to float32 before hashing because that is how every
- * caller consumes these returns: the genuinely-80-bit returns (DistanceSquared*)
- * leave an unrounded sum in st0 on the x86 reference but a float-rounded value
- * on the emulated build (see distance_squared.c), and only the caller's float
- * projection — round80->float either way — is the observable value.
- *
- * Inputs are float LITERALS only. Never compute a harness input with native FP:
- * that would feed the x87 reference and the emulated build different values (the
- * same trap documented for the probe rays above).
+ * Calls the selected pure math leaves with fixed inputs and folds their
+ * float-projected outputs into per-function FNV-1a digests. Differences between
+ * native builds identify arithmetic paths to inspect against Windows machine
+ * code; matching sampled digests do not establish a complete function proof.
+ * Inputs are float literals, and projection deliberately measures the float
+ * store boundary rather than claiming that wider live return values agree.
  */
 /* NOT_FROM_ORIGINAL_SOURCE: core-math parity probe. */
 void coduo_engine_emit_core_math_digest(void)

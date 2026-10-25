@@ -54,22 +54,7 @@ typedef struct hunk_temp_header_s {
  * 0x08238548..0x08238568.  Select the complete original layout at the type
  * boundary; do not combine the two records into a synthetic superset.
  */
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "hunk_state_t requires one platform behavior"
-#elif defined(LINUX_BEHAVIOR)
-typedef struct hunk_state_s {
-    size_t lowMark;
-    size_t lowTempMark;
-    size_t lowUsed;
-    size_t lowTemp;
-    size_t highMark;
-    size_t highTempMark;
-    size_t highUsed;
-    size_t highTemp;
-    size_t totalSize;
-} hunk_state_t;
-#else
-/* WINDOWS_BEHAVIOR is the default for client builds. */
+/* Windows hunk layout, adapted only for the host pointer width. */
 typedef struct hunk_state_s {
     size_t totalSize;
     size_t totalZoneSize; /* Reported but never written by CoDUOMP.exe. */
@@ -84,7 +69,6 @@ typedef struct hunk_state_s {
     size_t lowUsed;
     size_t lowTemp;
 } hunk_state_t;
-#endif
 
 #if UINTPTR_MAX == UINT32_MAX
 HUNK_TYPES_STATIC_ASSERT(HUNK_TYPES_ALIGNOF(hunk_log_block_t) == 4,
@@ -111,28 +95,6 @@ HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_temp_header_t, sizeDelta) == 0x04,
                "i386 hunk temporary size delta moved");
 HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_temp_header_t, unused08) == 0x08,
                "i386 hunk temporary unused tail moved");
-#if defined(LINUX_BEHAVIOR)
-HUNK_TYPES_STATIC_ASSERT(sizeof(hunk_state_t) == 0x24,
-               "Linux i386 hunk-state extent changed");
-HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, lowMark) == 0x00,
-               "Linux hunk low mark moved");
-HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, lowTempMark) == 0x04,
-               "Linux hunk low temporary mark moved");
-HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, lowUsed) == 0x08,
-               "Linux hunk low permanent use moved");
-HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, lowTemp) == 0x0c,
-               "Linux hunk low temporary use moved");
-HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, highMark) == 0x10,
-               "Linux hunk high mark moved");
-HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, highTempMark) == 0x14,
-               "Linux hunk high temporary mark moved");
-HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, highUsed) == 0x18,
-               "Linux hunk high permanent use moved");
-HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, highTemp) == 0x1c,
-               "Linux hunk high temporary use moved");
-HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, totalSize) == 0x20,
-               "Linux hunk total size moved");
-#else
 HUNK_TYPES_STATIC_ASSERT(HUNK_TYPES_ALIGNOF(hunk_state_t) == 4,
                "Windows i386 hunk-state alignment changed");
 HUNK_TYPES_STATIC_ASSERT(sizeof(hunk_state_t) == 0x30,
@@ -161,7 +123,6 @@ HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, lowUsed) == 0x28,
                "Windows hunk low permanent use moved");
 HUNK_TYPES_STATIC_ASSERT(offsetof(hunk_state_t, lowTemp) == 0x2c,
                "Windows hunk low temporary use moved");
-#endif
 #endif
 HUNK_TYPES_STATIC_ASSERT(sizeof(hunk_temp_header_t) == 0x10,
                "hunk temporary-header extent changed");

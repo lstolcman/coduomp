@@ -6,18 +6,10 @@
 
 /* Windows leaves each result live in ST0. Linux narrows the cycle and vertical
  * factor to binary32; its horizontal factor returns the final product live. */
-#if defined(WINDOWS_BEHAVIOR)
 long double BG_GetBobCycle(const playerState_t *ps);
 long double BG_GetVerticalBobFactor(const playerState_t *ps, float phase,
                                     float amplitude, float maxAmplitude);
 long double BG_GetHorizontalBobFactor(const playerState_t *ps, float phase,
                                       float amplitude, float maxAmplitude);
-#else
-float BG_GetBobCycle(const playerState_t *ps);
-float BG_GetVerticalBobFactor(const playerState_t *ps, float phase,
-                              float amplitude, float maxAmplitude);
-WIDE_FLOAT BG_GetHorizontalBobFactor(const playerState_t *ps, float phase,
-                                     float amplitude, float maxAmplitude);
-#endif
 
 #endif

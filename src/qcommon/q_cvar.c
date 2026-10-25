@@ -731,7 +731,6 @@ void Cvar_Update(vmCvar_t *vmCvar)
  * negative on truncation, while Linux C99 snprintf returns the required
  * length. See docs/platform-discrepancies/
  * cvar-save-buffer-truncation.md. */
-#if defined(WINDOWS_BEHAVIOR)
 /* Source: CoDUOMP.exe 0x0043d4b0..0x0043d521.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0043d4b0_0043d522.mcode.
  * Name: exact same-module Mac symbol Com_SaveCvarsToBuffer. */
@@ -758,31 +757,6 @@ qboolean Com_SaveCvarsToBuffer(const char *const *cvarNames,
 
     return qtrue;
 }
-#else
-/* Source: coduo_lnxded 0x08072b9e..0x08072c3d. */
-qboolean Com_SaveCvarsToBuffer(const char *const *cvarNames,
-                               int32_t cvarCount, char *buffer,
-                               size_t bufferSize)
-{
-    size_t remaining = bufferSize;
-
-    for (int32_t index = 0; index < cvarCount; ++index) {
-        const char *const name = cvarNames[index];
-        const char *const value = Cvar_VariableString(name);
-        const int32_t written = snprintf(
-            buffer, (size_t)remaining, "%s \"%s\"\n", name, value);
-
-        /* NOT_FROM_ORIGINAL_SOURCE: advance only after the complete serialized
-         * entry fits the remaining output extent. */
-        if (written < 0 || (size_t)written >= remaining)
-            return qfalse;
-        buffer += written;
-        remaining -= (size_t)written;
-    }
-
-    return qtrue;
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x0043d530..0x0043d757.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0043d530_0043d758.mcode.

@@ -2,12 +2,8 @@
 
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 #include "math/q_math.h"
 
-#if defined(LINUX_BEHAVIOR)
-#include "compat/libm/coduo_libm.h"
-#endif
 
 #include <math.h>
 #include <stdint.h>
@@ -90,17 +86,6 @@ void PM_SetMovementDir(void)
         }
 
         float distance;
-#if defined(WINDOWS_BEHAVIOR)
-#if EMULATE_X87
-        distance = x87f_store_f32(x87f_sqrt(x87f_add(
-            x87f_add(
-                x87f_mul(x87f_load_f32(displacement[2]),
-                         x87f_load_f32(displacement[2])),
-                x87f_mul(x87f_load_f32(displacement[1]),
-                         x87f_load_f32(displacement[1]))),
-            x87f_mul(x87f_load_f32(displacement[0]),
-                     x87f_load_f32(displacement[0])))));
-#else
         distance = (float)sqrtl(
             ((long double)displacement[2] *
                  (long double)displacement[2] +
@@ -108,41 +93,11 @@ void PM_SetMovementDir(void)
                  (long double)displacement[1]) +
             (long double)displacement[0] *
                 (long double)displacement[0]);
-#endif
-#else
-#if EMULATE_X87
-        distance = (float)CoduoLibm_SqrtGlibc(x87f_store_f64(x87f_add(
-            x87f_add(
-                x87f_mul(x87f_load_f32(displacement[0]),
-                         x87f_load_f32(displacement[0])),
-                x87f_mul(x87f_load_f32(displacement[1]),
-                         x87f_load_f32(displacement[1]))),
-            x87f_mul(x87f_load_f32(displacement[2]),
-                     x87f_load_f32(displacement[2])))));
-#else
-        const long double squared =
-            ((long double)displacement[0] *
-                 (long double)displacement[0] +
-             (long double)displacement[1] *
-                 (long double)displacement[1]) +
-            (long double)displacement[2] *
-                (long double)displacement[2];
-        distance = (float)CoduoLibm_SqrtGlibc((double)squared);
-#endif
-#endif
 
-#if EMULATE_X87
-        if (distance == 0.0f ||
-            !x87f_lt(x87f_mul(
-                          x87f_load_f32(pml.frametime),
-                          x87f_load_f32(PM_MOVEMENT_DIR_DISTANCE_FACTOR)),
-                      x87f_load_f32(distance))) {
-#else
         if (distance == 0.0f ||
             !((long double)pml.frametime *
                   (long double)PM_MOVEMENT_DIR_DISTANCE_FACTOR <
               (long double)distance)) {
-#endif
             ps->movementDir = 0;
             return;
         }

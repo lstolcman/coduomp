@@ -60,7 +60,6 @@ MINGW32_ARCH_FLAGS := -msse
 MINGW32_CPPFLAGS := -Isrc \
 	-iquote src/client/engine/bindings \
 	-iquote src/qcommon/bindings/default \
-	-DWINDOWS_BEHAVIOR \
 	-DCURL_STATICLIB \
 	-DCASE_SENSITIVE_FS=0 \
 	$(RECOVERY_POLICY_CPPFLAGS) \

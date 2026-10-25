@@ -118,19 +118,8 @@ xanim_length_t XAnimGetLength(XAnim *tree, int32_t animIndex)
         tree->entries[animIndex].payload.leafAsset->data.xanimParts;
     const int32_t frameCountMinusOne = record->frameCountMinusOne;
 
-#if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-    volatile double length =
-        (double)frameCountMinusOne / (double)record->frameRate;
-
-    return length;
-#else
-    return x87f_div(x87f_load_i32(frameCountMinusOne),
-                    x87f_load_f32(record->frameRate));
-#endif
-#elif (defined(__i386__) || defined(__x86_64__)) && \
+#if   (defined(__i386__) || defined(__x86_64__)) && \
       (defined(__GNUC__) || defined(__clang__))
-#if defined(WINDOWS_BEHAVIOR)
     double length;
 
     __asm__ __volatile__("fildl %[frameCount]\n\t"
@@ -142,25 +131,7 @@ xanim_length_t XAnimGetLength(XAnim *tree, int32_t animIndex)
                          : "st", "memory");
     return length;
 #else
-    long double length;
-
-    __asm__ __volatile__("fildl %[frameCount]\n\t"
-                         "fdivs %[frameRate]\n\t"
-                         "fstpt %[length]"
-                         : [length] "=m"(length)
-                         : [frameCount] "m"(frameCountMinusOne),
-                           [frameRate] "m"(record->frameRate)
-                         : "st", "memory");
-    return length;
-#endif
-#else
-    /* Explicitly non-faithful EMULATE_X87=0 builds on non-x87 targets use the
-     * widest native carrier available. */
-#if defined(WINDOWS_BEHAVIOR)
+    /* Non-x87 targets retain the binary64 result boundary in native C. */
     return (double)frameCountMinusOne / (double)record->frameRate;
-#else
-    return (long double)frameCountMinusOne /
-           (long double)record->frameRate;
-#endif
 #endif
 }

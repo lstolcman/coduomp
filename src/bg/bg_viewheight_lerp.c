@@ -22,13 +22,7 @@
 #include "bg_pmove.h"
 
 #include "compat/coduo_int32_bits.h"
-#include "compat/coduo_x87emu.h"
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select exactly one PM_GetViewHeightLerp behavior mode"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select exactly one PM_GetViewHeightLerp behavior mode"
-#endif
 
 /* -1 sentinel meaning "this viewheight argument is unspecified" (CMP r,-1). */
 enum {
@@ -47,7 +41,6 @@ enum {
                                      *        viewHeightLerpDown != 0 */
 };
 
-#if defined(WINDOWS_BEHAVIOR)
 long double PM_GetViewHeightLerp(int32_t fromViewheight, int32_t toViewheight)
 {
     pmove_t *move = pm;      /* [0x30539850] */
@@ -155,51 +148,3 @@ long double PM_GetViewHeightLerp(int32_t fromViewheight, int32_t toViewheight)
     }
     return frac;
 }
-#else
-/* Linux game.mp.uo.i386.so RVA 0x00061912 follows the same transition gates
- * but stores the quotient to binary32 at RVA 0x00061a50 before the clamp and
- * return. The long-double return type is the cross-platform ST0 carrier; this
- * body deliberately retains the Linux store through its `fraction` local. */
-long double PM_GetViewHeightLerp(int32_t fromViewheight, int32_t toViewheight)
-{
-    float fraction;
-    int32_t lerpTime;
-
-    if (pm->ps->viewHeightLerpTime == 0) {
-        return 0.0f;
-    }
-
-    if ((fromViewheight == VIEWHEIGHT_NONE ||
-         toViewheight == VIEWHEIGHT_NONE) ||
-        (toViewheight == pm->ps->viewHeightLerpTarget &&
-         ((toViewheight != pm->ps->crouchViewHeight ||
-           (fromViewheight == pm->ps->proneViewHeight &&
-            pm->ps->viewHeightLerpDown == 0)) ||
-          (fromViewheight == pm->ps->standViewHeight &&
-           pm->ps->viewHeightLerpDown != 0)))) {
-        int32_t elapsed;
-
-        lerpTime = PM_GetViewHeightLerpTime(
-            pm->ps, pm->ps->viewHeightLerpTarget,
-            pm->ps->viewHeightLerpDown);
-        elapsed = coduo_int32_from_bits(
-            (uint32_t)pm->command.commandTime -
-            (uint32_t)pm->ps->viewHeightLerpTime);
-#if EMULATE_X87
-        fraction = x87f_store_f32(x87f_div(
-            x87f_load_i32(elapsed), x87f_load_i32(lerpTime)));
-#else
-        fraction =
-            (float)((long double)elapsed / (long double)lerpTime);
-#endif
-        if (fraction < 0.0f) {
-            fraction = 0.0f;
-        } else if (fraction > 1.0f) {
-            fraction = 1.0f;
-        }
-        return fraction;
-    }
-
-    return 0.0f;
-}
-#endif

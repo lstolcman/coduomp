@@ -43,10 +43,6 @@ static inline float sound_alias_compat_pick_selector(const vec3_t origin)
     return 10.0f;
 }
 
-#if defined(WINDOWS_BEHAVIOR)
 #define SOUND_ALIAS_COMPAT_RANDOM_SCALE 32768.0f
-#else
-#define SOUND_ALIAS_COMPAT_RANDOM_SCALE (-2147483648.0f)
-#endif
 
 #endif

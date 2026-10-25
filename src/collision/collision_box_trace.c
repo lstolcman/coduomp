@@ -1,6 +1,5 @@
 #include "collision_box_trace.h"
 
-#include "compat/coduo_x87emu.h"
 #include "collision_geometry.h"
 #include "collision_queries.h"
 #include "collision_trace_entry.h"
@@ -9,11 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "collision_box_trace.c requires a platform behavior mode"
-#endif
 
 /*
  * Complete public box-trace entry cluster:
@@ -62,20 +56,6 @@ void CM_TransformedBoxTrace(trace_t *trace,
     vec3_t endLocal;
 
     for (int32_t axis = 0; axis < 3; ++axis) {
-#if EMULATE_X87
-        const float offset = x87f_store_f32(x87f_mul(
-            x87f_add(x87f_load_f32(inputMins[axis]),
-                     x87f_load_f32(inputMaxs[axis])),
-            x87f_load_f32(0.5f)));
-        traceMins[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(inputMins[axis]), x87f_load_f32(offset)));
-        traceMaxs[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(inputMaxs[axis]), x87f_load_f32(offset)));
-        startLocal[axis] = x87f_store_f32(x87f_add(
-            x87f_load_f32(start[axis]), x87f_load_f32(offset)));
-        endLocal[axis] = x87f_store_f32(x87f_add(
-            x87f_load_f32(end[axis]), x87f_load_f32(offset)));
-#else
         const float offset = (float)(
             ((long double)inputMins[axis] +
              (long double)inputMaxs[axis]) * 0.5L);
@@ -87,23 +67,13 @@ void CM_TransformedBoxTrace(trace_t *trace,
             (long double)start[axis] + (long double)offset);
         endLocal[axis] = (float)(
             (long double)end[axis] + (long double)offset);
-#endif
     }
 
     for (int32_t axis = 0; axis < 3; ++axis) {
-#if EMULATE_X87
-        startLocal[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(startLocal[axis]),
-            x87f_load_f32(origin[axis])));
-        endLocal[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(endLocal[axis]),
-            x87f_load_f32(origin[axis])));
-#else
         startLocal[axis] = (float)(
             (long double)startLocal[axis] - (long double)origin[axis]);
         endLocal[axis] = (float)(
             (long double)endLocal[axis] - (long double)origin[axis]);
-#endif
     }
 
     const qboolean rotated =
@@ -116,54 +86,23 @@ void CM_TransformedBoxTrace(trace_t *trace,
      * dead lanes so portable C never evaluates indeterminate float objects. */
     cmTraceSphereRecord_t sphere = {0};
     sphere.sphere.use = capsule;
-#if EMULATE_X87 && defined(WINDOWS_BEHAVIOR)
-    sphere.sphere.radius =
-        x87f_lt_signaling(x87f_load_f32(traceMaxs[2]),
-                          x87f_load_f32(traceMaxs[0]))
-            ? traceMaxs[2] : traceMaxs[0];
-#elif EMULATE_X87
-    sphere.sphere.radius =
-        x87f_lt(x87f_load_f32(traceMaxs[2]),
-                x87f_load_f32(traceMaxs[0]))
-            ? traceMaxs[2] : traceMaxs[0];
-#else
     sphere.sphere.radius =
         traceMaxs[2] < traceMaxs[0] ? traceMaxs[2] : traceMaxs[0];
-#endif
     sphere.sphere.halfheight = traceMaxs[2];
-#if EMULATE_X87
-    const float cylinderOffset = x87f_store_f32(x87f_sub(
-        x87f_load_f32(traceMaxs[2]),
-        x87f_load_f32(sphere.sphere.radius)));
-#else
     const float cylinderOffset = (float)(
         (long double)traceMaxs[2] -
         (long double)sphere.sphere.radius);
-#endif
 
     axis_t matrix;
     const float (*const matrixReadOnly)[3] =
         (const float (*)[3])matrix;
     if (rotated != qfalse) {
         CreateRotationMatrix(angles, matrix);
-#if defined(WINDOWS_BEHAVIOR)
         /* Input rotation adds X/Y before Z. Normal rotation below uses the
          * separate RotatePoint operation order. Preserve the input lanes. */
         const vec3_t unrotatedStart = {startLocal[0], startLocal[1], startLocal[2]};
         const vec3_t unrotatedEnd = {endLocal[0], endLocal[1], endLocal[2]};
         for (int32_t row = 0; row < 3; ++row) {
-#if EMULATE_X87
-            startLocal[row] = x87f_store_f32(x87f_add(
-                x87f_add(
-                    x87f_mul(x87f_load_f32(matrixReadOnly[row][0]), x87f_load_f32(unrotatedStart[0])),
-                    x87f_mul(x87f_load_f32(matrixReadOnly[row][1]), x87f_load_f32(unrotatedStart[1]))),
-                x87f_mul(x87f_load_f32(matrixReadOnly[row][2]), x87f_load_f32(unrotatedStart[2]))));
-            endLocal[row] = x87f_store_f32(x87f_add(
-                x87f_add(
-                    x87f_mul(x87f_load_f32(matrixReadOnly[row][0]), x87f_load_f32(unrotatedEnd[0])),
-                    x87f_mul(x87f_load_f32(matrixReadOnly[row][1]), x87f_load_f32(unrotatedEnd[1]))),
-                x87f_mul(x87f_load_f32(matrixReadOnly[row][2]), x87f_load_f32(unrotatedEnd[2]))));
-#else
             startLocal[row] = (float)(
                 ((long double)matrixReadOnly[row][0] * unrotatedStart[0] +
                  (long double)matrixReadOnly[row][1] * unrotatedStart[1]) +
@@ -172,36 +111,13 @@ void CM_TransformedBoxTrace(trace_t *trace,
                 ((long double)matrixReadOnly[row][0] * unrotatedEnd[0] +
                  (long double)matrixReadOnly[row][1] * unrotatedEnd[1]) +
                 (long double)matrixReadOnly[row][2] * unrotatedEnd[2]);
-#endif
         }
-#else
-        RotatePoint(startLocal, matrixReadOnly);
-        RotatePoint(endLocal, matrixReadOnly);
-#endif
-#if EMULATE_X87
-        sphere.sphere.offset[0] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(matrix[0][2]),
-            x87f_load_f32(cylinderOffset)));
-#if defined(WINDOWS_BEHAVIOR)
-        sphere.sphere.offset[1] = x87f_store_f32(x87f_neg(x87f_mul(
-            x87f_load_f32(matrix[1][2]),
-            x87f_load_f32(cylinderOffset))));
-#else
-        sphere.sphere.offset[1] = x87f_store_f32(x87f_mul(
-            x87f_neg(x87f_load_f32(matrix[1][2])),
-            x87f_load_f32(cylinderOffset)));
-#endif
-        sphere.sphere.offset[2] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(matrix[2][2]),
-            x87f_load_f32(cylinderOffset)));
-#else
         sphere.sphere.offset[0] = (float)(
             (long double)matrix[0][2] * (long double)cylinderOffset);
         sphere.sphere.offset[1] = (float)(
             -(long double)matrix[1][2] * (long double)cylinderOffset);
         sphere.sphere.offset[2] = (float)(
             (long double)matrix[2][2] * (long double)cylinderOffset);
-#endif
     } else {
         sphere.sphere.offset[0] = 0.0f;
         sphere.sphere.offset[1] = 0.0f;
@@ -213,18 +129,8 @@ void CM_TransformedBoxTrace(trace_t *trace,
     CM_Trace(&localTrace, startLocal, endLocal, traceMins, traceMaxs,
              modelHandle, contentMask, capsule, &sphere);
 
-#if EMULATE_X87 && defined(WINDOWS_BEHAVIOR)
-    const qboolean closer = x87f_lt_signaling(
-        x87f_load_f32(localTrace.fraction),
-        x87f_load_f32(trace->fraction)) ? qtrue : qfalse;
-#elif EMULATE_X87
-    const qboolean closer = x87f_lt(
-        x87f_load_f32(localTrace.fraction),
-        x87f_load_f32(trace->fraction)) ? qtrue : qfalse;
-#else
     const qboolean closer =
         localTrace.fraction < trace->fraction ? qtrue : qfalse;
-#endif
     if (rotated != qfalse && closer != qfalse) {
         axis_t transpose;
         TransposeMatrix(matrixReadOnly, transpose);
@@ -233,19 +139,10 @@ void CM_TransformedBoxTrace(trace_t *trace,
     }
 
     for (int32_t axis = 0; axis < 3; ++axis) {
-#if EMULATE_X87
-        localTrace.endpos[axis] = x87f_store_f32(x87f_add(
-            x87f_mul(
-                x87f_sub(x87f_load_f32(end[axis]),
-                         x87f_load_f32(start[axis])),
-                x87f_load_f32(localTrace.fraction)),
-            x87f_load_f32(start[axis])));
-#else
         localTrace.endpos[axis] = (float)(
             ((long double)end[axis] - (long double)start[axis]) *
                 (long double)localTrace.fraction +
             (long double)start[axis]);
-#endif
     }
     *trace = localTrace;
 }
@@ -290,20 +187,6 @@ int32_t CM_TransformedBoxSightTrace(int32_t previousHit,
     vec3_t endLocal;
 
     for (int32_t axis = 0; axis < 3; ++axis) {
-#if EMULATE_X87
-        const float offset = x87f_store_f32(x87f_mul(
-            x87f_add(x87f_load_f32(inputMins[axis]),
-                     x87f_load_f32(inputMaxs[axis])),
-            x87f_load_f32(0.5f)));
-        traceMins[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(inputMins[axis]), x87f_load_f32(offset)));
-        traceMaxs[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(inputMaxs[axis]), x87f_load_f32(offset)));
-        startLocal[axis] = x87f_store_f32(x87f_add(
-            x87f_load_f32(start[axis]), x87f_load_f32(offset)));
-        endLocal[axis] = x87f_store_f32(x87f_add(
-            x87f_load_f32(end[axis]), x87f_load_f32(offset)));
-#else
         const float offset = (float)(
             ((long double)inputMins[axis] +
              (long double)inputMaxs[axis]) * 0.5L);
@@ -315,23 +198,13 @@ int32_t CM_TransformedBoxSightTrace(int32_t previousHit,
             (long double)start[axis] + (long double)offset);
         endLocal[axis] = (float)(
             (long double)end[axis] + (long double)offset);
-#endif
     }
 
     for (int32_t axis = 0; axis < 3; ++axis) {
-#if EMULATE_X87
-        startLocal[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(startLocal[axis]),
-            x87f_load_f32(origin[axis])));
-        endLocal[axis] = x87f_store_f32(x87f_sub(
-            x87f_load_f32(endLocal[axis]),
-            x87f_load_f32(origin[axis])));
-#else
         startLocal[axis] = (float)(
             (long double)startLocal[axis] - (long double)origin[axis]);
         endLocal[axis] = (float)(
             (long double)endLocal[axis] - (long double)origin[axis]);
-#endif
     }
 
     const qboolean rotated =
@@ -343,54 +216,23 @@ int32_t CM_TransformedBoxSightTrace(int32_t previousHit,
      * their first read, so zero them to keep portable C defined. */
     cmTraceSphereRecord_t sphere = {0};
     sphere.sphere.use = capsule;
-#if EMULATE_X87 && defined(WINDOWS_BEHAVIOR)
-    sphere.sphere.radius =
-        x87f_lt_signaling(x87f_load_f32(traceMaxs[2]),
-                          x87f_load_f32(traceMaxs[0]))
-            ? traceMaxs[2] : traceMaxs[0];
-#elif EMULATE_X87
-    sphere.sphere.radius =
-        x87f_lt(x87f_load_f32(traceMaxs[2]),
-                x87f_load_f32(traceMaxs[0]))
-            ? traceMaxs[2] : traceMaxs[0];
-#else
     sphere.sphere.radius =
         traceMaxs[2] < traceMaxs[0] ? traceMaxs[2] : traceMaxs[0];
-#endif
     sphere.sphere.halfheight = traceMaxs[2];
-#if EMULATE_X87
-    const float cylinderOffset = x87f_store_f32(x87f_sub(
-        x87f_load_f32(traceMaxs[2]),
-        x87f_load_f32(sphere.sphere.radius)));
-#else
     const float cylinderOffset = (float)(
         (long double)traceMaxs[2] -
         (long double)sphere.sphere.radius);
-#endif
 
     if (rotated != qfalse) {
         axis_t matrix;
         const float (*const matrixReadOnly)[3] =
             (const float (*)[3])matrix;
         CreateRotationMatrix(angles, matrix);
-#if defined(WINDOWS_BEHAVIOR)
         /* Input rotation adds X/Y before Z, retaining all unrotated lanes
          * until both endpoints have been transformed. */
         const vec3_t unrotatedStart = {startLocal[0], startLocal[1], startLocal[2]};
         const vec3_t unrotatedEnd = {endLocal[0], endLocal[1], endLocal[2]};
         for (int32_t row = 0; row < 3; ++row) {
-#if EMULATE_X87
-            startLocal[row] = x87f_store_f32(x87f_add(
-                x87f_add(
-                    x87f_mul(x87f_load_f32(matrixReadOnly[row][0]), x87f_load_f32(unrotatedStart[0])),
-                    x87f_mul(x87f_load_f32(matrixReadOnly[row][1]), x87f_load_f32(unrotatedStart[1]))),
-                x87f_mul(x87f_load_f32(matrixReadOnly[row][2]), x87f_load_f32(unrotatedStart[2]))));
-            endLocal[row] = x87f_store_f32(x87f_add(
-                x87f_add(
-                    x87f_mul(x87f_load_f32(matrixReadOnly[row][0]), x87f_load_f32(unrotatedEnd[0])),
-                    x87f_mul(x87f_load_f32(matrixReadOnly[row][1]), x87f_load_f32(unrotatedEnd[1]))),
-                x87f_mul(x87f_load_f32(matrixReadOnly[row][2]), x87f_load_f32(unrotatedEnd[2]))));
-#else
             startLocal[row] = (float)(
                 ((long double)matrixReadOnly[row][0] * unrotatedStart[0] +
                  (long double)matrixReadOnly[row][1] * unrotatedStart[1]) +
@@ -399,36 +241,13 @@ int32_t CM_TransformedBoxSightTrace(int32_t previousHit,
                 ((long double)matrixReadOnly[row][0] * unrotatedEnd[0] +
                  (long double)matrixReadOnly[row][1] * unrotatedEnd[1]) +
                 (long double)matrixReadOnly[row][2] * unrotatedEnd[2]);
-#endif
         }
-#else
-        RotatePoint(startLocal, matrixReadOnly);
-        RotatePoint(endLocal, matrixReadOnly);
-#endif
-#if EMULATE_X87
-        sphere.sphere.offset[0] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(matrix[0][2]),
-            x87f_load_f32(cylinderOffset)));
-#if defined(WINDOWS_BEHAVIOR)
-        sphere.sphere.offset[1] = x87f_store_f32(x87f_neg(x87f_mul(
-            x87f_load_f32(matrix[1][2]),
-            x87f_load_f32(cylinderOffset))));
-#else
-        sphere.sphere.offset[1] = x87f_store_f32(x87f_mul(
-            x87f_neg(x87f_load_f32(matrix[1][2])),
-            x87f_load_f32(cylinderOffset)));
-#endif
-        sphere.sphere.offset[2] = x87f_store_f32(x87f_mul(
-            x87f_load_f32(matrix[2][2]),
-            x87f_load_f32(cylinderOffset)));
-#else
         sphere.sphere.offset[0] = (float)(
             (long double)matrix[0][2] * (long double)cylinderOffset);
         sphere.sphere.offset[1] = (float)(
             -(long double)matrix[1][2] * (long double)cylinderOffset);
         sphere.sphere.offset[2] = (float)(
             (long double)matrix[2][2] * (long double)cylinderOffset);
-#endif
     } else {
         sphere.sphere.offset[0] = 0.0f;
         sphere.sphere.offset[1] = 0.0f;

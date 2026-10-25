@@ -1,5 +1,5 @@
 /*
- * Shared source adapters for the platform-selected floating-point-to-integer
+ * Shared source adapters for the Windows floating-point-to-integer
  * compiler lowering used by the recovered multiplayer binaries.
  */
 #ifndef CODUO_FP_CONVERSION_H
@@ -8,11 +8,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(WINDOWS_BEHAVIOR) && defined(LINUX_BEHAVIOR)
-#error "Select only one of WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#elif !defined(WINDOWS_BEHAVIOR) && !defined(LINUX_BEHAVIOR)
-#error "Select WINDOWS_BEHAVIOR or LINUX_BEHAVIOR"
-#endif
 
 #if defined(__GNUC__) || defined(__clang__)
 #define CODUO_FP_ALWAYS_INLINE __attribute__((always_inline)) inline
@@ -22,11 +17,10 @@
 
 /*
  * NOT_FROM_ORIGINAL_SOURCE: shared expression of the final integer result
- * produced by the original compiler conversions. WINDOWS_BEHAVIOR models the
+ * produced by the original compiler conversions. The result is the
  * low dword of MSVC `_ftol2`'s signed-qword result; its masked invalid result
- * is INT64_MIN and therefore has a zero low dword. LINUX_BEHAVIOR models the
- * Linux binaries' direct signed-dword truncation; its masked invalid result is
- * INT32_MIN. Ordered range comparisons also reject NaNs and infinities.
+ * is INT64_MIN and therefore has a zero low dword. Ordered range comparisons
+ * also reject NaNs and infinities.
  *
  * CALL-SITE VERIFICATION REQUIRED: choosing one of these adapters proves only
  * the final conversion width and invalid-result bits. Every caller must still
@@ -39,7 +33,6 @@
 static CODUO_FP_ALWAYS_INLINE int32_t
 coduo_fp_to_i32_extended(long double value)
 {
-#if defined(WINDOWS_BEHAVIOR)
     uint32_t lowBits = 0;
     int32_t result;
 
@@ -54,12 +47,6 @@ coduo_fp_to_i32_extended(long double value)
     }
     memcpy(&result, &lowBits, sizeof(result));
     return result;
-#else
-    if (!(value >= -2147483648.0L && value < 2147483648.0L)) {
-        return INT32_MIN;
-    }
-    return (int32_t)value;
-#endif
 }
 
 /*
