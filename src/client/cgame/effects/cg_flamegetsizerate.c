@@ -25,6 +25,7 @@
 // sites that FLD a literal base then FLD a variable exponent, e.g. pow(10.0,x)
 // and pow(0.1,x) in 0x3004d060). Expressed here as the source-level pow().
 
+#include "compat/libm/coduo_wide_math.h"
 #include "client/cgame/client_recovered.h"
 #include <math.h>
 
@@ -75,7 +76,7 @@ long double CG_FlameGetSizeRate(flameChunk_t *f /* ESI */)
         // require; a double `pow` would round each. (The powl polynomial still
         // differs from _CIpow -- a pre-existing transcendental relaxation.)
         long double cubed =
-            powl((long double)f->driftSpeed * CG_FLAME_INPUT_SCALE, 3.0L);
+            coduomp_math_powl((long double)f->driftSpeed * CG_FLAME_INPUT_SCALE, 3.0L);
 
         // 30023bbd: FADD ST0,ST0 => 2 * cubed.
         long double doubled = cubed + cubed;
@@ -121,6 +122,6 @@ long double CG_FlameGetSizeRate(flameChunk_t *f /* ESI */)
     // it back unrounded (no store in the tail). powl keeps the base, the result
     // and the return all 80-bit; the return type is long double so no rounding
     // is inserted at `return`. (powl != _CIpow polynomial -- relaxation.)
-    return powl(C, 2.0L) * (long double)B +
+    return coduomp_math_powl(C, 2.0L) * (long double)B +
            (long double)B / (long double)A;
 }

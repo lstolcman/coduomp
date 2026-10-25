@@ -1,3 +1,4 @@
+#include "compat/libm/coduo_wide_math.h"
 #include "backend.h"
 
 #include "compat/coduo_native_x87.h"
@@ -189,7 +190,7 @@ void GaussianRandom(float *real, float *imaginary)
 
     /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
     const long double scale =
-        sqrtl((-2.0L * logl(radiusSquared)) / radiusSquared);
+        sqrtl((-2.0L * coduomp_math_logl(radiusSquared)) / radiusSquared);
     *real = (float)((long double)x * scale);
     *imaginary = (float)(y * scale);
 }
@@ -249,7 +250,7 @@ void PickWaterFrequencies(shader_water_map_t *waterMap)
                     waterMap->windDirection[0];
 
             if (!(windDotWave <= 0.0L)) {
-                const long double exponential = expl(
+                const long double exponential = coduomp_math_expl(
                     -1.0L /
                     (waveNumberSquared * windLengthScaleSquared));
                 const long double waveNumberSixth =

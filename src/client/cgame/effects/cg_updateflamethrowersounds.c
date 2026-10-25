@@ -37,6 +37,7 @@
 //   * TEST AH,0x44 ; JNP  -> after FUCOMPP, taken only for ordered equality.
 // Each branch below records the resolved sense in a comment.
 
+#include "compat/libm/coduo_wide_math.h"
 #include "client/cgame/globals.h"
 #include "client/cgame/client_recovered.h"
 
@@ -248,7 +249,7 @@ void CG_UpdateFlamethrowerSounds(void)
                 } else {
                     t = (float)tFull;                  /* 0x3002943f FSTP m32 */
                 }
-                contribution = powl((long double)t, 1.0L); /* exp 1.0 @0x3007bcf8 */
+                contribution = coduomp_math_powl((long double)t, 1.0L); /* exp 1.0 @0x3007bcf8 */
             }
             /* 0x3002945e..0x3002946d: priority = max(priority, contribution).
              * FCOM priority; TEST AH,0x41; JNZ (contribution <= priority) pops;

@@ -29,6 +29,7 @@
 //   - CG_pow (0x3006bb20) is the MSVC x87 `pow` intrinsic: base on ST(1), exp ST(0).
 //     Here base = field_94*0.0011111111f, exp = 2.0, i.e. (field_94*0.0011111111)^2.
 
+#include "compat/libm/coduo_wide_math.h"
 #include "client/cgame/client_recovered.h"
 #include "client/cgame/globals.h"
 
@@ -202,7 +203,7 @@ void CG_ComputeFlameChunkOrigin(flameChunk_t *f, int32_t cg_flameTime, vec3_t ou
      * perform, so powl widens the base OPERAND and keeps the result 80-bit). */
     long double w =
         0.65f *
-            powl((long double)f->driftSpeed * 0.0011111111f, 2.0L) +
+            coduomp_math_powl((long double)f->driftSpeed * 0.0011111111f, 2.0L) +
         sizeBias;
     if (w < 0.0f) {                 /* 0x30025bbf FCOMP 0.0f, JP-clamp low */
         w = 0.0f;
@@ -210,7 +211,7 @@ void CG_ComputeFlameChunkOrigin(flameChunk_t *f, int32_t cg_flameTime, vec3_t ou
         /* The retail path repeats the complete pow/scale/bias chain at
          * 0x30025bd6 before the upper clamp instead of reusing its first value. */
         w = 0.65f *
-                powl((long double)f->driftSpeed * 0.0011111111f, 2.0L) +
+                coduomp_math_powl((long double)f->driftSpeed * 0.0011111111f, 2.0L) +
             sizeBias;
         if (w > 1.0f) {             /* 0x30025bf7 FCOM 1.0f, JNZ-clamp high */
             w = 1.0f;
