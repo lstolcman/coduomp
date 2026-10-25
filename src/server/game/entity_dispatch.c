@@ -681,7 +681,9 @@ void multi_trigger(gentity_t *ent, gentity_t *activator)
         ent->think = multi_wait;
         /* Keep the random product and wait sum wide. Windows truncates the
          * negated milliseconds to a signed qword and subtracts its low dword;
-         * Linux truncates positive milliseconds to a signed dword. */
+         * Linux truncates positive milliseconds to a signed dword. Negating
+         * before truncation and subtracting its low word is equivalent to
+         * adding the positive conversion modulo 2^32. */
 #if EMULATE_X87 && defined(LINUX_BEHAVIOR)
         {
             x87f randSigned =
@@ -698,13 +700,8 @@ void multi_trigger(gentity_t *ent, gentity_t *activator)
         volatile WIDE_FLOAT randomOffset =
             (WIDE_FLOAT)coduo_server_rand_signed_unit() * ent->itemRandom;
         WIDE_FLOAT waitSeconds = randomOffset + (WIDE_FLOAT)ent->itemWait;
-#if defined(WINDOWS_BEHAVIOR)
-        ent->nextthink = coduo_int32_from_bits((uint32_t)level.time -
-            coduo_fp_to_u32_extended(waitSeconds * -TRIGGER_DURATION_SCALE));
-#else
         ent->nextthink = coduo_int32_from_bits((uint32_t)level.time +
             coduo_fp_to_u32_extended(waitSeconds * TRIGGER_DURATION_SCALE));
-#endif
 #endif
     } else {
         ent->touch = NULL;
@@ -926,20 +923,18 @@ void G_TransposeMatrix(float matrix[3][3], float transpose[3][3])
 /* VERIFIED_DECOMPILER(0x6053e, 7053e_G_RotatePoint.c, VERIFY-WAVE2-ENTITY-DISPATCH-COLLISION-2026-06-17): DATAFLOW_VERIFIED - original point temporaries and row-major matrix dot products checked. */
 void G_RotatePoint(float *point, float matrix[3][3])
 {
-    float x = point[0];
-    float y = point[1];
-    float z = point[2];
+    const vec3_t original = { point[0], point[1], point[2] };
 
     /* Keep each dot product wide until its float store. The standalone
      * Windows body adds Z/Y before X; Linux adds X/Y before Z. */
-    for (int i = 0; i < 3; i++) {
 #if defined(WINDOWS_BEHAVIOR)
-        point[i] = (float)(((WIDE_FLOAT)matrix[i][2] * z + (WIDE_FLOAT)matrix[i][1] * y)
-                         + (WIDE_FLOAT)matrix[i][0] * x);
+    const int first = 2, last = 0;
 #else
-        point[i] = (float)(((WIDE_FLOAT)matrix[i][0] * x + (WIDE_FLOAT)matrix[i][1] * y)
-                         + (WIDE_FLOAT)matrix[i][2] * z);
+    const int first = 0, last = 2;
 #endif
+    for (int i = 0; i < 3; i++) {
+        point[i] = ((WIDE_FLOAT)matrix[i][first] * original[first] + (WIDE_FLOAT)matrix[i][1] * original[1])
+                   + (WIDE_FLOAT)matrix[i][last] * original[last];
     }
 }
 
@@ -978,21 +973,21 @@ int G_TryPushingEntity(gentity_t *ent, gentity_t *mover,
     originalRelativeOrigin[1] = relativeOrigin[1];
     originalRelativeOrigin[2] = relativeOrigin[2];
 
-#if defined(WINDOWS_BEHAVIOR)
     /* The Windows inlined rotation adds Z/Y before X in the first two rows,
-     * but X/Z before Y in the third. Each row rounds once to float. */
-    relativeOrigin[0] = (float)(((WIDE_FLOAT)transposeMatrix[0][2] * originalRelativeOrigin[2]
-                              + (WIDE_FLOAT)transposeMatrix[0][1] * originalRelativeOrigin[1])
-                              + (WIDE_FLOAT)transposeMatrix[0][0] * originalRelativeOrigin[0]);
-    relativeOrigin[1] = (float)(((WIDE_FLOAT)transposeMatrix[1][2] * originalRelativeOrigin[2]
-                              + (WIDE_FLOAT)transposeMatrix[1][1] * originalRelativeOrigin[1])
-                              + (WIDE_FLOAT)transposeMatrix[1][0] * originalRelativeOrigin[0]);
-    relativeOrigin[2] = (float)(((WIDE_FLOAT)transposeMatrix[2][0] * originalRelativeOrigin[0]
-                              + (WIDE_FLOAT)transposeMatrix[2][2] * originalRelativeOrigin[2])
-                              + (WIDE_FLOAT)transposeMatrix[2][1] * originalRelativeOrigin[1]);
+     * but X/Z before Y in the third. Linux adds X/Y before Z. Cancellation
+     * can expose the association difference; each row rounds once to float. */
+    for (int row = 0; row < 3; row++) {
+#if defined(WINDOWS_BEHAVIOR)
+        const int first = row == 2 ? 0 : 2;
+        const int second = row == 2 ? 2 : 1;
+        const int last = row == 2 ? 1 : 0;
 #else
-    G_RotatePoint(relativeOrigin, transposeMatrix);
+        const int first = 0, second = 1, last = 2;
 #endif
+        relativeOrigin[row] = ((WIDE_FLOAT)transposeMatrix[row][first] * originalRelativeOrigin[first]
+                             + (WIDE_FLOAT)transposeMatrix[row][second] * originalRelativeOrigin[second])
+                             + (WIDE_FLOAT)transposeMatrix[row][last] * originalRelativeOrigin[last];
+    }
     /* 0x606eb..0x6072d: stock rounds the rotation delta to a float vector
      * first, then adds it to pushedOrigin -- two roundings per component. */
     rotateDelta[0] = relativeOrigin[0] - originalRelativeOrigin[0];

@@ -384,7 +384,9 @@ void Activate_trigger_damage(gentity_t *trigger, gentity_t *activator,
                 /* Keep the random product and wait sum wide. Windows truncates
                  * the negated millisecond value to a signed qword and subtracts
                  * its low dword; Linux truncates the positive value to a signed
-                 * dword (0x76dd0..0x76e14). Timer arithmetic wraps at 32 bits. */
+                 * dword (0x76dd0..0x76e14). Negating before truncation and
+                 * subtracting is equivalent to adding the positive conversion
+                 * with the same 32-bit wrapping. */
 #if EMULATE_X87 && defined(LINUX_BEHAVIOR)
                 trigger->nextthink =
                     coduo_int32_from_bits((uint32_t)level.time +
@@ -399,13 +401,8 @@ void Activate_trigger_damage(gentity_t *trigger, gentity_t *activator,
                 volatile WIDE_FLOAT randomOffset =
                     (WIDE_FLOAT)coduo_server_rand_signed_unit() * trigger->itemRandom;
                 WIDE_FLOAT waitSeconds = randomOffset + (WIDE_FLOAT)trigger->itemWait;
-#if defined(WINDOWS_BEHAVIOR)
-                trigger->nextthink = coduo_int32_from_bits((uint32_t)level.time -
-                    coduo_fp_to_u32_extended(waitSeconds * -TRIGGER_DAMAGE_DURATION_SCALE));
-#else
                 trigger->nextthink = coduo_int32_from_bits((uint32_t)level.time +
                     coduo_fp_to_u32_extended(waitSeconds * TRIGGER_DAMAGE_DURATION_SCALE));
-#endif
 #endif
             } else {
                 trigger->touch = NULL;

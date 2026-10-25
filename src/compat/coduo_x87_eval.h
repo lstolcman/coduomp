@@ -15,4 +15,13 @@
 #define WIDE_FLOAT long double
 #endif
 
+/* NOT_FROM_ORIGINAL_SOURCE: explicit binary32 rounding inside a wide
+ * expression. The volatile object prevents an excess-precision value from
+ * surviving the store; the result remains convenient for wide evaluation. */
+static inline WIDE_FLOAT coduo_round_f32(WIDE_FLOAT value)
+{
+    volatile float rounded = value;
+    return rounded;
+}
+
 #endif /* CODUO_X87_EVAL_H */

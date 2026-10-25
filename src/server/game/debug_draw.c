@@ -146,18 +146,15 @@ void G_DebugCircleEx(const float *center, float radius, const float *normal,
                 x87f_load_f32(points[index][c])));
         }
 #else
+        for (int c = 0; c < 3; c++) {
+            WIDE_FLOAT tangentPart = (WIDE_FLOAT)tangent[c] * cosine;
+            WIDE_FLOAT bitangentPart = (WIDE_FLOAT)bitangent[c] * sine;
 #if defined(WINDOWS_BEHAVIOR)
-        points[index][0] = (float)(((WIDE_FLOAT)tangent[0] * cosine + (WIDE_FLOAT)bitangent[0] * sine) + center[0]);
-        points[index][1] = (float)(((WIDE_FLOAT)tangent[1] * cosine + (WIDE_FLOAT)bitangent[1] * sine) + center[1]);
-        points[index][2] = (float)(((WIDE_FLOAT)tangent[2] * cosine + (WIDE_FLOAT)bitangent[2] * sine) + center[2]);
+            points[index][c] = (tangentPart + bitangentPart) + center[c];
 #else
-        points[index][0] = (float)((WIDE_FLOAT)center[0] + (WIDE_FLOAT)bitangent[0] * sine);
-        points[index][1] = (float)((WIDE_FLOAT)center[1] + (WIDE_FLOAT)bitangent[1] * sine);
-        points[index][2] = (float)((WIDE_FLOAT)center[2] + (WIDE_FLOAT)bitangent[2] * sine);
-        points[index][0] = (float)((WIDE_FLOAT)points[index][0] + (WIDE_FLOAT)tangent[0] * cosine);
-        points[index][1] = (float)((WIDE_FLOAT)points[index][1] + (WIDE_FLOAT)tangent[1] * cosine);
-        points[index][2] = (float)((WIDE_FLOAT)points[index][2] + (WIDE_FLOAT)tangent[2] * cosine);
+            points[index][c] = coduo_round_f32((WIDE_FLOAT)center[c] + bitangentPart) + tangentPart;
 #endif
+        }
 #endif
     }
 

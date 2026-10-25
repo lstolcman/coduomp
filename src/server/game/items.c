@@ -837,27 +837,19 @@ static void game_compat_drop_weapon_place_at_tag(gentity_t *source, gentity_t *d
         vec3_t start;
 
         /* Windows rounds X after halving and Z before halving; Y stays wide
-         * through the origin addition. The volatile locals retain those two
-         * intermediate float stores when the compiler keeps excess precision.
-         * Linux rounds every component after each of the three stages. */
+         * through the origin addition. Linux stores each stage. For bounded
+         * finite coordinates, halving commutes with float rounding, so X/Z
+         * share one boundary; only Y needs a profile-specific boundary. */
+        for (int axis = 0; axis < 3; axis++) {
+            WIDE_FLOAT half = ((WIDE_FLOAT)source->mins[axis] + source->maxs[axis]) * 0.5f;
 #if defined(WINDOWS_BEHAVIOR)
-        volatile float halfX = (float)(((WIDE_FLOAT)source->maxs[0] + source->mins[0]) * 0.5f);
-        volatile float sumZ = (float)((WIDE_FLOAT)source->maxs[2] + source->mins[2]);
-
-        start[0] = (WIDE_FLOAT)halfX + source->currentOrigin[0];
-        start[1] = ((WIDE_FLOAT)source->maxs[1] + source->mins[1]) * 0.5f + source->currentOrigin[1];
-        start[2] = (WIDE_FLOAT)sumZ * 0.5f + source->currentOrigin[2];
-#else
-        start[0] = source->mins[0] + source->maxs[0];
-        start[1] = source->mins[1] + source->maxs[1];
-        start[2] = source->mins[2] + source->maxs[2];
-        start[0] *= 0.5f;
-        start[1] *= 0.5f;
-        start[2] *= 0.5f;
-        start[0] += source->currentOrigin[0];
-        start[1] += source->currentOrigin[1];
-        start[2] += source->currentOrigin[2];
+            if (axis != 1)
 #endif
+            {
+                half = coduo_round_f32(half);
+            }
+            start[axis] = half + source->currentOrigin[axis];
+        }
 
         trap_TraceCapsule(&trace, start,
                           dropped->mins,
@@ -1417,13 +1409,12 @@ void G_BounceItem(gentity_t *ent, trace_t *trace)
             x87f_load_i32(level.time - level.previousTime),
             x87f_load_f32(trace->fraction))) +
         level.previousTime;
-#elif defined(WINDOWS_BEHAVIOR)
-    volatile float elapsed = (float)(level.time - level.previousTime);
-    int bounceTime = coduo_fp_to_i32_extended((WIDE_FLOAT)elapsed * trace->fraction) + level.previousTime;
 #else
-    int bounceTime =
-        coduo_fp_to_i32_extended((WIDE_FLOAT)(level.time - level.previousTime) * trace->fraction) +
-        level.previousTime;
+    WIDE_FLOAT elapsed = level.time - level.previousTime;
+#if defined(WINDOWS_BEHAVIOR)
+    elapsed = coduo_round_f32(elapsed);
+#endif
+    int bounceTime = coduo_fp_to_i32_extended(elapsed * trace->fraction) + level.previousTime;
 #endif
     vec3_t velocity;
     volatile float dot;
@@ -1448,15 +1439,15 @@ void G_BounceItem(gentity_t *ent, trace_t *trace)
     }
 #else
 #if defined(WINDOWS_BEHAVIOR)
-    volatile float reflectionScale;
-    dot = ((WIDE_FLOAT)velocity[0] * trace->normal[0] + (WIDE_FLOAT)velocity[2] * trace->normal[2]) +
-          (WIDE_FLOAT)velocity[1] * trace->normal[1];
+    const int second = 2, last = 1;
 #else
-    WIDE_FLOAT reflectionScale;
-    dot = ((WIDE_FLOAT)velocity[0] * trace->normal[0] + (WIDE_FLOAT)velocity[1] * trace->normal[1]) +
-          (WIDE_FLOAT)velocity[2] * trace->normal[2];
+    const int second = 1, last = 2;
 #endif
-    reflectionScale = (WIDE_FLOAT)dot * ITEM_BOUNCE_REFLECTION_SCALE;
+    dot = ((WIDE_FLOAT)velocity[0] * trace->normal[0] + (WIDE_FLOAT)velocity[second] * trace->normal[second])
+          + (WIDE_FLOAT)velocity[last] * trace->normal[last];
+    /* The -2 scale is exact for the bounded, already-float dot. Its Windows
+     * float store cannot introduce another rounding difference. */
+    WIDE_FLOAT reflectionScale = (WIDE_FLOAT)dot * ITEM_BOUNCE_REFLECTION_SCALE;
     delta[0] = (WIDE_FLOAT)reflectionScale * trace->normal[0] + velocity[0];
     delta[1] = (WIDE_FLOAT)reflectionScale * trace->normal[1] + velocity[1];
     delta[2] = (WIDE_FLOAT)reflectionScale * trace->normal[2] + velocity[2];

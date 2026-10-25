@@ -594,23 +594,16 @@ void PlayerCmd_getFractionMaxAmmo(uint32_t entityNum)
     /* Windows divides the exact integer reserve count; Linux rounds that
      * count to binary32 first. Both retain the integer divisor's precision
      * and round the quotient to float only when publishing the result. */
-#if defined(WINDOWS_BEHAVIOR)
-    int reserveAmmoForDivide = ent->client->ps.ammo[weaponInfo->ammoIndex];
-#else
-    float reserveAmmoForDivide =
-        (float)ent->client->ps.ammo[weaponInfo->ammoIndex];
+    WIDE_FLOAT reserveAmmoForDivide = ent->client->ps.ammo[weaponInfo->ammoIndex];
+#if defined(LINUX_BEHAVIOR)
+    reserveAmmoForDivide = coduo_round_f32(reserveAmmoForDivide);
 #endif
     int maxAmmo = BG_GetAmmoTypeMax(weaponInfo->ammoIndex);
 #if EMULATE_X87
-#if defined(WINDOWS_BEHAVIOR)
-    x87f reserveValue = x87f_load_i32(reserveAmmoForDivide);
-#else
-    x87f reserveValue = x87f_load_f32(reserveAmmoForDivide);
-#endif
     Scr_AddFloat(x87f_store_f32(x87f_div(
-        reserveValue, x87f_load_i32(maxAmmo))));
+        x87f_load_f64((double)reserveAmmoForDivide), x87f_load_i32(maxAmmo))));
 #else
-    Scr_AddFloat((float)((WIDE_FLOAT)reserveAmmoForDivide / (WIDE_FLOAT)maxAmmo));
+    Scr_AddFloat((float)(reserveAmmoForDivide / maxAmmo));
 #endif
 }
 
@@ -992,70 +985,47 @@ void PlayerCmd_finishPlayerDamage(uint32_t entityNum)
         }
 
         if (knockback != 0) {
+            /* Windows uses a binary32 reciprocal and retains X through its
+             * velocity sum. Y/Z impulses round first. Linux divides by 250
+             * (0x4770e/0x4772b/0x47748) and stores all three impulses before
+             * adding velocity. The deterministic base may be shared. */
+#if EMULATE_X87
+            x87f impulseBase = x87f_mul(x87f_load_i32(knockback), x87f_load_f32(g_knockback.value));
 #if defined(WINDOWS_BEHAVIOR)
-            /* The Windows reciprocal is binary32. X remains wide through its
-             * velocity sum; Y and Z round to binary32 before their sums. */
+            impulseBase = x87f_mul(impulseBase, x87f_load_f32(PLAYER_DAMAGE_KNOCKBACK_RECIPROCAL));
+#else
+            impulseBase = x87f_div(impulseBase, x87f_load_f32(PLAYER_DAMAGE_KNOCKBACK_DIVISOR));
+#endif
+#else
+            WIDE_FLOAT impulseBase = (WIDE_FLOAT)knockback * g_knockback.value;
+#if defined(WINDOWS_BEHAVIOR)
+            impulseBase *= PLAYER_DAMAGE_KNOCKBACK_RECIPROCAL;
+#else
+            impulseBase /= PLAYER_DAMAGE_KNOCKBACK_DIVISOR;
+#endif
+#endif
+            for (int axis = 0; axis < 3; axis++) {
 #if EMULATE_X87
-            x87f impulseBase = x87f_mul(
-                x87f_mul(x87f_load_i32(knockback), x87f_load_f32(g_knockback.value)),
-                x87f_load_f32(PLAYER_DAMAGE_KNOCKBACK_RECIPROCAL));
-            x87f impulseX = x87f_mul(x87f_load_f32(dir[0]), impulseBase);
-            float impulseY = x87f_store_f32(x87f_mul(x87f_load_f32(dir[1]), impulseBase));
-            float impulseZ = x87f_store_f32(x87f_mul(x87f_load_f32(dir[2]), impulseBase));
-
-            ent->client->ps.velocity[0] = x87f_store_f32(x87f_add(impulseX, x87f_load_f32(ent->client->ps.velocity[0])));
-            ent->client->ps.velocity[1] = x87f_store_f32(x87f_add(x87f_load_f32(impulseY), x87f_load_f32(ent->client->ps.velocity[1])));
-            ent->client->ps.velocity[2] = x87f_store_f32(x87f_add(x87f_load_f32(impulseZ), x87f_load_f32(ent->client->ps.velocity[2])));
-#else
-            WIDE_FLOAT impulseBase = ((WIDE_FLOAT)knockback * (WIDE_FLOAT)g_knockback.value) * (WIDE_FLOAT)PLAYER_DAMAGE_KNOCKBACK_RECIPROCAL;
-            volatile WIDE_FLOAT impulseX = (WIDE_FLOAT)dir[0] * impulseBase;
-            volatile float impulseY = (float)((WIDE_FLOAT)dir[1] * impulseBase);
-            volatile float impulseZ = (float)((WIDE_FLOAT)dir[2] * impulseBase);
-
-            ent->client->ps.velocity[0] = (float)(impulseX + (WIDE_FLOAT)ent->client->ps.velocity[0]);
-            ent->client->ps.velocity[1] += impulseY;
-            ent->client->ps.velocity[2] += impulseZ;
+                x87f impulse = x87f_mul(x87f_load_f32(dir[axis]), impulseBase);
+#if defined(WINDOWS_BEHAVIOR)
+                if (axis != 0)
 #endif
+                {
+                    impulse = x87f_load_f32(x87f_store_f32(impulse));
+                }
+                ent->client->ps.velocity[axis] = x87f_store_f32(x87f_add(impulse,
+                    x87f_load_f32(ent->client->ps.velocity[axis])));
 #else
-            vec3_t impulseDelta;
-
-            /* Stock 0x4770e/0x4772b/0x47748: dir[k] * ((fild(knockback) *
-             * g_knockback.value) / 250.0f) all 80-bit, one store per component.
-             * Stock recomputes the base per k; deterministic, so one reused
-             * x87f base is value-identical. */
-#if EMULATE_X87
-            x87f impulseBase = x87f_div(
-                x87f_mul(x87f_load_i32(knockback),
-                         x87f_load_f32(g_knockback.value)),
-                x87f_load_f32(PLAYER_DAMAGE_KNOCKBACK_DIVISOR));
-            impulseDelta[0] =
-                x87f_store_f32(x87f_mul(x87f_load_f32(dir[0]), impulseBase));
-            impulseDelta[1] =
-                x87f_store_f32(x87f_mul(x87f_load_f32(dir[1]), impulseBase));
-            impulseDelta[2] =
-                x87f_store_f32(x87f_mul(x87f_load_f32(dir[2]), impulseBase));
-#else
-            impulseDelta[0] = (float)(
-                (long double)dir[0] *
-                (((long double)knockback *
-                  (long double)g_knockback.value) /
-                 (long double)PLAYER_DAMAGE_KNOCKBACK_DIVISOR));
-            impulseDelta[1] = (float)(
-                (long double)dir[1] *
-                (((long double)knockback *
-                  (long double)g_knockback.value) /
-                 (long double)PLAYER_DAMAGE_KNOCKBACK_DIVISOR));
-            impulseDelta[2] = (float)(
-                (long double)dir[2] *
-                (((long double)knockback *
-                  (long double)g_knockback.value) /
-                 (long double)PLAYER_DAMAGE_KNOCKBACK_DIVISOR));
+                WIDE_FLOAT impulse = (WIDE_FLOAT)dir[axis] * impulseBase;
+#if defined(WINDOWS_BEHAVIOR)
+                if (axis != 0)
 #endif
-
-            ent->client->ps.velocity[0] += impulseDelta[0];
-            ent->client->ps.velocity[1] += impulseDelta[1];
-            ent->client->ps.velocity[2] += impulseDelta[2];
+                {
+                    impulse = coduo_round_f32(impulse);
+                }
+                ent->client->ps.velocity[axis] = impulse + ent->client->ps.velocity[axis];
 #endif
+            }
 
             if (ent->client->ps.pmTime == 0) {
                 int pmTime = knockback * 2;
@@ -1501,15 +1471,10 @@ void PlayerCmd_setEnterTime(uint32_t entityNum)
         ent = NULL;
     }
 
-#if defined(WINDOWS_BEHAVIOR)
-    /* Windows selects the client after fetching the script argument. */
-    int enterTime = Scr_GetInt(0);
-    ent->client->enterTime = enterTime;
-#else
+    /* The argument conversion does not replace the client; scheduling the
+     * client load before or after it is not a platform behavior. */
     gclient_t *client = ent->client;
-
     client->enterTime = Scr_GetInt(0);
-#endif
 }
 
 /* VERIFIED_DECOMPILER(0x48b92, 58b92_FUN_00058b92.c, VERIFY-SCRIPT-PLAYER-CMDS-2026-06-17): DATAFLOW_VERIFIED; temporary corpse clone s_flags clear checked. */
@@ -1635,15 +1600,9 @@ void PlayerCmd_FreezeControls(uint32_t entityNum)
         ent = NULL;
     }
 
-    /* Windows fetches the argument before selecting the current client. */
-#if defined(WINDOWS_BEHAVIOR)
-    int controlsFrozen = Scr_GetBool(0);
-    ent->client->controlsFrozen = controlsFrozen;
-#else
+    /* Boolean argument conversion leaves the selected client unchanged. */
     gclient_t *client = ent->client;
-
     client->controlsFrozen = Scr_GetBool(0);
-#endif
 }
 
 /* VERIFIED_DECOMPILER(0x490e6, 590e6_script_method_player_disableweapon.c, VERIFY-P1-SCRIPTPLAYER-2026-06-17): DATAFLOW_VERIFIED - entity validation prologue and OR of PMF_WEAPON_DISABLED into playerStateFlags checked against current decompiler output. */
@@ -1731,14 +1690,9 @@ void ScrCmd_IsLookingAt(uint32_t entityNum)
         Scr_Error(va("%i is not a valid entity number", (int)entityNum));
         ent = NULL;
     }
-    /* Linux retains the client across argument lookup; Windows reloads it. */
-#if defined(WINDOWS_BEHAVIOR)
-    gentity_t *target = Scr_GetEntity(0);
-    gclient_t *client = ent->client;
-#else
+    /* Entity argument lookup does not replace the invoking player's client. */
     gclient_t *client = ent->client;
     gentity_t *target = Scr_GetEntity(0);
-#endif
 
     Scr_AddInt(client->lookAtEntity == target);
 }

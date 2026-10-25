@@ -741,18 +741,18 @@ static float game_compat_g_turret_xanim_goal_time_for_weight(XAnimTree *animTree
             x87f_div(x87f_load_f32(1.0f), x87f_load_f32(blendFrames)));
     }
     return 0.0f;
-#elif defined(WINDOWS_BEHAVIOR)
-    const float roundedTargetWeight = (float)targetWeight;
-    WIDE_FLOAT weightDelta = fabsl((WIDE_FLOAT)trap_XAnimGetWeight(animTree, anim) - roundedTargetWeight);
-    WIDE_FLOAT blendFrames = ((WIDE_FLOAT)TURRET_POSITION_BLEND_MSEC / level.frameTime) * weightDelta;
-
-    if (blendFrames > 0.0f) {
-        return (float)((WIDE_FLOAT)1.0f / blendFrames);
-    }
-    return 0.0f;
 #else
-    float weightDelta = (float)fabsl((WIDE_FLOAT)trap_XAnimGetWeight(animTree, anim) - targetWeight);
-    float blendFrames = (float)(((WIDE_FLOAT)TURRET_POSITION_BLEND_MSEC / level.frameTime) * weightDelta);
+#if defined(WINDOWS_BEHAVIOR)
+    targetWeight = coduo_round_f32(targetWeight);
+#endif
+    WIDE_FLOAT weightDelta = fabsl((WIDE_FLOAT)trap_XAnimGetWeight(animTree, anim) - targetWeight);
+#if defined(LINUX_BEHAVIOR)
+    weightDelta = coduo_round_f32(weightDelta);
+#endif
+    WIDE_FLOAT blendFrames = ((WIDE_FLOAT)TURRET_POSITION_BLEND_MSEC / level.frameTime) * weightDelta;
+#if defined(LINUX_BEHAVIOR)
+    blendFrames = coduo_round_f32(blendFrames);
+#endif
 
     if (blendFrames > 0.0f) {
         return (float)((WIDE_FLOAT)1.0f / blendFrames);
@@ -901,7 +901,7 @@ static int game_compat_g_turret_select_aiming_anim(XAnimTree *animTree, uint32_t
         childPosition = (WIDE_FLOAT)childCount * 0.5f - (WIDE_FLOAT)turretYaw / horizontalRotateIncrement;
 #if !defined(WINDOWS_BEHAVIOR)
         /* Linux rounds the child position before clamping and truncation. */
-        childPosition = (float)childPosition;
+        childPosition = coduo_round_f32(childPosition);
 #endif
         childPosition = game_compat_g_turret_clamp_child_position(childPosition, childCount);
         secondWeight = game_compat_g_turret_prime_child_pair(animTree, topAnim,
@@ -950,11 +950,7 @@ void G_PlayerTurretPositionAndBlend(gentity_t *player, gentity_t *turret)
     matrix43_t combinedAxis;
     vec3_t deltaRotation;
     vec3_t deltaTranslation;
-#if defined(WINDOWS_BEHAVIOR)
     WIDE_FLOAT viewDelta[3];
-#else
-    vec3_t viewDelta;
-#endif
     float tagForwardOffset;
     float targetForwardOffset;
     float turretYaw;
@@ -996,23 +992,22 @@ void G_PlayerTurretPositionAndBlend(gentity_t *player, gentity_t *turret)
     turretAxis.origin[1] = turret->currentOrigin[1];
     turretAxis.origin[2] = turret->currentOrigin[2];
 
-#if defined(WINDOWS_BEHAVIOR)
-    /* Windows retains the origin differences through the Z/Y/X projection. */
-    viewDelta[0] = (WIDE_FLOAT)player->currentOrigin[0] - turretAxis.origin[0];
-    viewDelta[1] = (WIDE_FLOAT)player->currentOrigin[1] - turretAxis.origin[1];
-    viewDelta[2] = (WIDE_FLOAT)player->currentOrigin[2] - turretAxis.origin[2];
-    tagForwardOffset = (float)((viewDelta[2] * turretAxis.axis[2][2] +
-                               viewDelta[1] * turretAxis.axis[2][1]) +
-                              viewDelta[0] * turretAxis.axis[2][0]);
-#else
-    /* Linux stores the differences first, then retains its X/Y/Z dot product. */
-    viewDelta[0] = player->currentOrigin[0] - turretAxis.origin[0];
-    viewDelta[1] = player->currentOrigin[1] - turretAxis.origin[1];
-    viewDelta[2] = player->currentOrigin[2] - turretAxis.origin[2];
-    tagForwardOffset = (float)(((WIDE_FLOAT)viewDelta[0] * turretAxis.axis[2][0] +
-                               (WIDE_FLOAT)viewDelta[1] * turretAxis.axis[2][1]) +
-                              (WIDE_FLOAT)viewDelta[2] * turretAxis.axis[2][2]);
+    /* Windows retains origin differences through projection. Linux stores
+     * the differences first; both store the completed tag offset as float. */
+    for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
+        viewDelta[axisIndex] = (WIDE_FLOAT)player->currentOrigin[axisIndex] - turretAxis.origin[axisIndex];
+#if defined(LINUX_BEHAVIOR)
+        viewDelta[axisIndex] = coduo_round_f32(viewDelta[axisIndex]);
 #endif
+    }
+#if defined(WINDOWS_BEHAVIOR)
+    const int firstProjection = 2, lastProjection = 0;
+#else
+    const int firstProjection = 0, lastProjection = 2;
+#endif
+    tagForwardOffset = (viewDelta[firstProjection] * turretAxis.axis[2][firstProjection] +
+                        viewDelta[1] * turretAxis.axis[2][1]) +
+                       viewDelta[lastProjection] * turretAxis.axis[2][lastProjection];
     targetForwardOffset = tagForwardOffset -
                           weaponTagMatrix->origin[2];
 
@@ -1371,19 +1366,15 @@ qboolean G_TurretAimAtAngles(gentity_t *turret, const float *targetAngles,
         arrived = qfalse;
         delta = -turnRates[0];
     }
-#if defined(WINDOWS_BEHAVIOR)
-    /* The carry uses the retained sum, before the pitch's float store rounds it. */
-    {
-        WIDE_FLOAT finalPitch = (WIDE_FLOAT)previousPitch + delta;
-        turret->s.turret.pitch = (float)finalPitch;
-        *game_compat_g_turret_pitch_carry(turret) =
-            (float)((WIDE_FLOAT)*game_compat_g_turret_pitch_carry(turret) - finalPitch);
-    }
-#else
+    /* Windows uses the retained sum for the carry, before the pitch's float store rounds it. */
+    WIDE_FLOAT finalPitch = (WIDE_FLOAT)previousPitch + delta;
+    turret->s.turret.pitch = (float)finalPitch;
+#if defined(LINUX_BEHAVIOR)
     /* The Linux carry uses the pitch after its float store. */
-    turret->s.turret.pitch = previousPitch + delta;
-    *game_compat_g_turret_pitch_carry(turret) -= turret->s.turret.pitch;
+    finalPitch = coduo_round_f32(finalPitch);
 #endif
+    *game_compat_g_turret_pitch_carry(turret) =
+        (WIDE_FLOAT)*game_compat_g_turret_pitch_carry(turret) - finalPitch;
 
     return arrived;
 }
@@ -1514,19 +1505,21 @@ void turret_think_init(gentity_t *turret)
         localEnd[0] = rotatedDelta[0] + aimTag->origin[0];
         localEnd[1] = rotatedDelta[1] + aimTag->origin[1];
         localEnd[2] = rotatedDelta[2] + aimTag->origin[2];
-#if defined(WINDOWS_BEHAVIOR)
         /* This inlined transform sums Z, Y, X, then translation; each trace
-         * endpoint lane rounds only after the complete sum. */
+         * endpoint lane rounds only after the complete sum. Linux sums X/Y/Z.
+         * Select the association here: cancellation can change the endpoint. */
+#if defined(WINDOWS_BEHAVIOR)
+        const int first = 2, last = 0;
+#else
+        const int first = 0, last = 2;
+#endif
         for (int axisIndex = 0; axisIndex < 3; ++axisIndex) {
             traceEnd[axisIndex] = (float)(
-                (((WIDE_FLOAT)localEnd[2] * entityAxis.axis[2][axisIndex] +
+                (((WIDE_FLOAT)localEnd[first] * entityAxis.axis[first][axisIndex] +
                   (WIDE_FLOAT)localEnd[1] * entityAxis.axis[1][axisIndex]) +
-                 (WIDE_FLOAT)localEnd[0] * entityAxis.axis[0][axisIndex]) +
+                 (WIDE_FLOAT)localEnd[last] * entityAxis.axis[last][axisIndex]) +
                 entityAxis.origin[axisIndex]);
         }
-#else
-        MatrixTransformVector43(localEnd, &entityAxis, traceEnd);
-#endif
 
         trap_LocationalTrace(&trace, traceStart, traceEnd, turret->s.number,
                              TURRET_INIT_TRACE_CONTENTS,
@@ -1608,8 +1601,8 @@ static qboolean G_TurretPlayerFacingUseArc(gentity_t *turret,
 
     delta[2] = 0.0f;
     VectorNormalize(delta);
-    /* Keep the dot product wide until the float Q_acos argument. Windows
-     * accumulates Z/Y/X; Linux accumulates X/Y/Z. The degree conversion uses
+    /* Keep the dot product wide until the float Q_acos argument. The Z lane
+     * is zero, so both accumulation orders have the same finite result. The degree conversion uses
      * float pi on Windows and double pi on Linux, then rounds to float before
      * comparing with the stored half-arc. */
 #if EMULATE_X87
@@ -1621,14 +1614,13 @@ static qboolean G_TurretPlayerFacingUseArc(gentity_t *turret,
         x87f_mul(x87f_load_f32(Q_acos(facingDot)), x87f_load_f32(180.0f)),
         x87f_load_f64(M_PI)));
 #else
-    volatile float facingDot;
+    const volatile float facingDot = ((WIDE_FLOAT)forward[0] * delta[0] + (WIDE_FLOAT)forward[1] * delta[1]) + (WIDE_FLOAT)forward[2] * delta[2];
 #if defined(WINDOWS_BEHAVIOR)
-    facingDot = ((WIDE_FLOAT)forward[2] * delta[2] + (WIDE_FLOAT)forward[1] * delta[1]) + (WIDE_FLOAT)forward[0] * delta[0];
-    angleToPlayer = ((WIDE_FLOAT)Q_acos(facingDot) * 180.0f) / (float)M_PI;
+    const WIDE_FLOAT radiansPerHalfTurn = (float)M_PI;
 #else
-    facingDot = ((WIDE_FLOAT)forward[0] * delta[0] + (WIDE_FLOAT)forward[1] * delta[1]) + (WIDE_FLOAT)forward[2] * delta[2];
-    angleToPlayer = ((WIDE_FLOAT)Q_acos(facingDot) * 180.0f) / M_PI;
+    const WIDE_FLOAT radiansPerHalfTurn = M_PI;
 #endif
+    angleToPlayer = ((WIDE_FLOAT)Q_acos(facingDot) * 180.0f) / radiansPerHalfTurn;
 #endif
 
     /* Stock branches to false only for an ordered angle greater than the
