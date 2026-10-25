@@ -10,6 +10,17 @@
   Preserve `WIDE_FLOAT` intermediates and explicit float/double rounding and
   integer truncation boundaries; removing emulation does not justify narrowing
   live arithmetic to float.
+- Original Windows CRT behavior is part of the stock contract. Reimplement
+  observable CRT semantics in the shared compatibility layer wherever the host
+  library does not preserve them. Matching a standard function name is not
+  proof: check results, bytes, ordering, state ownership, and side effects over
+  the supported caller domain. Keep host runtime internals only behind that
+  boundary; see `docs/branch-policy.md` for the CRT scope.
+- Native floating-point limits do not waive reproducible CRT behavior. Preserve
+  the integer-based decimal converters and other portable compatibility code;
+  these are not software x87 emulation. Document unavoidable native precision
+  limits per operation, including on macOS arm64, without narrowing unrelated
+  arithmetic or accepting unrelated host-CRT differences.
 - Read `docs/branch-policy.md` before changing behavior or moving code between
   branches.
 - `stock` is the hardened stock-compatible baseline. Preserve legitimate
