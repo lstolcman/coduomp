@@ -2,7 +2,15 @@
 # Common build settings
 #-----------------------------------------------------------------
 
-if(NOT MSVC OR MSVC_VERSION LESS 1939)
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    message(FATAL_ERROR
+        "CoDUOMP: clang-cl is not supported by this Windows CMake build yet. "
+        "The tested x64 native-x87 options break variadic argument passing or "
+        "the Windows x64 floating-point calling convention. "
+        "Use the msvc preset for x86 or msvc-x64 with its documented arithmetic limits. "
+        "See docs/client-building.md.")
+endif()
+if(NOT CMAKE_C_COMPILER_ID STREQUAL "MSVC" OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" OR MSVC_VERSION LESS 1939)
 	message(FATAL_ERROR
 		"CoDUOMP: this CMake project requires MSVC 19.39 or newer with C11 and __typeof__ support. "
 		"Use the Makefile targets for GCC/Clang builds.")
