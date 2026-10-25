@@ -1371,8 +1371,19 @@ qboolean G_TurretAimAtAngles(gentity_t *turret, const float *targetAngles,
         arrived = qfalse;
         delta = -turnRates[0];
     }
+#if defined(WINDOWS_BEHAVIOR)
+    /* The carry uses the retained sum, before the pitch's float store rounds it. */
+    {
+        WIDE_FLOAT finalPitch = (WIDE_FLOAT)previousPitch + delta;
+        turret->s.turret.pitch = (float)finalPitch;
+        *game_compat_g_turret_pitch_carry(turret) =
+            (float)((WIDE_FLOAT)*game_compat_g_turret_pitch_carry(turret) - finalPitch);
+    }
+#else
+    /* The Linux carry uses the pitch after its float store. */
     turret->s.turret.pitch = previousPitch + delta;
     *game_compat_g_turret_pitch_carry(turret) -= turret->s.turret.pitch;
+#endif
 
     return arrived;
 }
