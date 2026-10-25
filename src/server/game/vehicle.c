@@ -147,7 +147,6 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_MOTION_ANIM_FRAME_SECONDS  0.05f
 #define VEH_MOTION_ANIM_PHASE_STEP     36.0f
 #define VEH_MOTION_ANIM_CENTER         127.0f
-#define VEH_MOTION_ANIM_DEGREES        30.0f
 /* Windows body conversion uses binary32 values of 30/127 and 127/30. */
 #define VEH_MOTION_ANIM_DECODE_SCALE   0.23622047901153564453125f
 #define VEH_MOTION_ANIM_ENCODE_SCALE   4.233333110809326171875f
