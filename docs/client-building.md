@@ -266,20 +266,24 @@ the Visual Studio 2022 toolchain and the third-party libraries bundled in
 downloads the pinned GitHub archives into `libs/<name>` (verified by SHA-256,
 no git installation required); later configures reuse them.
 
-Generate a Visual Studio solution:
-
-```sh
-cmake -G "Visual Studio 17 2022" -A Win32 -DBUNDLED_LIBS=YES ..
-MSBuild.exe CoDUOMP.sln /m /p:Configuration=Release /p:Platform=Win32
-```
-
-or use NMake makefiles:
+Generate a Visual Studio solution and build it:
 
 ```sh
 mkdir build && cd build
-cmake -G "NMake Makefiles" -DBUNDLED_LIBS=YES .. && nmake
+cmake -G "Visual Studio 17 2022" -A Win32 -DBUNDLED_LIBS=YES ..
+cmake --build . --config Release --parallel 4
 ```
 
+`--parallel 4` lets MSBuild build four projects at once and passes `/MP4` to the
+compiler, so each project compiles four files at a time. Change the number to
+suit the host; `--parallel` without a number uses every processor, and removing
+it builds without parallelism.
+
+Alternatively, from the same build directory, use NMake makefiles:
+
+```sh
+cmake -G "NMake Makefiles" -DBUNDLED_LIBS=YES .. && nmake
+```
 
 The executable is written to `build/bin/Release/CoDUOMP.exe` and its modules to
 `build/bin/Release/uo/`. This build links the bundled libraries and the MSVC

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- MSBuild sets MSBuildNodeCount from the /m option it receives. Keep the
+       compiler's own /MP budget in step with it: no /m (or /m:1) builds
+       sequentially, /m uses every processor, and /m:<n> uses n compiler
+       processes per project. /FS keeps concurrent PDB writes valid. -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <MultiProcessorCompilation Condition="'$(MSBuildNodeCount)' != '' and '$(MSBuildNodeCount)' &gt; '1'">true</MultiProcessorCompilation>
+      <ProcessorNumber Condition="'$(MSBuildNodeCount)' != '' and '$(MSBuildNodeCount)' &gt; '1'">$(MSBuildNodeCount)</ProcessorNumber>
+      <AdditionalOptions Condition="'$(MSBuildNodeCount)' != '' and '$(MSBuildNodeCount)' &gt; '1'">%(AdditionalOptions) /FS</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>

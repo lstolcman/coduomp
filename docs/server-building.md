@@ -103,8 +103,13 @@ installation is required.
 ```sh
 mkdir build && cd build
 cmake -G "Visual Studio 17 2022" -A Win32 -DBUNDLED_LIBS=YES ..
-MSBuild.exe CoDUOMP.sln /m /p:Configuration=Release /p:Platform=Win32
+cmake --build . --config Release --parallel 4
 ```
+
+`--parallel 4` lets MSBuild build four projects at once and passes `/MP4` to the
+compiler, so each project compiles four files at a time. Change the number to
+suit the host; `--parallel` without a number uses every processor, and removing
+it builds without parallelism.
 
 Output:
 
@@ -115,7 +120,7 @@ build/bin/Release/coduo_dedicated_recovered.exe
 To build only the server project:
 
 ```cmd
-cmake --build . --config Release --target coduo_dedicated_recovered
+cmake --build . --config Release --target coduo_dedicated_recovered --parallel 4
 ```
 
 To generate a solution that contains only the dedicated server, disable the
