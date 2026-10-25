@@ -5,7 +5,7 @@
  * The dedicated server reproduces the Linux server and is built for Windows
  * with MinGW, whose C library supplies the POSIX names below. MSVC does not,
  * so this header maps them onto the Microsoft CRT and Win32 APIs. It is
- * force-included only by the coduo_dedicated_recovered target.
+ * force-included only by the coduo_dedicated target.
  */
 #ifndef CODUOMP_MSVC_POSIX_COMPAT_H
 #define CODUOMP_MSVC_POSIX_COMPAT_H

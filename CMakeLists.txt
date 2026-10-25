@@ -1,5 +1,7 @@
 #-----------------------------------------------------------------
-# CoDUOMP Visual Studio build
+# CoDUOMP CMake build
+#
+# Windows (Visual Studio, 32-bit retail configuration):
 #
 #   mkdir build && cd build
 #   cmake -A Win32 -DBUNDLED_LIBS=YES ..
@@ -9,32 +11,44 @@
 #
 #   cmake -G "NMake Makefiles" -DBUNDLED_LIBS=YES .. && nmake
 #
+# Linux (native GCC/Clang, dedicated server):
+#
+#   mkdir build && cd build
+#   cmake -DBUNDLED_LIBS=YES ..
+#   cmake --build . --target coduo_dedicated --parallel 4
+#
 # The Makefiles (Makefile + build-mk/) stay authoritative for the other
 # platforms. This project provides the equivalent MSVC solution so the recovered
 # source can be edited, navigated, debugged and built from Visual Studio with
-# cl.exe. Source membership is read from build-mk/ instead of being duplicated
+# cl.exe, and the same recovered sources built natively on Linux with GCC or
+# Clang. Source membership is read from build-mk/ instead of being duplicated
 # here.
 #
 # The recovered sources are shared with the GCC-compatible Makefile builds.
-# MSVC-specific adaptations stay next to the code they affect: the
+# Toolchain-specific adaptations stay next to the code they affect: the
 # offsetof(<type>, <member>[<index>]) layout checks are GCC/clang-only, the game
 # module selects src/compat/libm/coduo_libm_msvc.c because MSVC has no 80-bit
 # long double or GNU inline assembly, cmake/CoduompMsvcCompat.h supplies the
 # Microsoft CRT names the shared sources use, and the dedicated server uses
-# cmake/msvc-posix/ for the POSIX names MinGW provides.
+# cmake/msvc-posix/ for the POSIX names MinGW provides. The native Linux
+# configuration compiles the dedicated-server sources with the flags and x87
+# policy of build-mk/server.mk; the client executable and its modules are only
+# generated for Windows.
 #
 # Targets:
-#   CoDUOMP                   client executable
-#   uo_cgame_mp_x86           client game module
-#   uo_ui_mp_x86              client UI module
-#   uo_game_mp_x86            listen-server game module
-#   coduo_dedicated_recovered dedicated server executable
+#   CoDUOMP                   client executable (Windows)
+#   uo_cgame_mp_x86           client game module (Windows)
+#   uo_ui_mp_x86              client UI module (Windows)
+#   uo_game_mp_x86            listen-server game module (Windows)
+#   coduo_dedicated           dedicated server executable (coduo_lnxded on Linux)
 #
 # Third-party libraries are built from libs/ by default. The first configure
 # fetches the pinned archives into libs/<name> and later configures reuse them,
 # so builds work offline once the tree is populated. Pass
 # -DBUNDLED_LIBS=OFF to use system libraries instead (or supply a prefix with
-# -DCODUOMP_DEP_PREFIX=<path>).
+# -DCODUOMP_DEP_PREFIX=<path>). The dedicated server links zlib only, so the
+# native Linux server uses the bundled copy without any extra development
+# package.
 #
 # The retail client is a 32-bit x86 PE image. Generate the Win32 configuration
 # (cmake -A Win32) so float expressions use the x87 FPU like the original and
@@ -57,6 +71,32 @@ if(COMMAND cmake_diagnostic)
 	cmake_diagnostic(SET CMD_DEPRECATED IGNORE)
 endif()
 
+#-----------------------------------------------------------------
+# Host toolchain
+#
+# A native configuration needs a compiler and, for the Makefile generators,
+# make. Installing system packages needs root, so report the package that
+# provides them instead of letting project() fail with a bare
+# compiler-not-found error.
+#-----------------------------------------------------------------
+if(NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+	find_program(CODUOMP_HOST_CC NAMES cc gcc clang)
+	find_program(CODUOMP_HOST_CXX NAMES c++ g++ clang++)
+	if(CMAKE_GENERATOR MATCHES "Makefiles")
+		find_program(CODUOMP_HOST_MAKE NAMES make gmake)
+	endif()
+	if(NOT CODUOMP_HOST_CC OR NOT CODUOMP_HOST_CXX OR
+		(CMAKE_GENERATOR MATCHES "Makefiles" AND NOT CODUOMP_HOST_MAKE))
+		message(FATAL_ERROR
+			"CoDUOMP: a C/C++ compiler and make are required for the native "
+			"build. Install them with 'sudo apt-get install -y build-essential' "
+			"(Debian/Ubuntu) and re-run CMake.")
+	endif()
+	unset(CODUOMP_HOST_CC CACHE)
+	unset(CODUOMP_HOST_CXX CACHE)
+	unset(CODUOMP_HOST_MAKE CACHE)
+endif()
+
 # Single-configuration generators (NMake Makefiles) need an explicit build type.
 # CMake seeds "Debug" itself inside project(); choose Release before that, so
 # the etlegacy-style `cmake -G "NMake Makefiles" .. && nmake` builds the release
@@ -65,7 +105,10 @@ if(NOT DEFINED CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
 	set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build")
 endif()
 
-project(CoDUOMP C CXX RC)
+project(CoDUOMP C CXX)
+if(WIN32)
+	enable_language(RC)
+endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
@@ -76,8 +119,18 @@ set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMake")
 #-----------------------------------------------------------------
 # Options
 #-----------------------------------------------------------------
-option(CODUOMP_BUILD_CLIENT		"Build the CoDUOMP client executable"						ON)
-option(CODUOMP_BUILD_MODULES	"Build the cgame, UI and listen-server game modules"		ON)
+# The native Linux configuration builds the dedicated server; the client and
+# its modules are generated by the Visual Studio configuration.
+if(MSVC)
+	set(CODUOMP_CLIENT_DEFAULT ON)
+	set(CODUOMP_MODULES_DEFAULT ON)
+else()
+	set(CODUOMP_CLIENT_DEFAULT OFF)
+	set(CODUOMP_MODULES_DEFAULT OFF)
+endif()
+
+option(CODUOMP_BUILD_CLIENT		"Build the CoDUOMP client executable"				${CODUOMP_CLIENT_DEFAULT})
+option(CODUOMP_BUILD_MODULES	"Build the cgame, UI and listen-server game modules"		${CODUOMP_MODULES_DEFAULT})
 option(CODUOMP_BUILD_SERVER		"Build the dedicated server executable"					ON)
 
 option(CODUOMP_STATIC_VCRT		"Link the MSVC runtime statically (/MT)"					ON)

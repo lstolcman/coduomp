@@ -102,6 +102,11 @@ make client-linux64-package
 make server64
 ```
 
+#### Linux dedicated server
+
+See the dedicated-server build instructions in
+[docs/server-building.md](docs/server-building.md#native-linux-build-cmake).
+
 ### Debian or Ubuntu Linux (32-bit on an x86-64 host)
 
 Enable i386 packages and install the complete 32-bit toolchain and dependency

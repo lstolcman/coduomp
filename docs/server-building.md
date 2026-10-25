@@ -7,9 +7,9 @@ The public tree contains two independently useful target families:
 - `build-mk/game.mk` builds the server game module from `src/server/game/` and
   its shared BG/qcommon/math dependencies.
 
-`CMakeLists.txt` builds the same dedicated-server executable natively with the
-Visual Studio toolchain on Windows; see
-[Native Windows build (MSVC)](#native-windows-build-msvc).
+`CMakeLists.txt` builds the same dedicated-server executable with the Visual
+Studio toolchain on Windows and with GCC or Clang on Linux; see the platform
+sections below.
 
 ## CD-key Authorization
 
@@ -90,8 +90,100 @@ make server-engine64
 Output:
 
 ```text
-.workbench/build/server/linux-x86_64-noauth/coduo_lnxded_recovered
+.workbench/build/server/linux-x86_64-noauth/coduo_lnxded
 ```
+
+## Native Linux build (CMake)
+
+`CMakeLists.txt` also builds the dedicated server natively with GCC or Clang.
+A clean Ubuntu installation needs CMake 3.21 or newer and the compiler
+toolchain; the bundled zlib in `libs/` is used by default, so no development
+packages are required:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y cmake build-essential
+```
+
+Create a build directory, configure, and build the 64-bit server:
+
+```sh
+mkdir build && cd build
+cmake -DBUNDLED_LIBS=YES ..
+cmake --build . --target coduo_dedicated --parallel 4
+```
+
+The Unix Makefiles generator is single-configuration: the build type is chosen
+at configure time with `CMAKE_BUILD_TYPE`, which defaults to `Release` here.
+Build a debug binary with `cmake -DCMAKE_BUILD_TYPE=Debug ..`; `--config` only
+selects a configuration with multi-configuration generators such as Visual
+Studio. Both configurations use the `build-mk/server.mk` flags and x87 policy, so
+Debug differs only by its debug information. Change `--parallel 4` to suit the
+host.
+
+Outputs:
+
+```text
+build/bin/Release/coduo_lnxded
+build/bin/Release/uo/game.mp.uo.x86_64.so
+```
+
+With `-DCMAKE_BUILD_TYPE=Debug` the same files are staged under
+`build/bin/Debug`.
+
+The target is named `coduo_dedicated`; on Linux it produces `coduo_lnxded`, and
+the same target produces `coduo_dedicated.exe` on Windows.
+
+The server target depends on the game module, so one build produces both. Put
+the module in the `uo/` directory of a filesystem search path before starting a
+map; the engine loads it there through `dlopen()`.
+
+The first configure downloads the pinned zlib archive into `libs/` and later
+configures reuse it; pass `-DBUNDLED_LIBS=OFF` to link a system zlib
+(`zlib1g-dev`) instead. The native configuration builds the dedicated server and
+its game module only; the client executable and its client modules come from the
+Visual Studio configuration. If the compiler or `make` is missing, configure
+stops and names the package to install.
+
+The native configuration builds the architecture the compiler targets, which is
+x86-64 on a standard host. Use the Makefile `server32` target for the i386
+engine and module. Both architectures speak the same network protocol, so
+clients running the original 32-bit executable connect to the 64-bit server
+without any change.
+
+### Running the server
+
+No configuration files are needed for a first test: these arguments set
+everything the server needs, and it writes its own configuration into
+`fs_homepath`.
+
+```sh
+cd build/bin/Release
+
+# Directory that contains the game data, with main/ and uo/ directly below it.
+GAME_DATA=/path/to/call-of-duty-uo
+
+# The engine loads the game module from uo/ in fs_homepath (default ~/.callofduty).
+mkdir -p ~/.callofduty/uo
+ln -sfn "$PWD/uo/game.mp.uo.x86_64.so" ~/.callofduty/uo/game.mp.uo.x86_64.so
+
+./coduo_lnxded \
+  +set com_hunkmegs 64 \
+  +set dedicated 2 \
+  +set net_ip "localhost" \
+  +set net_port 28960 \
+  +set sv_hostname "test" \
+  +set sv_pure 0 \
+  +set fs_basepath "$GAME_DATA" \
+  +map mp_carentan
+```
+
+`fs_basepath` is the directory that contains `main/` and `uo/`. The default
+`fs_homepath` is `~/.callofduty`, which receives configuration files and is
+also searched for the module, so the game-data directory is left untouched. On
+a case-sensitive filesystem the game-data directories must be named `main` and
+`uo` in lower case. `mp_carentan` ships with the game; replace it with another
+map shipped in the game data. Stop the server with Ctrl+C.
 
 ## Native Windows build (MSVC)
 
@@ -117,13 +209,13 @@ without parallelism.
 Output:
 
 ```text
-build/bin/Debug/coduo_dedicated_recovered.exe
+build/bin/Debug/coduo_dedicated.exe
 ```
 
 To build only the server project:
 
 ```cmd
-cmake --build . --config Debug --target coduo_dedicated_recovered --parallel 4
+cmake --build . --config Debug --target coduo_dedicated --parallel 4
 ```
 
 To generate a solution that contains only the dedicated server, disable the
@@ -135,7 +227,7 @@ built:
 cmake -A Win32 -DBUNDLED_LIBS=YES -DCODUOMP_BUILD_CLIENT=OFF -DCODUOMP_BUILD_MODULES=OFF ..
 ```
 
-That solution contains `coduo_dedicated_recovered` and the bundled zlib.
+That solution contains `coduo_dedicated` and the bundled zlib.
 
 The target is a console executable compiled with `LINUX_BEHAVIOR`, so it keeps
 the retail Linux server's behavior. `cmake/msvc-posix/` supplies the POSIX
@@ -165,14 +257,14 @@ MSBuild.exe CoDUOMP.sln /m:4 /p:Configuration=Debug /p:Platform=Win32
 output in `build/bin/<config>/`:
 
 ```sh
-cmake --build . --config Release --target coduo_dedicated_recovered --parallel 4
+cmake --build . --config Release --target coduo_dedicated --parallel 4
 ```
 
 Configure-time options are passed at the `cmake` step as `-D<name>=<value>`:
 
 | Option | Default | Effect |
 | --- | --- | --- |
-| `CODUOMP_BUILD_SERVER` | `ON` | Build `coduo_dedicated_recovered.exe`. |
+| `CODUOMP_BUILD_SERVER` | `ON` | Build `coduo_dedicated.exe`. |
 | `CODUOMP_BUILD_CLIENT` | `ON` | Build `CoDUOMP.exe` in the same solution. |
 | `CODUOMP_BUILD_MODULES` | `ON` | Build the cgame, UI and listen-server modules. |
 | `BUNDLED_LIBS` | `ON` | Fetch and build the third-party libraries in `libs/`. |

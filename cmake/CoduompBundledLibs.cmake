@@ -1,10 +1,11 @@
 #-----------------------------------------------------------------
 # Bundled libraries
 #
-# libs/CMakeLists.txt holds every third-party dependency the Windows build
-# needs and fetches the pinned sources into libs/<name> when they are missing.
-# This module starts that build and publishes the targets through the same
-# CODUOMP_<LIB>_* variables the system-library path uses.
+# libs/CMakeLists.txt holds every third-party dependency the builds need and
+# fetches the pinned sources into libs/<name> when they are missing. This module
+# starts that build and publishes the targets through the same
+# CODUOMP_<LIB>_* variables the system-library path uses. Only zlib is fetched
+# for a server-only configuration, which is what the native Linux build uses.
 #-----------------------------------------------------------------
 
 if(NOT BUNDLED_LIBS)

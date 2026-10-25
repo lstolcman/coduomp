@@ -314,8 +314,7 @@ cmake --build . --config Debug --target uo_ui_mp_x86 --parallel 4
 ```
 
 The targets are `CoDUOMP`, `uo_cgame_mp_x86`, `uo_ui_mp_x86`,
-`uo_game_mp_x86` (the listen-server game module) and
-`coduo_dedicated_recovered`.
+`uo_game_mp_x86` (the listen-server game module) and `coduo_dedicated`.
 
 Configure-time options are passed at the `cmake` step as `-D<name>=<value>`:
 

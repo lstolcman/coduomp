@@ -5,7 +5,7 @@ AR ?= ar
 include build-mk/sources/server-engine.mk
 
 BUILD_DIR ?= .workbench/build/server/objects
-TARGET := $(BUILD_DIR)/libcoduo_lnxded_recovered.a
+TARGET := $(BUILD_DIR)/libcoduo_lnxded.a
 ifneq ($(filter native-macos-exe,$(MAKECMDGOALS)),)
 CODUO_FP_FAITHFUL ?= relaxed
 EMULATE_X87 ?= 1
@@ -14,9 +14,9 @@ NATIVE_MACOS_X87_VARIANT := $(if $(filter softfloat,$(EMU_X87_BACKEND)),,-$(EMU_
 EXE_BUILD_DIR ?= .workbench/build/server/native-macos-x87$(NATIVE_MACOS_X87_VARIANT)
 endif
 EXE_BUILD_DIR ?= .workbench/build/server/native
-EXE_TARGET := $(EXE_BUILD_DIR)/coduo_lnxded_recovered
+EXE_TARGET := $(EXE_BUILD_DIR)/coduo_lnxded
 EXE_I386_BUILD_DIR ?= .workbench/build/server/linux-i386
-EXE_I386_TARGET := $(EXE_I386_BUILD_DIR)/coduo_lnxded_recovered
+EXE_I386_TARGET := $(EXE_I386_BUILD_DIR)/coduo_lnxded
 WINDOWS_I386_BUILD_DIR ?= .workbench/build/server/windows-i386
 WINDOWS_I386_TARGET := $(WINDOWS_I386_BUILD_DIR)/coduo_dedicated_recovered.exe
 WINDOWS_I686_BUILD_DIR ?= .workbench/build/server/windows-i686
@@ -265,7 +265,7 @@ CPPFLAGS += -D_GNU_SOURCE
 NATIVE_CXXFLAGS += -Wno-pedantic
 endif
 
-SHARED_TARGET := $(BUILD_DIR)/libcoduo_lnxded_recovered.$(SHARED_EXT)
+SHARED_TARGET := $(BUILD_DIR)/libcoduo_lnxded.$(SHARED_EXT)
 
 .PHONY: all check objects shared shared-check-link exe exe-i386 windows \
 	windows-i386 windows-i686 native64-check native64-shared native64-exe native-macos-exe \
