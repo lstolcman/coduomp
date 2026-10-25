@@ -6957,7 +6957,7 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
     vec3_t sideAxis;
     vec3_t lengthAxis;
     vec3_t groundNormal;
-    float planeDistance;
+    volatile float planeDistance;
     vec3_t targetAngles;
 
     /*
@@ -6976,7 +6976,20 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
         vec3_t localWheel;
 
         VEH_GetWheelOrigin(ent, wheelIndex, localWheel);
+#if defined(WINDOWS_BEHAVIOR)
+        /* The inlined Windows transform folds Y/X/Z, X/Y/Z, then X/Z/Y. */
+        traceStart[0] = (((WIDE_FLOAT)localWheel[1] * axis.axis[1][0] +
+                          (WIDE_FLOAT)localWheel[0] * axis.axis[0][0]) +
+                         (WIDE_FLOAT)localWheel[2] * axis.axis[2][0]) + axis.origin[0];
+        traceStart[1] = (((WIDE_FLOAT)localWheel[0] * axis.axis[0][1] +
+                          (WIDE_FLOAT)localWheel[1] * axis.axis[1][1]) +
+                         (WIDE_FLOAT)localWheel[2] * axis.axis[2][1]) + axis.origin[1];
+        traceStart[2] = (((WIDE_FLOAT)localWheel[0] * axis.axis[0][2] +
+                          (WIDE_FLOAT)localWheel[2] * axis.axis[2][2]) +
+                         (WIDE_FLOAT)localWheel[1] * axis.axis[1][2]) + axis.origin[2];
+#else
         MatrixTransformVector43(localWheel, &axis, traceStart);
+#endif
 
         if (g_vehicleDebug.integer != 0) {
             VEH_DebugBox(traceStart, 4.0f, 1.0f, 0.0f, 0.0f);
@@ -7062,26 +7075,49 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
     VectorNormalize(lengthAxis);
 
     CrossProduct(sideAxis, lengthAxis, groundNormal);
-    planeDistance = wheelPoints[0][0] * groundNormal[0] +
-                    wheelPoints[0][1] * groundNormal[1] +
-                    wheelPoints[0][2] * groundNormal[2];
+#if defined(WINDOWS_BEHAVIOR)
+    /* Windows stores the reused X/Y products before adding them to Z. */
+    const volatile float baseDotX = (WIDE_FLOAT)wheelPoints[0][0] * groundNormal[0];
+    const volatile float baseDotY = (WIDE_FLOAT)wheelPoints[0][1] * groundNormal[1];
+    planeDistance = ((WIDE_FLOAT)wheelPoints[0][2] * groundNormal[2] + baseDotX) + baseDotY;
+#else
+    planeDistance = ((WIDE_FLOAT)wheelPoints[0][0] * groundNormal[0] +
+                     (WIDE_FLOAT)wheelPoints[0][1] * groundNormal[1]) +
+                    (WIDE_FLOAT)wheelPoints[0][2] * groundNormal[2];
+#endif
 
     for (int wheelIndex = 1; wheelIndex < wheelCount; wheelIndex++) {
+#if defined(WINDOWS_BEHAVIOR)
+        /* The six-wheel loop folds its middle three dots Z/Y/X; the other
+         * dots fold X/Z/Y. Each dot is stored before distance subtraction. */
+        const WIDE_FLOAT dotX = (WIDE_FLOAT)wheelPoints[wheelIndex][0] * groundNormal[0];
+        const WIDE_FLOAT dotY = (WIDE_FLOAT)wheelPoints[wheelIndex][1] * groundNormal[1];
+        const WIDE_FLOAT dotZ = (WIDE_FLOAT)wheelPoints[wheelIndex][2] * groundNormal[2];
+        const volatile float wheelDot =
+            wheelCount == VEH_SUSPENSION_WHEEL_COUNT_TANK && wheelIndex > 1 && wheelIndex < wheelCount - 1 ?
+            (dotZ + dotY) + dotX : (dotX + dotZ) + dotY;
+        const volatile float wheelDistance = (WIDE_FLOAT)wheelDot - planeDistance;
+
+        if (vehicleInfo->suspensionTravel < wheelDistance) {
+            planeDistance = (WIDE_FLOAT)wheelDot - vehicleInfo->suspensionTravel;
+        }
+#else
         /* 0x819ba..0x81ab7: the dot product stays in the 80-bit chain up to
          * the subtraction (never rounded on its own), and the update path
          * recomputes the full chain minus suspensionTravel. */
-        const float wheelDistance =
-            (wheelPoints[wheelIndex][0] * groundNormal[0] +
-             wheelPoints[wheelIndex][1] * groundNormal[1] +
-             wheelPoints[wheelIndex][2] * groundNormal[2]) - planeDistance;
+        const volatile float wheelDistance =
+            (((WIDE_FLOAT)wheelPoints[wheelIndex][0] * groundNormal[0] +
+              (WIDE_FLOAT)wheelPoints[wheelIndex][1] * groundNormal[1]) +
+             (WIDE_FLOAT)wheelPoints[wheelIndex][2] * groundNormal[2]) - planeDistance;
 
         if (vehicleInfo->suspensionTravel < wheelDistance) {
             planeDistance =
-                (wheelPoints[wheelIndex][0] * groundNormal[0] +
-                 wheelPoints[wheelIndex][1] * groundNormal[1] +
-                 wheelPoints[wheelIndex][2] * groundNormal[2]) -
+                (((WIDE_FLOAT)wheelPoints[wheelIndex][0] * groundNormal[0] +
+                  (WIDE_FLOAT)wheelPoints[wheelIndex][1] * groundNormal[1]) +
+                 (WIDE_FLOAT)wheelPoints[wheelIndex][2] * groundNormal[2]) -
                 vehicleInfo->suspensionTravel;
         }
+#endif
     }
 
     /* Keep both corrected axes in the matrix used to derive target angles. */
@@ -7110,8 +7146,8 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
     if (game_compat_veh_entity_collision_mode(ent) !=
         VEH_COLLISION_MODE_ALT_TRACE) {
         vehicleState->origin[2] =
-            -((vehicleState->origin[0] * groundNormal[0] +
-               vehicleState->origin[1] * groundNormal[1]) -
+            -(((WIDE_FLOAT)vehicleState->origin[0] * groundNormal[0] +
+               (WIDE_FLOAT)vehicleState->origin[1] * groundNormal[1]) -
               planeDistance) / groundNormal[2];
     }
 
@@ -7130,10 +7166,18 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
              wheelIndex++) {
             projected[wheelIndex][0] = wheelPoints[wheelIndex][0];
             projected[wheelIndex][1] = wheelPoints[wheelIndex][1];
+#if defined(WINDOWS_BEHAVIOR)
+            const WIDE_FLOAT horizontalDot = wheelIndex == 0 ?
+                (WIDE_FLOAT)baseDotX + baseDotY :
+                (WIDE_FLOAT)projected[wheelIndex][1] * groundNormal[1] +
+                (WIDE_FLOAT)projected[wheelIndex][0] * groundNormal[0];
+            projected[wheelIndex][2] = -((horizontalDot - planeDistance) / groundNormal[2]);
+#else
             projected[wheelIndex][2] =
-                -((projected[wheelIndex][0] * groundNormal[0] +
-                   projected[wheelIndex][1] * groundNormal[1]) -
+                -(((WIDE_FLOAT)projected[wheelIndex][0] * groundNormal[0] +
+                   (WIDE_FLOAT)projected[wheelIndex][1] * groundNormal[1]) -
                   planeDistance) / groundNormal[2];
+#endif
         }
 
         VEH_DebugLine(projected[0], projected[1], 1.0f, 1.0f, 0.0f);
