@@ -1526,7 +1526,7 @@ static qboolean G_TurretPlayerFacingUseArc(gentity_t *turret,
     float yawBase;
     float yawCenter;
     float halfUseArc;
-    float angleToPlayer;
+    volatile float angleToPlayer;
 
     /* 0x5c6c0/0x5c6ef: stock rounds currentAngles[1]+rightArc and the
      * half-arc product to float locals before summing them for the
@@ -1559,9 +1559,10 @@ static qboolean G_TurretPlayerFacingUseArc(gentity_t *turret,
 
     delta[2] = 0.0f;
     VectorNormalize(delta);
-    /* Stock 0x5c7aa: forward.delta 3-mul/2-add dot kept 80-bit, stored to float
-     * (the Q_acos arg); 0x5c7ce: (Q_acos * 180.0f) / M_PI(QWORD double), one
-     * store.  Q_acos is external (stock calls Q_acos@plt) -> faithful. */
+    /* Keep the dot product wide until the float Q_acos argument. Windows
+     * accumulates Z/Y/X; Linux accumulates X/Y/Z. The degree conversion uses
+     * float pi on Windows and double pi on Linux, then rounds to float before
+     * comparing with the stored half-arc. */
 #if EMULATE_X87
     float facingDot = x87f_store_f32(x87f_add(x87f_add(
         x87f_mul(x87f_load_f32(forward[0]), x87f_load_f32(delta[0])),
@@ -1571,12 +1572,14 @@ static qboolean G_TurretPlayerFacingUseArc(gentity_t *turret,
         x87f_mul(x87f_load_f32(Q_acos(facingDot)), x87f_load_f32(180.0f)),
         x87f_load_f64(M_PI)));
 #else
-    angleToPlayer =
-        (float)(((long double)180.0f *
-                 (long double)Q_acos(forward[0] * delta[0] +
-                                      forward[1] * delta[1] +
-                                      forward[2] * delta[2])) /
-                (long double)M_PI);
+    volatile float facingDot;
+#if defined(WINDOWS_BEHAVIOR)
+    facingDot = ((WIDE_FLOAT)forward[2] * delta[2] + (WIDE_FLOAT)forward[1] * delta[1]) + (WIDE_FLOAT)forward[0] * delta[0];
+    angleToPlayer = ((WIDE_FLOAT)Q_acos(facingDot) * 180.0f) / (float)M_PI;
+#else
+    facingDot = ((WIDE_FLOAT)forward[0] * delta[0] + (WIDE_FLOAT)forward[1] * delta[1]) + (WIDE_FLOAT)forward[2] * delta[2];
+    angleToPlayer = ((WIDE_FLOAT)Q_acos(facingDot) * 180.0f) / M_PI;
+#endif
 #endif
 
     /* Stock branches to false only for an ordered angle greater than the
