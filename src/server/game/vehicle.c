@@ -76,6 +76,8 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_GROUND_STEER_MAX_STEP      5.0f
 #define VEH_APPROACH_FRAME_SECONDS     0.05f
 #define VEH_APPROACH_EPSILON           0.001f /* original float32 0x3a83126f */
+#define VEH_ANGLE_HALF_TURN            180.0f
+#define VEH_ANGLE_FULL_TURN            360.0f
 #define VEH_ENTITY_SVFLAGS             4u
 #define VEH_ENTITY_CONTENTS            0x2080
 #define VEH_ENTITY_SPAWNFLAG_TRIGGER   1u
@@ -2807,24 +2809,22 @@ void VEH_GetWheelOrigin(gentity_t *ent, int wheelIndex, vec3_t origin)
 /* VERIFIED_DECOMPILER(0x7c525, 8c525_FUN_0008c525.c, VERIFY-VEHICLE-PACKET-2026-06-17): DATAFLOW_VERIFIED */
 float VEH_TrackValue(float target, float current, float speed)
 {
-    const float delta = target - current;
-    float step = speed;
+    /* The sign test uses the live difference; the magnitude tests use its
+     * float store. Keep the signed step wide through the final addition. */
+    const WIDE_FLOAT delta = (WIDE_FLOAT)target - current;
+    const float storedDelta = (float)delta;
+    const WIDE_FLOAT step = (WIDE_FLOAT)speed *
+        (delta > 0.0f ? VEH_APPROACH_FRAME_SECONDS : -VEH_APPROACH_FRAME_SECONDS);
 
-    if (!(delta > 0.0f)) {
-        step = -step;
-    }
-
-    step *= VEH_APPROACH_FRAME_SECONDS;
-
-    if (!(fabsf(delta) > VEH_APPROACH_EPSILON)) {
+    if (!(fabsf(storedDelta) > VEH_APPROACH_EPSILON)) {
         return target;
     }
 
-    if (fabsf(delta) < fabsf(step)) {
+    if ((WIDE_FLOAT)fabsf(storedDelta) < fabsl(step)) {
         return target;
     }
 
-    return current + step;
+    return (float)((WIDE_FLOAT)current + step);
 }
 
 /* ------------------------------------------------------------------ */
@@ -2834,20 +2834,21 @@ float VEH_TrackValue(float target, float current, float speed)
 /* VERIFIED_DECOMPILER(0x7c5c5, 8c5c5_FUN_0008c5c5.c, VERIFY-VEHICLE-PACKET-2026-06-17): DATAFLOW_VERIFIED */
 float VEH_LerpValue(float target, float current, float speed)
 {
-    const float delta = target - current;
+    /* The delta remains live; only the completed scaled step stores float. */
+    const WIDE_FLOAT delta = (WIDE_FLOAT)target - current;
     const float step =
-        (float)((long double)speed * (long double)delta *
-                (long double)VEH_APPROACH_FRAME_SECONDS);
+        (float)((WIDE_FLOAT)speed * delta * VEH_APPROACH_FRAME_SECONDS);
+    const WIDE_FLOAT magnitude = fabsl(delta);
 
-    if (!(fabsf(delta) > VEH_APPROACH_EPSILON)) {
+    if (!(magnitude > (WIDE_FLOAT)VEH_APPROACH_EPSILON)) {
         return target;
     }
 
-    if (fabsf(delta) < fabsf(step)) {
+    if (magnitude < (WIDE_FLOAT)fabsf(step)) {
         return target;
     }
 
-    return current + step;
+    return (float)((WIDE_FLOAT)current + step);
 }
 
 /* ------------------------------------------------------------------ */
@@ -2857,30 +2858,33 @@ float VEH_LerpValue(float target, float current, float speed)
 /* VERIFIED_DECOMPILER(0x7c63c, 8c63c_FUN_0008c63c.c, VERIFY-VEHICLE-PACKET-2026-06-17): DATAFLOW_VERIFIED */
 float VEH_TrackAngle(float target, float current, float speed)
 {
+    /* Wrap in wide arithmetic, then round at the value-helper argument. */
+    WIDE_FLOAT wrappedTarget = target;
+
     /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
     if (isinf(current)) {
         return 0.0f;
     }
 
-    while (target - current > 180.0f) {
-        const float previous = target;
+    while (wrappedTarget - current > VEH_ANGLE_HALF_TURN) {
+        const WIDE_FLOAT previous = wrappedTarget;
 
-        target -= 360.0f;
-        if (target == previous) {
+        wrappedTarget -= VEH_ANGLE_FULL_TURN;
+        if (wrappedTarget == previous) {
             break;
         }
     }
 
-    while (target - current < -180.0f) {
-        const float previous = target;
+    while (wrappedTarget - current < -VEH_ANGLE_HALF_TURN) {
+        const WIDE_FLOAT previous = wrappedTarget;
 
-        target += 360.0f;
-        if (target == previous) {
+        wrappedTarget += VEH_ANGLE_FULL_TURN;
+        if (wrappedTarget == previous) {
             break;
         }
     }
 
-    return AngleNormalize180(VEH_TrackValue(target, current, speed));
+    return AngleNormalize180(VEH_TrackValue((float)wrappedTarget, current, speed));
 }
 
 /* ------------------------------------------------------------------ */
@@ -2890,30 +2894,40 @@ float VEH_TrackAngle(float target, float current, float speed)
 /* VERIFIED_DECOMPILER(0x7c6cf, 8c6cf_FUN_0008c6cf.c, VERIFY-VEHICLE-PACKET-2026-06-17): DATAFLOW_VERIFIED */
 float VEH_LerpAngle(float target, float current, float speed)
 {
+    /* The inlined interpolation retains the wrapped target and delta until
+     * the scaled-step and final angle stores. */
+    WIDE_FLOAT wrappedTarget = target;
+
     /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
     if (isinf(current)) {
         return 0.0f;
     }
 
-    while (target - current > 180.0f) {
-        const float previous = target;
+    while (wrappedTarget - current > VEH_ANGLE_HALF_TURN) {
+        const WIDE_FLOAT previous = wrappedTarget;
 
-        target -= 360.0f;
-        if (target == previous) {
+        wrappedTarget -= VEH_ANGLE_FULL_TURN;
+        if (wrappedTarget == previous) {
             break;
         }
     }
 
-    while (target - current < -180.0f) {
-        const float previous = target;
+    while (wrappedTarget - current < -VEH_ANGLE_HALF_TURN) {
+        const WIDE_FLOAT previous = wrappedTarget;
 
-        target += 360.0f;
-        if (target == previous) {
+        wrappedTarget += VEH_ANGLE_FULL_TURN;
+        if (wrappedTarget == previous) {
             break;
         }
     }
 
-    return AngleNormalize180(VEH_LerpValue(target, current, speed));
+    const WIDE_FLOAT delta = wrappedTarget - current;
+    const float step = (float)((WIDE_FLOAT)speed * delta * VEH_APPROACH_FRAME_SECONDS);
+    const WIDE_FLOAT magnitude = fabsl(delta);
+    const float angle = (!(magnitude > (WIDE_FLOAT)VEH_APPROACH_EPSILON) || magnitude < (WIDE_FLOAT)fabsf(step))
+        ? (float)wrappedTarget : (float)((WIDE_FLOAT)current + step);
+
+    return AngleNormalize180(angle);
 }
 
 /* ------------------------------------------------------------------ */
