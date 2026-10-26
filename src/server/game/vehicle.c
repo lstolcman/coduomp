@@ -9095,12 +9095,14 @@ int G_VehUpdatePathPos(vehicle_path_position_t *position, int16_t lastNodeIndex)
             position->currentAngles[2] =
                 AngleNormalize180(position->currentAngles[2]);
 
-            position->origin[0] +=
-                position->speed * VEH_PHYSICS_FRAME_SECONDS * pathDelta[0];
-            position->origin[1] +=
-                position->speed * VEH_PHYSICS_FRAME_SECONDS * pathDelta[1];
-            position->origin[2] +=
-                position->speed * VEH_PHYSICS_FRAME_SECONDS * pathDelta[2];
+            /* Retain the shared frame step and each direction product until
+             * the final binary32 origin stores. The volatile wide product
+             * keeps multiplication separate from the following addition. */
+            const WIDE_FLOAT frameStep = (WIDE_FLOAT)position->speed * VEH_PHYSICS_FRAME_SECONDS;
+            for (int axis = 0; axis < 3; axis++) {
+                const volatile WIDE_FLOAT displacement = frameStep * pathDelta[axis];
+                position->origin[axis] = displacement + position->origin[axis];
+            }
 
             reachedLastNode =
                 VP_ProjectPathPosition(position, pathDelta, lastNodeIndex);
