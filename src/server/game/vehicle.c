@@ -20,6 +20,8 @@
 #include "game_functions.h"
 #include "qcommon/info.h"
 #include "compat/crt/atof_compat.h"
+#include "compat/crt/atoi_compat.h"
+#include "compat/crt/scan_compat.h"
 #include "compat/coduo_native_x87.h"
 #include "compat/coduo_fp_conversion.h"
 #include "scr_vm.h"
@@ -8185,7 +8187,7 @@ void VP_ParseDynamicVehicleNodeField(const char *key, const char *value,
         if (fieldType != VEH_SCRIPT_FIELD_INT) {
             return;
         }
-        Scr_AddInt(atoi(value));
+        Scr_AddInt(coduo_compat_atoi(value));
     }
 
     Scr_SetDynamicEntityField(node->scriptObjectId,
@@ -8217,13 +8219,13 @@ void VP_ParseVehicleNodeField(const char *key, const char *value,
     base = &((uint8_t *)(void *)node)[field->offset];
     switch (field->type) {
     case 0:
-        *(int32_t *)(void *)base = atoi(value);
+        *(int32_t *)(void *)base = coduo_compat_atoi(value);
         break;
     case 1:
-        *(int16_t *)(void *)base = (int16_t)atoi(value);
+        *(int16_t *)(void *)base = (int16_t)coduo_compat_atoi(value);
         break;
     case 2:
-        *base = (uint8_t)atoi(value);
+        *base = (uint8_t)coduo_compat_atoi(value);
         break;
     case 3:
         *(float *)(void *)base = (float)coduo_compat_atof(value);
@@ -8235,14 +8237,14 @@ void VP_ParseVehicleNodeField(const char *key, const char *value,
     case 6: {
         vec3_t vector;
 
-        sscanf(value, "%f %f %f", &vector[0], &vector[1], &vector[2]);
+        coduo_compat_scan_vec3(value, vector);
         memcpy(base, vector, sizeof(vector));
         break;
     }
     case 9: {
         vec3_t vector;
 
-        sscanf(value, "%f %f %f", &vector[0], &vector[1], &vector[2]);
+        coduo_compat_scan_vec3(value, vector);
         *(float *)(void *)base = AngleNormalize360Accurate(vector[1]);
         break;
     }
