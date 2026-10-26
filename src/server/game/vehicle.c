@@ -366,8 +366,8 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_SOLID_MIN_FALL_SPEED     -20.0f
 #define VEH_SOLID_SCRIPT_PUSH_TIME_MS 150
 #define VEH_SOLID_SCRIPT_PUSH_SPEED   700.0f
-#define VEH_SOLID_MIN_SCRIPT_SCALE    0.2f
-#define VEH_SOLID_MAX_SCRIPT_SCALE    0.6f
+#define VEH_SOLID_MIN_SCRIPT_SCALE    0.2
+#define VEH_SOLID_MAX_SCRIPT_SCALE    0.6
 #define VEH_SOLID_MAX_OTHER_SCALE     0.5f
 #define VEH_SOLID_INPUT_SPEED_BASE    400.0f
 #define VEH_SOLID_INPUT_SPEED_AXIS    300.0f
@@ -7485,17 +7485,25 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
             }
         }
 
-        if (vehicleState->throttleScale <= 0.0f) {
-            float inputScale =
-                game_compat_veh_clamp_float(collisionInputScale * 4.0f,
-                               VEH_SOLID_MIN_SCRIPT_SCALE,
-                               VEH_SOLID_MAX_SCRIPT_SCALE);
-            /* 0x83728..0x8375f: fabsl keeps the dot in the 80-bit chain
-             * (fabs on the register, no float store before the multiply). */
-            float inputSpeed =
-                VEH_SOLID_INPUT_SPEED_BASE -
-                fabsl(game_compat_veh_dot3(velocityDir, axis[0])) *
-                    VEH_SOLID_INPUT_SPEED_AXIS;
+        /* Nonpositive and unordered throttle values take scripted response. */
+        if (!(vehicleState->throttleScale > 0.0f)) {
+            VectorNormalize2(vehicleState->velocity, velocityDir);
+            volatile double inputScale = (WIDE_FLOAT)collisionInputScale * 4.0;
+            if (inputScale < VEH_SOLID_MIN_SCRIPT_SCALE) {
+                inputScale = VEH_SOLID_MIN_SCRIPT_SCALE;
+            } else if (inputScale > VEH_SOLID_MAX_SCRIPT_SCALE) {
+                inputScale = VEH_SOLID_MAX_SCRIPT_SCALE;
+            }
+            /* The Z/Y/X dot, absolute value, product and subtraction stay
+             * wide until the speed argument store. Scale is selected as
+             * double, then rounds to float at its own argument boundary. */
+            volatile wide_vec3_t products;
+            for (int component = 0; component < 3; component++) {
+                products[component] = (WIDE_FLOAT)axis[0][component] * velocityDir[component];
+            }
+            WIDE_FLOAT axialDot = (products[2] + products[1]) + products[0];
+            volatile WIDE_FLOAT axialSpeed = fabsl(axialDot) * VEH_SOLID_INPUT_SPEED_AXIS;
+            float inputSpeed = VEH_SOLID_INPUT_SPEED_BASE - axialSpeed;
 
             VEH_UpdateScriptedInput(ent, trace.normal, inputScale, 0.0f,
                                      inputSpeed);
@@ -7511,81 +7519,61 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
 
         if (hitEnt != NULL &&
             game_compat_veh_entity_model_classname(hitEnt) == scr_const_script_vehicle) {
-            hitDirection[0] = hitEnt->currentOrigin[0] - vehicleState->origin[0];
-            hitDirection[1] = hitEnt->currentOrigin[1] - vehicleState->origin[1];
-            hitDirection[2] = hitEnt->currentOrigin[2] - vehicleState->origin[2];
-
             if (hitState->throttleScale == 0.0f) {
-                float otherInputScale =
-                    game_compat_veh_clamp_float(collisionInputScale * 2.0f,
-                                   VEH_SOLID_MIN_SCRIPT_SCALE,
-                                   VEH_SOLID_MAX_OTHER_SCALE);
-
+                hitDirection[0] = hitEnt->currentOrigin[0] - vehicleState->origin[0];
+                hitDirection[1] = hitEnt->currentOrigin[1] - vehicleState->origin[1];
+                hitDirection[2] = hitEnt->currentOrigin[2] - vehicleState->origin[2];
                 VectorNormalize(hitDirection);
+                volatile double otherInputScale = (WIDE_FLOAT)collisionInputScale * 2.0;
+                if (otherInputScale < VEH_SOLID_MIN_SCRIPT_SCALE) {
+                    otherInputScale = VEH_SOLID_MIN_SCRIPT_SCALE;
+                } else if (otherInputScale > VEH_SOLID_MAX_OTHER_SCALE) {
+                    otherInputScale = VEH_SOLID_MAX_OTHER_SCALE;
+                }
                 VEH_UpdateScriptedInput(hitEnt, hitDirection, otherInputScale,
                                          0.0f, VEH_SOLID_SCRIPT_PUSH_SPEED);
-            } else {
-                VectorNormalize(hitDirection);
             }
 
-            /* 0x839af..0x84287: inline impulse push. Only the maxSpeed
-             * ratio, its *IMPULSE_BASE product, and the sqrt results are
-             * rounded to float slots; the vehicle speed ratio and the
-             * scaled goal stay in 80-bit registers through every compare
-             * and per-component velocity update. */
+            /* Each source-speed quotient rounds to float before selection.
+             * The max-speed ratio rounds only for the initial comparison
+             * and X update; Y/Z keep a fresh ratio wide. Apply the selected
+             * quotient before IMPULSE_BASE and retain products through the
+             * velocity addition. Re-read source speed between lane stores. */
             {
-                float goalBase = hitInfo->maxSpeed / vehicleInfo->maxSpeed;
-                float hitSpeed;
-                float vehicleSpeed;
-                qboolean applyImpulse;
+                float vehicleSpeed = game_compat_veh_length3(vehicleState->velocity);
+                float speedRatio = coduo_round_f32((WIDE_FLOAT)vehicleSpeed / vehicleInfo->maxSpeed);
+                float selectedRatio = game_compat_veh_clamp_float(speedRatio, VEH_SOLID_IMPULSE_MIN_SPEED, 1.0f);
+                const float storedMaxSpeedRatio = coduo_round_f32((WIDE_FLOAT)hitInfo->maxSpeed / vehicleInfo->maxSpeed);
+                float hitSpeed = game_compat_veh_length3(hitState->velocity);
+                WIDE_FLOAT goal = (WIDE_FLOAT)selectedRatio * storedMaxSpeedRatio * VEH_SOLID_IMPULSE_BASE;
 
-                goalBase = VEH_SOLID_IMPULSE_BASE * goalBase;
-                hitSpeed = game_compat_veh_length3(hitState->velocity);
-                vehicleSpeed = game_compat_veh_length3(vehicleState->velocity);
-
-                if (vehicleSpeed / vehicleInfo->maxSpeed <
-                    VEH_SOLID_IMPULSE_MIN_SPEED) {
-                    applyImpulse =
-                        VEH_SOLID_IMPULSE_MIN_SPEED * goalBase > hitSpeed;
-                } else if (vehicleSpeed / vehicleInfo->maxSpeed > 1.0f) {
-                    applyImpulse = goalBase > hitSpeed;
-                } else {
-                    applyImpulse = vehicleSpeed / vehicleInfo->maxSpeed *
-                                       goalBase >
-                                   hitSpeed;
-                }
-
-                if (applyImpulse) {
-                    hitDirection[0] =
-                        hitEnt->currentOrigin[0] - vehicleState->origin[0];
-                    hitDirection[1] =
-                        hitEnt->currentOrigin[1] - vehicleState->origin[1];
-                    hitDirection[2] =
-                        hitEnt->currentOrigin[2] - vehicleState->origin[2];
+                if (goal > hitSpeed) {
+                    /* Impulses use physics origins, independently of the
+                     * published entity positions used by scripted input. */
+                    hitDirection[0] = hitState->origin[0] - vehicleState->origin[0];
+                    hitDirection[1] = hitState->origin[1] - vehicleState->origin[1];
+                    hitDirection[2] = hitState->origin[2] - vehicleState->origin[2];
                     VectorNormalize(hitDirection);
 
                     for (int component = 0; component < 3; component++) {
-                        if (vehicleSpeed / vehicleInfo->maxSpeed <
-                            VEH_SOLID_IMPULSE_MIN_SPEED) {
-                            hitState->velocity[component] =
-                                VEH_SOLID_IMPULSE_MIN_SPEED * goalBase *
-                                    hitDirection[component] +
-                                hitState->velocity[component];
-                        } else if (vehicleSpeed / vehicleInfo->maxSpeed >
-                                   1.0f) {
-                            hitState->velocity[component] =
-                                hitDirection[component] * goalBase +
-                                hitState->velocity[component];
-                        } else {
-                            hitState->velocity[component] =
-                                vehicleSpeed / vehicleInfo->maxSpeed *
-                                    goalBase * hitDirection[component] +
-                                hitState->velocity[component];
+                        WIDE_FLOAT maxSpeedRatio = storedMaxSpeedRatio;
+                        if (component != 0) {
+                            vehicleSpeed = game_compat_veh_length3(vehicleState->velocity);
+                            speedRatio = coduo_round_f32((WIDE_FLOAT)vehicleSpeed / vehicleInfo->maxSpeed);
+                            maxSpeedRatio = (WIDE_FLOAT)hitInfo->maxSpeed / vehicleInfo->maxSpeed;
                         }
+                        selectedRatio = game_compat_veh_clamp_float(speedRatio, VEH_SOLID_IMPULSE_MIN_SPEED, 1.0f);
+                        volatile WIDE_FLOAT impulse = maxSpeedRatio * selectedRatio * VEH_SOLID_IMPULSE_BASE * hitDirection[component];
+                        hitState->velocity[component] = impulse + hitState->velocity[component];
                     }
 
-                    /* 0x8419b..0x84284: clamp to the hit vehicle's max. */
-                    hitSpeed = game_compat_veh_length3(hitState->velocity);
+                    /* The final speed test adds the updated Z/X/Y squares,
+                     * then clamps to the hit vehicle's maximum speed. */
+                    volatile wide_vec3_t squares;
+                    for (int component = 0; component < 3; component++) {
+                        squares[component] = (WIDE_FLOAT)hitState->velocity[component] * hitState->velocity[component];
+                    }
+                    hitSpeed = (float)CoduoLibm_Sqrt((double)((squares[2] + squares[0]) + squares[1]));
                     if (hitSpeed > hitInfo->maxSpeed) {
                         VectorNormalize(hitState->velocity);
                         hitState->velocity[0] =
@@ -7598,38 +7586,41 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
                 }
             }
 
-            if (game_compat_veh_dot3(hitDirection, vehicleState->velocity) >= 0.0f) {
+            /* The approach test uses a fresh, unnormalized published-origin
+             * delta. Its Z/X/Y dot is independent of the impulse direction. */
+            volatile wide_vec3_t approachProducts;
+            for (int component = 0; component < 3; component++) {
+                hitDirection[component] = g_entities[trace.entityNum].currentOrigin[component] - vehicleState->origin[component];
+                approachProducts[component] = (WIDE_FLOAT)hitDirection[component] * vehicleState->velocity[component];
+            }
+            WIDE_FLOAT approachDot = (approachProducts[2] + approachProducts[0]) + approachProducts[1];
+            if (approachDot >= 0.0f) {
                 if (hitInfo->maxSpeed <= vehicleInfo->maxSpeed) {
                     vec3_t velocityDelta = {
                         hitState->velocity[0] - vehicleState->velocity[0],
                         hitState->velocity[1] - vehicleState->velocity[1],
                         hitState->velocity[2] - vehicleState->velocity[2]
                     };
-                    /* 0x84483..0x848c4: the clamped reduction is never
-                     * stored -- each component's chain recomputes it in
-                     * 80-bit registers (maxSpeed / 2.0f, negated, times the
-                     * direction) and rounds once on the velocity store. */
-                    const float deltaSpeed =
-                        game_compat_veh_length3(velocityDelta);
-
-                    if (game_compat_veh_dot3(vehicleState->velocity, hitDirection) >
-                        0.0f) {
+                    /* Normalize the physics-origin delta before the second
+                     * Z/X/Y approach test. Measure the saved velocity delta
+                     * only on its positive path, adding squares Z/Y/X. */
+                    for (int component = 0; component < 3; component++) {
+                        hitDirection[component] = hitState->origin[component] - vehicleState->origin[component];
+                    }
+                    VectorNormalize(hitDirection);
+                    for (int component = 0; component < 3; component++) {
+                        approachProducts[component] = (WIDE_FLOAT)hitDirection[component] * vehicleState->velocity[component];
+                    }
+                    approachDot = (approachProducts[2] + approachProducts[0]) + approachProducts[1];
+                    if (approachDot > 0.0f) {
+                        const float deltaSpeed = game_compat_veh_length3_zyx(velocityDelta);
                         for (int component = 0; component < 3; component++) {
-                            if (deltaSpeed < 0.0f) {
-                                vehicleState->velocity[component] =
-                                    -0.0f * hitDirection[component] +
-                                    vehicleState->velocity[component];
-                            } else if (deltaSpeed >
-                                       vehicleInfo->maxSpeed / 2.0f) {
-                                vehicleState->velocity[component] =
-                                    -(vehicleInfo->maxSpeed / 2.0f) *
-                                        hitDirection[component] +
-                                    vehicleState->velocity[component];
-                            } else {
-                                vehicleState->velocity[component] =
-                                    -deltaSpeed * hitDirection[component] +
-                                    vehicleState->velocity[component];
-                            }
+                            /* Both the upper limit and selected reduction
+                             * round to float before the wide product/add. */
+                            const float limit = coduo_round_f32((WIDE_FLOAT)vehicleInfo->maxSpeed / 2.0f);
+                            const float reduction = game_compat_veh_clamp_float(deltaSpeed, 0.0f, limit);
+                            volatile WIDE_FLOAT product = -(WIDE_FLOAT)reduction * hitDirection[component];
+                            vehicleState->velocity[component] = product + vehicleState->velocity[component];
                         }
                         reducedByVehicleImpulse = qtrue;
                     }
