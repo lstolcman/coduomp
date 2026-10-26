@@ -25,6 +25,7 @@
 #include "scr_vm.h"
 #include "level_locals.h"
 #include "compat/libm/coduo_libm.h"
+#include "compat/libm/coduo_wide_math.h"
 
 /* Private descriptors used only by the vehicle parser and turret state. */
 typedef enum vehicle_parse_field_type_e {
@@ -115,6 +116,8 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_ROLL_ACCEL_MAX_STEP        3.0f
 #define VEH_ROLL_ACCEL_CLAMP           16.0f
 #define VEH_ROLL_ACCEL_SNAP            0.5f
+#define VEH_ROLL_INPUT_MAX             100.0
+#define VEH_ROLL_ACCEL_BLEND_BASE      0.2f
 #define VEH_STEERING_ROLL_SPEED        40.0f
 #define VEH_DRIVER_BUTTON_STRAFE       (1u << 5)
 #define VEH_UNSTICK_VECTOR_COUNT       26
@@ -5772,99 +5775,58 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
         float rollAccelBlend;
         float rollAccel;
         float rollAngle = vehicleState->externalVelocity[0];
+        const double inputMagnitude = fabs((double)input[0]);
+        const double clampedInput = inputMagnitude < VEH_ROLL_INPUT_MAX ? inputMagnitude : VEH_ROLL_INPUT_MAX;
 
         if (input[0] < 0) {
-            /* 0x7f1a6..0x7f24c: DOUBLE roll math, one rounded double store
-             * per operation (|input|/100, *scale, /2), then one float. */
-            const double rollScale = vehicleInfo->rollInputScale;
-            double rolled;
-
-            if (fabs((double)input[0]) < 100.0) {
-                double rollFraction = fabs((double)input[0]) / 100.0;
-                rollFraction = rollFraction * rollScale;
-                rolled = rollFraction / 2.0;
-            } else {
-                rolled = rollScale / 2.0;
-            }
-            rollTarget = (float)rolled;
+            /* Select the double input magnitude, then keep the division,
+             * scale product and halving live through the float result. */
+            rollTarget = coduo_round_f32((WIDE_FLOAT)clampedInput / VEH_ROLL_INPUT_MAX * vehicleInfo->rollInputScale / 2.0);
         } else if (input[0] > 0) {
-            /* 0x7f260..0x7f31b: mirror with the fraction negated in place
-             * (sign-bit flip on the stored double). */
-            const double rollScale = vehicleInfo->rollInputScale;
-            double rolled;
-
-            if (fabs((double)input[0]) < 100.0) {
-                double rollFraction = fabs((double)input[0]) / 100.0;
-                rollFraction = -rollFraction;
-                rollFraction = rollFraction * rollScale;
-                rolled = rollFraction / 2.0;
-            } else {
-                rolled = -1.0 * rollScale;              /* 0x7f2ed */
-                rolled = rolled / 2.0;
-            }
-            rollTarget = (float)rolled;
+            /* Positive input uses the same chain with a negative divisor. */
+            rollTarget = coduo_round_f32((WIDE_FLOAT)clampedInput / VEH_ROLL_INPUT_MAX * vehicleInfo->rollInputScale / -2.0);
         } else {
             rollTarget = 0.0f;
         }
 
         if (linearAccel[0] < -VEH_4WHEEL_STEER_CENTER) {
-            /* 0x7f347..0x7f3da: one 80-bit chain rounded to double, then
-             * to float (unlike the stepwise block above). */
-            const double rollScale = vehicleInfo->rollInputScale;
-            const double currentRoll = rollTarget;
-            double rolled;
-
-            if (fabs((double)input[0]) < 100.0) {
-                rolled = fabs((double)input[0]) / 100.0 * rollScale / 2.0 +
-                         currentRoll;
-            } else {
-                rolled = rollScale / 2.0 + currentRoll;
-            }
-            rollTarget = (float)rolled;
+            /* Add the live contribution to the previously rounded target,
+             * with no intervening double store. */
+            rollTarget = coduo_round_f32((WIDE_FLOAT)rollTarget +
+                (WIDE_FLOAT)clampedInput / VEH_ROLL_INPUT_MAX * vehicleInfo->rollInputScale / 2.0);
         } else if (linearAccel[0] > VEH_4WHEEL_STEER_CENTER) {
-            /* 0x7f401..0x7f4a0: negated mirror of the chain. */
-            const double rollScale = vehicleInfo->rollInputScale;
-            const double currentRoll = rollTarget;
-            double rolled;
-
-            if (fabs((double)input[0]) < 100.0) {
-                rolled = -(fabs((double)input[0]) / 100.0) * rollScale / 2.0 +
-                         currentRoll;
-            } else {
-                rolled = -1.0 * rollScale / 2.0 + currentRoll;  /* 0x7f476 */
-            }
-            rollTarget = (float)rolled;
+            /* The positive-acceleration branch subtracts that contribution. */
+            rollTarget = coduo_round_f32((WIDE_FLOAT)rollTarget -
+                (WIDE_FLOAT)clampedInput / VEH_ROLL_INPUT_MAX * vehicleInfo->rollInputScale / 2.0);
         }
 
-        rollAccelTarget = (rollTarget - rollAngle) * VEH_ROLL_ACCEL_SCALE;
-        /* 0x7f4d6..0x7f50b: the pow argument is the quotient rounded to
-         * DOUBLE with its sign masked, and the call is double pow(). */
-        rollAccelBlend =
-            game_compat_veh_clamp_float(0.2f +
-                           pow(fabs((double)(rollAngle /
-                                             vehicleInfo->rollLimit)),
-                               2.0f),
-                           0.0f, 1.0f);
-        /* 0x7f571..0x7f59f: blend*target is stored to a float slot before
-         * the second term is accumulated. */
-        rollAccel = rollAccelBlend * rollAccelTarget;
-        rollAccel =
-            (rollAccelTarget +
-             vehicleState->angularAcceleration[0]) *
-            (1.0f - rollAccelBlend) + rollAccel;
+        rollAccelTarget = coduo_round_f32(((WIDE_FLOAT)rollTarget - rollAngle) * VEH_ROLL_ACCEL_SCALE);
+        /* The live absolute quotient enters the CRT power core. Preserve its
+         * native result through the promoted binary32 blend-base addition,
+         * then round to float before clamping. */
+        rollAccelBlend = coduo_round_f32(VEH_ROLL_ACCEL_BLEND_BASE +
+            coduomp_math_powl(fabsl((WIDE_FLOAT)rollAngle / vehicleInfo->rollLimit), 2.0));
+        rollAccelBlend = game_compat_veh_clamp_float(rollAccelBlend, 0.0f, 1.0f);
+        /* Store blend*target as float before accumulating the second term.
+         * That term's sum, complementary weight and product stay wide. */
+        rollAccel = coduo_round_f32((WIDE_FLOAT)rollAccelBlend * rollAccelTarget);
+        rollAccel = coduo_round_f32(((WIDE_FLOAT)rollAccelTarget + vehicleState->angularAcceleration[0]) *
+            (1.0f - (WIDE_FLOAT)rollAccelBlend) + rollAccel);
 
         if (fabsf(rollAccel) < VEH_ROLL_ACCEL_SNAP &&
             rollAngle < VEH_ROLL_ACCEL_SNAP) {
             rollAccel = 0.0f;
         }
 
-        rollAccel =
-            game_compat_veh_approach_float_step(vehicleState->angularAcceleration[0],
-                                  rollAccel, VEH_ROLL_ACCEL_MAX_STEP);
+        /* Clamp a rounded delta and add it back to the old rate. Returning
+         * the target directly would skip the subtraction/addition rounding. */
+        rollAccel = coduo_round_f32((WIDE_FLOAT)rollAccel - vehicleState->angularAcceleration[0]);
+        rollAccel = game_compat_veh_clamp_abs(rollAccel, VEH_ROLL_ACCEL_MAX_STEP);
+        rollAccel = coduo_round_f32((WIDE_FLOAT)rollAccel + vehicleState->angularAcceleration[0]);
         rollAccel = game_compat_veh_clamp_abs(rollAccel, VEH_ROLL_ACCEL_CLAMP);
         vehicleState->angularAcceleration[0] = rollAccel;
         vehicleState->externalVelocity[0] =
-            rollAngle + rollAccel * VEH_PHYSICS_FRAME_SECONDS;
+            rollAngle + (WIDE_FLOAT)rollAccel * VEH_PHYSICS_FRAME_SECONDS;
     }
 
     {
@@ -5873,19 +5835,11 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
         float steeringRollVelocity = vehicleState->angularAcceleration[2];
 
         if (vehicleState->acceleration[1] > 0.0f) {
-            steeringRollTarget = vehicleInfo->steeringRollScale;
-            if (vehicleState->acceleration[1] / VEH_STEERING_ROLL_SPEED <
-                1.0f) {
-                steeringRollTarget *=
-                    vehicleState->acceleration[1] / VEH_STEERING_ROLL_SPEED;
-            }
+            const float fraction = coduo_round_f32((WIDE_FLOAT)vehicleState->acceleration[1] / VEH_STEERING_ROLL_SPEED);
+            steeringRollTarget = coduo_round_f32((WIDE_FLOAT)(fraction < 1.0f ? fraction : 1.0f) * vehicleInfo->steeringRollScale);
         } else if (vehicleState->acceleration[1] < 0.0f) {
-            steeringRollTarget = -vehicleInfo->steeringRollScale;
-            if (-vehicleState->acceleration[1] / VEH_STEERING_ROLL_SPEED <
-                1.0f) {
-                steeringRollTarget *=
-                    -vehicleState->acceleration[1] / VEH_STEERING_ROLL_SPEED;
-            }
+            const float fraction = coduo_round_f32((WIDE_FLOAT)vehicleState->acceleration[1] / -VEH_STEERING_ROLL_SPEED);
+            steeringRollTarget = coduo_round_f32(-((WIDE_FLOAT)(fraction < 1.0f ? fraction : 1.0f) * vehicleInfo->steeringRollScale));
         } else {
             steeringRollTarget = 0.0f;
         }
@@ -5896,30 +5850,18 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
             steeringRollTarget = 0.0f;
         }
 
-        steeringRollAccelTarget =
-            (steeringRollTarget -
-             vehicleState->externalVelocity[2]) *
-            VEH_ROLL_ACCEL_SCALE;
+        steeringRollAccelTarget = coduo_round_f32(((WIDE_FLOAT)steeringRollTarget -
+            vehicleState->externalVelocity[2]) * VEH_ROLL_ACCEL_SCALE);
 
-        /* 0x7f842..0x7f908: clamped-delta approach; the step expression
-         * (steeringLimit * frame) stays 80-bit inside compares and sums. */
-        if (steeringRollAccelTarget - steeringRollVelocity <
-                -vehicleInfo->steeringLimit * VEH_PHYSICS_FRAME_SECONDS) {
-            steeringRollVelocity = steeringRollVelocity +
-                -vehicleInfo->steeringLimit * VEH_PHYSICS_FRAME_SECONDS;
-        } else if (steeringRollAccelTarget - steeringRollVelocity >
-                   vehicleInfo->steeringLimit * VEH_PHYSICS_FRAME_SECONDS) {
-            steeringRollVelocity =
-                vehicleInfo->steeringLimit * VEH_PHYSICS_FRAME_SECONDS +
-                steeringRollVelocity;
-        } else {
-            steeringRollVelocity =
-                (steeringRollAccelTarget - steeringRollVelocity) +
-                steeringRollVelocity;
-        }
+        /* Round both the delta and steering-limit step to float before the
+         * clamp. Round the resulting rate before advancing the roll angle. */
+        const float steeringRollDelta = coduo_round_f32((WIDE_FLOAT)steeringRollAccelTarget - steeringRollVelocity);
+        const float steeringRollStep = coduo_round_f32((WIDE_FLOAT)vehicleInfo->steeringLimit * VEH_PHYSICS_FRAME_SECONDS);
+        steeringRollVelocity = coduo_round_f32((WIDE_FLOAT)steeringRollVelocity +
+            game_compat_veh_clamp_abs(steeringRollDelta, steeringRollStep));
         vehicleState->angularAcceleration[2] = steeringRollVelocity;
         vehicleState->externalVelocity[2] +=
-            steeringRollVelocity * VEH_PHYSICS_FRAME_SECONDS;
+            (WIDE_FLOAT)steeringRollVelocity * VEH_PHYSICS_FRAME_SECONDS;
     }
 }
 
