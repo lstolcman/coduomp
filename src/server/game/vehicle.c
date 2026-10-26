@@ -170,6 +170,7 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_MOTION_ANIM_MAX           255.0f
 #define VEH_MOTION_ANIM_SCALE          (127.0f / 30.0f)
 #define VEH_PI                         3.1415927f /* original float32 0x40490fdb */
+#define VEH_PATH_UNSPECIFIED_ANGLE      VEH_PI
 #define VEH_PATH_DEBUG_SEGMENT_DOT     0.9999f /* original float32 0x3f7ff972 */
 #define VEH_PATH_DEBUG_MAX_ITERS       50000
 #define VEH_PATH_DEBUG_BOX_HALF_SIZE   4.0f
@@ -1183,15 +1184,19 @@ static vehicle_path_node_t *game_compat_veh_path_node_at(int index)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-static qboolean game_compat_veh_path_vector_is_zero(const vec3_t value)
+static qboolean game_compat_veh_path_angles_unspecified(const vec3_t value)
 {
-    return value[0] == 0.0f && value[1] == 0.0f && value[2] == 0.0f;
+    /* An all-zero orientation is explicit; only the three sentinel lanes
+     * denote a node whose angles must be obtained from its neighbours. */
+    return value[0] == VEH_PATH_UNSPECIFIED_ANGLE &&
+           value[1] == VEH_PATH_UNSPECIFIED_ANGLE &&
+           value[2] == VEH_PATH_UNSPECIFIED_ANGLE;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
 static qboolean game_compat_veh_path_node_has_angles(const vehicle_path_node_t *node)
 {
-    return !game_compat_veh_path_vector_is_zero(node->angles);
+    return !game_compat_veh_path_angles_unspecified(node->angles);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
@@ -8289,9 +8294,9 @@ void VP_InitNode(vehicle_path_node_t *node, int16_t scriptObjectId)
     node->direction[0] = 0.0f;
     node->direction[1] = 0.0f;
     node->direction[2] = 0.0f;
-    node->angles[0] = VEH_PI;
-    node->angles[1] = VEH_PI;
-    node->angles[2] = VEH_PI;
+    node->angles[0] = VEH_PATH_UNSPECIFIED_ANGLE;
+    node->angles[1] = VEH_PATH_UNSPECIFIED_ANGLE;
+    node->angles[2] = VEH_PATH_UNSPECIFIED_ANGLE;
     node->segmentLength = 0.0f;
     node->nextNodeIndex = -1;
     node->previousNodeIndex = -1;
@@ -8514,77 +8519,71 @@ void VP_GetNodeAngles(int16_t nodeIndex, vec3_t outAngles)
     const vehicle_path_node_t *nextNode;
     float previousDistance = 0.0f;
     float nextDistance = 0.0f;
-    vec3_t previousAngles = { 0.0f, 0.0f, 0.0f };
-    vec3_t nextAngles = { 0.0f, 0.0f, 0.0f };
+    vec3_t previousAngles = { VEH_PATH_UNSPECIFIED_ANGLE, VEH_PATH_UNSPECIFIED_ANGLE, VEH_PATH_UNSPECIFIED_ANGLE };
+    vec3_t nextAngles = { VEH_PATH_UNSPECIFIED_ANGLE, VEH_PATH_UNSPECIFIED_ANGLE, VEH_PATH_UNSPECIFIED_ANGLE };
 
     if (game_compat_veh_path_node_has_angles(node)) {
         game_compat_veh_path_node_copy_angles(node, outAngles);
         return;
     }
 
-    previousNode = node;
-    for (int count = 0; count < vehPathNodeCount; count++) {
-        if (previousNode->previousNodeIndex < 0) {
-            break;
-        }
-        if (previousNode->previousNodeIndex == nodeIndex) {
-            break;
-        }
-
-        previousNode = game_compat_veh_path_node_at(previousNode->previousNodeIndex);
-        previousDistance += previousNode->segmentLength;
-        if (game_compat_veh_path_node_has_angles(previousNode)) {
-            game_compat_veh_path_node_copy_angles(previousNode, previousAngles);
-            break;
+    if (node->previousNodeIndex >= 0) {
+        previousNode = game_compat_veh_path_node_at(node->previousNodeIndex);
+        for (int count = 0; count < vehPathNodeCount; count++) {
+            previousDistance = coduo_round_f32((WIDE_FLOAT)previousDistance + previousNode->segmentLength);
+            if (game_compat_veh_path_node_has_angles(previousNode)) {
+                game_compat_veh_path_node_copy_angles(previousNode, previousAngles);
+                break;
+            }
+            if (previousNode->previousNodeIndex < 0 || previousNode->previousNodeIndex == nodeIndex) {
+                break;
+            }
+            previousNode = game_compat_veh_path_node_at(previousNode->previousNodeIndex);
         }
     }
 
     nextNode = node;
     for (int count = 0; count < vehPathNodeCount; count++) {
-        if (nextNode->nextNodeIndex < 0) {
-            break;
-        }
-        if (nextNode->nextNodeIndex == nodeIndex) {
-            break;
-        }
-
-        nextDistance += nextNode->segmentLength;
-        nextNode = game_compat_veh_path_node_at(nextNode->nextNodeIndex);
         if (game_compat_veh_path_node_has_angles(nextNode)) {
             game_compat_veh_path_node_copy_angles(nextNode, nextAngles);
             break;
         }
+        if (nextNode->nextNodeIndex < 0 || nextNode->nextNodeIndex == nodeIndex) {
+            break;
+        }
+        nextDistance = coduo_round_f32((WIDE_FLOAT)nextDistance + nextNode->segmentLength);
+        nextNode = game_compat_veh_path_node_at(nextNode->nextNodeIndex);
     }
 
-    if (game_compat_veh_path_vector_is_zero(previousAngles) &&
-        game_compat_veh_path_vector_is_zero(nextAngles)) {
+    if (game_compat_veh_path_angles_unspecified(previousAngles) &&
+        game_compat_veh_path_angles_unspecified(nextAngles)) {
         game_compat_veh_path_clear_vector(outAngles);
         return;
     }
 
-    if (game_compat_veh_path_vector_is_zero(previousAngles)) {
-        game_compat_veh_path_node_copy_angles(nextNode, outAngles);
+    if (game_compat_veh_path_angles_unspecified(previousAngles)) {
+        memcpy(outAngles, nextAngles, sizeof(nextAngles));
         return;
     }
 
-    if (game_compat_veh_path_vector_is_zero(nextAngles)) {
-        game_compat_veh_path_node_copy_angles(previousNode, outAngles);
+    if (game_compat_veh_path_angles_unspecified(nextAngles)) {
+        memcpy(outAngles, previousAngles, sizeof(previousAngles));
         return;
     }
 
-    /* 0x96c19..0x96c57: the distance sum and the fraction are rounded to
-     * their own float slots before the lerp. */
+    /* Windows RVAs 0x54113..0x54350 round each walked distance, their sum,
+     * and the shared interpolation fraction to separate binary32 slots. */
     {
-        const float distanceSum = previousDistance + nextDistance;
+        const float distanceSum = coduo_round_f32((WIDE_FLOAT)nextDistance + previousDistance);
 
         if (distanceSum <= 0.0f) {
             game_compat_veh_path_clear_vector(outAngles);
             return;
         }
 
-        /* single divide stored to the game_compat_veh_path_lerp_angles float arg -> shim */
+        /* The three angle lanes consume the same rounded fraction. */
         game_compat_veh_path_lerp_angles(previousAngles, nextAngles,
-                           previousDistance / distanceSum, outAngles);
+                           coduo_round_f32((WIDE_FLOAT)previousDistance / distanceSum), outAngles);
     }
 }
 
