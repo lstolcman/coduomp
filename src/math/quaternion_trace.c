@@ -1,6 +1,7 @@
 #include "q_math.h"
 
 #include "compat/coduo_native_x87.h"
+#include "compat/crt/atan2_compat.h"
 
 #include <math.h>
 
@@ -90,8 +91,9 @@ long double QuatRatioEigenTrace(const vec4_t left, const vec4_t right)
 }
 
 /*
- * Both platforms explicitly store x*x, x*x+y*y, and 2/length to binary32,
- * then store each atan2 argument to binary64.  Windows uses a float-derived
+ * Both platforms explicitly store x*x, x*x+y*y, and 2/length to binary32.
+ * Windows then passes the two live x87 expressions to its CRT atan2 entry;
+ * Linux materializes binary64 arguments. Windows uses a float-derived
  * 180/pi value (57.2957763671875); Linux uses the exact binary64 value
  * 57.29577951308232.  The final result is binary32 on both platforms.
  */
@@ -100,17 +102,15 @@ float RotationToYaw(const vec2_t rotation)
     float xSquared;
     float lengthSquared;
     float scale;
-    double numerator;
-    double denominator;
+    WIDE_FLOAT numerator;
+    WIDE_FLOAT denominator;
 
     xSquared = (float)((long double)rotation[0] * rotation[0]);
     lengthSquared = (float)(
         (long double)rotation[1] * rotation[1] + xSquared);
     scale = (float)((long double)2.0f / lengthSquared);
-    numerator = (double)(
-        (long double)rotation[1] * rotation[0] * scale);
-    denominator = (double)(
-        (long double)1.0f - (long double)scale * xSquared);
-    return (float)((long double)atan2(numerator, denominator) *
+    numerator = (WIDE_FLOAT)rotation[1] * rotation[0] * scale;
+    denominator = (WIDE_FLOAT)1.0f - (WIDE_FLOAT)scale * xSquared;
+    return (float)(coduomp_crt_atan2l(numerator, denominator) *
                    (long double)57.2957763671875);
 }

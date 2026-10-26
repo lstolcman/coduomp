@@ -1,6 +1,7 @@
 #include "q_math.h"
 
 #include "compat/coduo_native_x87.h"
+#include "compat/crt/atan2_compat.h"
 
 #include <math.h>
 
@@ -33,7 +34,7 @@
 #define Q_DIRECTION_PI 3.1415927410125732
 
 #define Q_DIRECTION_DEGREES(y, x, scale)                                    \
-    ((float)(((long double)atan2((double)(y), (double)(x)) *               \
+    ((float)((coduomp_crt_atan2l((WIDE_FLOAT)(y), (WIDE_FLOAT)(x)) *         \
               (long double)(scale)) /                                       \
              (long double)Q_DIRECTION_PI))
 #define Q_DIRECTION_HORIZONTAL(x, y)                                        \

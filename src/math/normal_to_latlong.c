@@ -1,6 +1,7 @@
 #include "q_math.h"
 
 #include "compat/coduo_fp_conversion.h"
+#include "compat/crt/atan2_compat.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -26,7 +27,7 @@ void NormalToLatLong(const vec3_t normal, uint8_t encoded[2])
     }
 
     const long double longitude =
-        (long double)atan2((double)normal[1], (double)normal[0]) *
+        coduomp_crt_atan2l((WIDE_FLOAT)normal[1], (WIDE_FLOAT)normal[0]) *
         (long double)degrees / (long double)pi * (long double)byteScale;
     const long double latitude =
         (long double)acos((double)normal[2]) *
