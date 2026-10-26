@@ -1710,14 +1710,13 @@ static int IsBinaryMoverBlocked(gentity_t *ent, gentity_t *other,
     toActivator[2] = activator->currentOrigin[2] - center[2];
     VectorNormalize(toActivator);
 
-    /* Stock 0x627dc..0x62800: the dot is a 3-mul/2-add chain kept 80-bit, stored
-     * to a float local (fstp DWORD 0x627f2), then compared >= 0 (fucompp on the
-     * stored float) -> shim the dot, native compare. center = absMin+absMax
-     * (single add stored) then *0.5 (exact power-of-two scale) stay native. */
+    /* Keep the Z/Y/X dot products and sum wide until the final float store;
+     * the comparison consumes that rounded float. The center calculation
+     * above retains its separate float sum and half-scale boundaries. */
     {
-        float dot = toActivator[0] * forward[0] +
-                    toActivator[1] * forward[1] +
-                    toActivator[2] * forward[2];
+        float dot = coduo_round_f32(((WIDE_FLOAT)forward[2] * toActivator[2] +
+                                    (WIDE_FLOAT)forward[1] * toActivator[1]) +
+                                   (WIDE_FLOAT)forward[0] * toActivator[0]);
 
         return dot >= 0.0f;
     }
