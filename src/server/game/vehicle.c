@@ -6711,7 +6711,12 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
         vec3_t localWheel;
 
         VEH_GetWheelOrigin(ent, wheelIndex, localWheel);
-        MatrixTransformVector43(localWheel, &axis, traceStart);
+        /* The inlined wheel transform groups X as Y/X/Z, Y as X/Y/Z and
+         * Z as X/Z/Y. Keep each sum wide until its translated float store;
+         * the standalone matrix helper uses a different grouping. */
+        traceStart[0] = ((WIDE_FLOAT)localWheel[1] * axis.axis[1][0] + (WIDE_FLOAT)axis.axis[0][0] * localWheel[0]) + (WIDE_FLOAT)localWheel[2] * axis.axis[2][0] + axis.origin[0];
+        traceStart[1] = ((WIDE_FLOAT)axis.axis[0][1] * localWheel[0] + (WIDE_FLOAT)localWheel[1] * axis.axis[1][1]) + (WIDE_FLOAT)axis.axis[2][1] * localWheel[2] + axis.origin[1];
+        traceStart[2] = ((WIDE_FLOAT)axis.axis[0][2] * localWheel[0] + (WIDE_FLOAT)axis.axis[2][2] * localWheel[2]) + (WIDE_FLOAT)localWheel[1] * axis.axis[1][2] + axis.origin[2];
 
         if (g_vehicleDebug.integer != 0) {
             VEH_DebugBox(traceStart, 4.0f, 1.0f, 0.0f, 0.0f);
