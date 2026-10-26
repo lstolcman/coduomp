@@ -4899,16 +4899,16 @@ static void game_compat_veh_build_turret_muzzle(gentity_t *ent,
     } else {
         const float back = vehicleState->viewState[0];
 
-        /* origin[i] = tagMatrix[12+i] - back*forward[i]: mul then sub, 80-bit,
-         * one store per component -> shim. */
-        muzzle->origin[0] = tagMatrix.origin[0] - back * forward[0];
-        muzzle->origin[1] = tagMatrix.origin[1] - back * forward[1];
-        muzzle->origin[2] = tagMatrix.origin[2] - back * forward[2];
+        /* origin[i] = tagMatrix[12+i] - back*forward[i]: negate the scale,
+         * multiply and add while wide, with one float store per component. */
+        muzzle->origin[0] = -(WIDE_FLOAT)back * forward[0] + tagMatrix.origin[0];
+        muzzle->origin[1] = -(WIDE_FLOAT)back * forward[1] + tagMatrix.origin[1];
+        muzzle->origin[2] = -(WIDE_FLOAT)back * forward[2] + tagMatrix.origin[2];
     }
 
-    muzzle->extraVector[0] = 0.0f;      /* +0x30..+0x33, size 0x04; generated 6a8b0/6aaa9 keep this as the muzzle packet's extra vector. */
-    muzzle->extraVector[1] = 0.0f;      /* +0x34..+0x37, size 0x04; generated 6a8b0/6aaa9 keep this as the muzzle packet's extra vector. */
-    muzzle->extraVector[2] = 0.0f;      /* +0x38..+0x3b, size 0x04; generated 6a8b0/6aaa9 keep this as the muzzle packet's extra vector. */
+    muzzle->extraVector[0] = forward[0]; /* +0x30..+0x33, size 0x04; generated 6a8b0/6aaa9 keep this as the muzzle packet's extra vector. */
+    muzzle->extraVector[1] = forward[1]; /* +0x34..+0x37, size 0x04; generated 6a8b0/6aaa9 keep this as the muzzle packet's extra vector. */
+    muzzle->extraVector[2] = forward[2]; /* +0x38..+0x3b, size 0x04; generated 6a8b0/6aaa9 keep this as the muzzle packet's extra vector. */
     muzzle->weaponInfo = weaponInfo;
 }
 
