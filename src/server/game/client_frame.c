@@ -16,6 +16,7 @@
 #include "g_syscalls.h"
 #include "game_functions.h"
 #include "compat/coduo_native_x87.h"
+#include "compat/coduo_fp_conversion.h"
 #include "compat/libm/coduo_libm.h"
 #include "compat/coduo_int32_bits.h"
 
@@ -710,9 +711,9 @@ static void game_compat_client_events_handle_weapon_view_model(gentity_t *ent, i
 static void game_compat_client_events_handle_damage_event(gentity_t *ent, gclient_t *client,
                                           int eventParm)
 {
-    float damageScale;
+    WIDE_FLOAT damageScale;
     if (eventParm < 100) {
-        damageScale = (float)eventParm * CLIENT_EVENTS_DAMAGE_PERCENT_SCALE;
+        damageScale = (WIDE_FLOAT)eventParm * CLIENT_EVENTS_DAMAGE_PERCENT_SCALE;
     } else {
         damageScale = CLIENT_EVENTS_DAMAGE_FULL_SCALE;
     }
@@ -721,15 +722,14 @@ static void game_compat_client_events_handle_damage_event(gentity_t *ent, gclien
         return;
     }
 
-    /* Stock stores the fild(maxHealth) * damageScale product to float before
-     * reloading it for the truncating fistp argument conversion. */
-    float damage = (float)((long double)damageScale *
-                           (long double)client->ps.stats[STAT_MAX_HEALTH]);
+    /* Windows keeps the percentage and max-health product live through the
+     * CRT conversion, then consumes its low dword. There is no float store. */
+    WIDE_FLOAT damage = damageScale * client->ps.stats[STAT_MAX_HEALTH];
     ent->painEventTime = coduo_int32_from_bits(
         (uint32_t)level.time + CLIENT_EVENTS_PAIN_DELAY_MS);
     /* VERIFIED_DECOMPILER(0x40860, 50860_ClientEvents.c, VERIFY-WAVE2-CLIENT-FRAME-STATE-2026-06-17): DATAFLOW_VERIFIED - fall-damage scale, pain delay, max-health conversion, and MOD_FALLING call arguments match generated output. Binary uses x87 fistp with RC=truncate for the scaled fall damage. */
     G_Damage(ent, 0, 0, 0, 0,
-             game_compat_int32_from_float_trunc(damage), 0,
+             coduo_fp_to_i32_extended(damage), 0,
              CLIENT_EVENTS_FALL_DAMAGE_MOD, 0);
 }
 
@@ -752,7 +752,9 @@ void ClientEvents(gentity_t *ent, uint32_t oldEventSequence)
         sequence = backlogStart;
     }
 
-    while (sequence < eventSequence) {
+    /* Dispatch may append events. The entry client remains the ring owner,
+     * but its current event count is reloaded after each callback. */
+    while (sequence < client->ps.eventIndex) {
         int event = (int)((const uint32_t *)(const void *)client->ps.events)
             [(uint32_t)sequence & CLIENT_EVENTS_RING_MASK];
         int eventParm =
@@ -798,9 +800,9 @@ void ClientEvents(gentity_t *ent, uint32_t oldEventSequence)
             break;
 
         case CLIENT_EVENTS_DROP_WEAPON:
-            if (client->ps.currentWeapon != 0 &&
-                Com_BitCheck(client->ps.weaponBits, client->ps.currentWeapon) != 0) {
-                Drop_Weapon(ent, client->ps.currentWeapon,
+            if (ent->client->ps.currentWeapon != 0 &&
+                Com_BitCheck(ent->client->ps.weaponBits, ent->client->ps.currentWeapon) != 0) {
+                Drop_Weapon(ent, ent->client->ps.currentWeapon,
                             CLIENT_EVENTS_DROP_TAG_RIGHT);
             }
             break;
