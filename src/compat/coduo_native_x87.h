@@ -279,6 +279,22 @@ coduo_x87_sinl(long double angle)
 #endif
 }
 
+/* NOT_FROM_ORIGINAL_SOURCE: explicit hardware FCOS boundary with an extended
+ * operand and result; other architectures retain native long-double math. */
+static CODUO_X87_ALWAYS_INLINE long double
+coduo_x87_cosl(long double angle)
+{
+#if (defined(__i386__) || defined(__x86_64__)) && \
+    (defined(__GNUC__) || defined(__clang__))
+    __asm__ __volatile__("fcos" : "+t"(angle));
+    return angle;
+#elif defined(__GNUC__) || defined(__clang__)
+    return __builtin_cosl(angle);
+#else
+    return cosl(angle);
+#endif
+}
+
 /* NOT_FROM_ORIGINAL_SOURCE: explicit hardware FPTAN boundary. FPTAN pushes
  * 1.0 in ST0; the pop discards it and leaves tan(angle) as the result. */
 static CODUO_X87_ALWAYS_INLINE long double

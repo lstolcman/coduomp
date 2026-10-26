@@ -5,6 +5,7 @@
 
 #include "bg_trajectory_binding.h"
 #include "compat/coduo_int32_bits.h"
+#include "compat/coduo_native_x87.h"
 #include "math/q_math.h"
 
 
@@ -95,7 +96,7 @@ void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime,
     case TR_SINE:
         elapsedMs = (int32_t)((uint32_t)atTime - (uint32_t)tr->trTime);
         /* 0x30005f7a..0x30005f89: FILD, integer-memory FDIV, 2*pi, FSIN. */
-        deltaTime = sinl(
+        deltaTime = coduo_x87_sinl(
             ((long double)elapsedMs / (long double)tr->trDuration) *
             (long double)TRAJECTORY_FULL_CIRCLE);
         result[0] = (float)((long double)tr->trBase[0] +
@@ -297,7 +298,7 @@ void BG_EvaluateTrajectoryDelta(const trajectory_t *trajectory, int32_t atTime,
             (uint32_t)atTime - (uint32_t)trajectory->trTime);
         /* 0x3000627a..0x3000628f: FILD/FIDIV/FMUL/FCOS/FMUL remains
          * unstored and feeds all three component multiplies through ST0. */
-        scale = cosl(
+        scale = coduo_x87_cosl(
             ((long double)elapsedMs /
              (long double)trajectory->trDuration) *
             (long double)TRAJECTORY_DELTA_FULL_CIRCLE) *
