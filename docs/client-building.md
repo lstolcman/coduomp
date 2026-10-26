@@ -90,13 +90,19 @@ the build uses its installed headers and links its library through
 matched to the implementation used to build the executable: the two providers
 can use the same shared-library name with different public record layouts.
 
-### Windows with MSVC
+### Windows with clang-cl or MSVC
+
+Clang is the preferred Windows compiler. The `clang-cl-x64` preset supports
+80-bit `WIDE_FLOAT` storage and the existing native x87 arithmetic paths.
+MSVC remains supported, but its `long double` is binary64 on both x86 and x64.
+We accept the resulting narrowing; MSVC builds do not promise extended-precision
+fidelity, even with `/arch:IA32` or optimization disabled.
 
 Use Visual Studio 2022 17.9 or newer with the C++ desktop workload and CMake 3.24 or newer.
 The CMake build reads the Makefile source manifests and builds the executable
 and all three modules. The POSIX dedicated server remains a Makefile target.
 The checked-in CMake presets generate Visual Studio/MSBuild projects. Select
-the `msvc` preset for the default **32-bit x86** build, which uses
+the `msvc` preset for a **32-bit x86** build, which uses
 `/arch:IA32` for compiler-generated x87 arithmetic:
 
 ```sh
@@ -156,6 +162,12 @@ unchanged. These cores do not reproduce the complete original CRT's exception
 handling or optional SSE2 power dispatch. Runtime parity remains unverified.
 Windows APIs and dependencies keep their normal Microsoft ABI; the SDK is
 not a general 80-bit long-double runtime.
+
+Recovered CRT atan2 callers use a separate shared entry from inline `FPATAN`
+callers. On native x87 it preserves the CRT's temporary precision setting,
+positive-quadrant calculation, signed axis results and live extended return
+through the caller's explicit rounding point. Non-x87 targets use native
+`atan2l`; no attempt is made to reproduce x87 rounding there.
 
 Do not add `-ffp-eval-method=extended` or disable SSE to this profile. Tested
 Clang 19.1.7 and 22.1.8 global extended evaluation mispasses variadic doubles

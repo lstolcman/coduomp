@@ -48,14 +48,14 @@ int main(void) { typedef char carrier[(sizeof(long double) == 16) ? 1 : -1]; ret
     message(STATUS "clang-cl x64 preserves the Windows calling ABI and uses the existing explicit x87 source paths.")
 elseif(CODUOMP_32BIT_X86)
     set(CODUOMP_FLOAT_MODEL "native x87 compiler arithmetic (/arch:IA32); binary64 long double storage")
-    message(STATUS "MSVC x86 is the default preset because it supports native x87 arithmetic.")
+    message(STATUS "MSVC x86 uses native x87 with binary64 carriers; prefer clang-cl-x64 for 80-bit WIDE_FLOAT storage.")
 else()
     set(CODUOMP_FLOAT_MODEL "native SSE2 arithmetic; binary64 long double")
     message(WARNING
         "MSVC x64 cannot generate x87 arithmetic from C/C++. Native floating-point "
         "expressions use SSE2 or newer instructions and may differ from the original "
         "game's x87 results. Its widest standard type is binary64. "
-        "Use the msvc preset (Win32) for x87 compiler arithmetic. "
+        "Prefer clang-cl-x64 for native x87 in explicit extended expressions. "
         "See docs/client-building.md for the architecture and fidelity limits.")
 endif()
 message(STATUS "Whole-program floating-point parity remains unverified on these Windows CMake targets.")

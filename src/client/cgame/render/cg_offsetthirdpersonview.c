@@ -11,6 +11,7 @@
 #include "../client_recovered.h"
 #include "../globals.h"
 #include "compat/coduo_native_x87.h"
+#include "compat/crt/atan2_compat.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -150,7 +151,7 @@ void CG_OffsetThirdPersonView(void)
     {
         /* _CIatan2 consumes both float loads in x87 precision, then the
          * original explicitly rounds its result to float before scaling. */
-        float pitchRadians = (float)coduo_x87_atan2l(
+        float pitchRadians = (float)coduomp_crt_atan2l(
             (long double)focusPoint[2], (long double)horizontalDistance);
         cg_refdefViewAngles[0] =
             pitchRadians * CG_NEGATIVE_RADIANS_TO_DEGREES;
