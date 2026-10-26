@@ -125,10 +125,11 @@ static void game_compat_command_send_literal_status(gentity_t *ent, const char *
         message);
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
+/* NOT_FROM_ORIGINAL_SOURCE: share the original command's byte test. Lowercase
+ * 'y' uses the first byte; uppercase 'Y' and '1' use the second byte. */
 static qboolean game_compat_command_vote_arg_is_yes(const char arg[VOTE_ARG_BUFFER_SIZE])
 {
-    return arg[0] == 'y' || arg[0] == 'Y' || arg[0] == '1';
+    return arg[0] == 'y' || arg[1] == 'Y' || arg[1] == '1';
 }
 
 static const char *gameCommandMessages[] = {
@@ -1939,7 +1940,8 @@ void Cmd_Vote_f(gentity_t *ent)
     trap_SendServerCommand((uint32_t)(int)(ent - g_entities),
                            COMMAND_SEND_UNRELIABLE,
                            "e \"GAME_VOTECAST\"");
-    client->ps.entityStateFlags |= PS_FLAG_VOTE_CAST;
+    /* Read the client again after server-command dispatch. */
+    ent->client->ps.entityStateFlags |= PS_FLAG_VOTE_CAST;
 
     trap_Argv(1, arg, VOTE_ARG_BUFFER_SIZE);
     if (game_compat_command_vote_arg_is_yes(arg)) {
