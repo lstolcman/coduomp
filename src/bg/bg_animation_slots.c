@@ -2,6 +2,7 @@
 #include "bg_animation_services.h"
 
 #include "compat/coduo_fp_conversion.h"
+#include "compat/coduo_int32_bits.h"
 #include "math/q_math.h"
 
 #include <math.h>
@@ -29,6 +30,7 @@ enum {
 #define BG_ANIM_RATE_CAP_FAST_MOVE 2.0f
 #define BG_ANIM_RATE_CAP_VERTICAL_MOVE 4.0f
 #define BG_ANIM_RATE_SPEED_RANGE 130.0f
+#define BG_ANIM_RATE_SPEED_RECIPROCAL (1.0f / BG_ANIM_RATE_SPEED_RANGE)
 
 /* The authoritative Windows cgame/game bodies are instruction-identical after
  * module addresses are normalized. Linux retains the canonical symbols at
@@ -391,31 +393,30 @@ void BG_RunLerpFrameRate(clientInfo_t *ci, bg_anim_slot_t *slot,
     }
 
     bg_static_animation_t *animation = bg_compat_slot_animation(slot);
-    if (animation->moveSpeed == 0 || slot->lastUpdateTime == 0) {
+    const int32_t animationMoveSpeed = animation->moveSpeed;
+    if (animationMoveSpeed == 0 || slot->lastUpdateTime == 0) {
         slot->animRate = 1.0f;
         slot->lastUpdateTime = bg_compat_animation_sample_time();
         bg_compat_copy_anim_slot_origin(slot, entity);
     } else if (bg_compat_animation_sample_time() != slot->lastUpdateTime) {
-        float moveDistance;
+        WIDE_FLOAT moveDistance;
 
         if (usesVerticalDelta) {
             moveDistance =
-                fabsf(slot->lastOrigin[2] - entity->pos.trBase[2]);
+                fabsl((WIDE_FLOAT)slot->lastOrigin[2] - entity->pos.trBase[2]);
         } else {
             moveDistance =
                 VectorDistance(slot->lastOrigin, entity->pos.trBase);
         }
 
-        /* 0x1d6c7..0x1d6db: the elapsed-seconds product (fild delta * SECONDS)
-         * stays in the 80-bit chain; only the quotient is rounded to float. */
-        const float moveSpeed = (float)(
-            (double)moveDistance /
-            ((double)(bg_compat_animation_sample_time() -
-                      slot->lastUpdateTime) *
-             (double)BG_ANIM_MILLISECONDS_TO_SECONDS));
+        /* Windows keeps the vertical difference, elapsed-seconds product and
+         * speed quotient live in x87. VectorDistance has its own float return
+         * store; the rate rounds to float only after the second division. */
+        const int32_t elapsed = coduo_int32_from_bits(
+            (uint32_t)bg_compat_animation_sample_time() - (uint32_t)slot->lastUpdateTime);
+        const WIDE_FLOAT moveSpeed = moveDistance / ((WIDE_FLOAT)elapsed * BG_ANIM_MILLISECONDS_TO_SECONDS);
 
-        slot->animRate =
-            (float)((double)moveSpeed / (double)animation->moveSpeed);
+        slot->animRate = coduo_round_f32(moveSpeed / animationMoveSpeed);
         slot->lastUpdateTime = bg_compat_animation_sample_time();
         bg_compat_copy_anim_slot_origin(slot, entity);
 
@@ -435,11 +436,12 @@ void BG_RunLerpFrameRate(clientInfo_t *ci, bg_anim_slot_t *slot,
                         slot->animRate = BG_ANIM_RATE_CAP_SLOW_MOVE;
                     }
                 } else {
-                    const float maxRate =
+                    /* The scale is the binary32 reciprocal (0x3bfc0fc1).
+                     * Keep the product and cap live through the comparison. */
+                    const WIDE_FLOAT maxRate =
                         BG_ANIM_RATE_CAP_SLOW_MOVE -
-                        (float)(animation->moveSpeed -
-                                BG_ANIM_RATE_SPEED_BASE) /
-                            BG_ANIM_RATE_SPEED_RANGE;
+                        (WIDE_FLOAT)(animation->moveSpeed - BG_ANIM_RATE_SPEED_BASE) *
+                            BG_ANIM_RATE_SPEED_RECIPROCAL;
 
                     if (slot->animRate > maxRate) {
                         slot->animRate = maxRate;
@@ -456,7 +458,7 @@ void BG_RunLerpFrameRate(clientInfo_t *ci, bg_anim_slot_t *slot,
                                              ~ANIM_TOGGLEBIT].name,
                        bgAnimStaticTable->entries[animationWord &
                                              ~ANIM_TOGGLEBIT].moveSpeed,
-                       moveSpeed, slot->animRate);
+                       (double)moveSpeed, slot->animRate);
         }
     }
 
