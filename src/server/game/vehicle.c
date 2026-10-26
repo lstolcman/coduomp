@@ -1810,8 +1810,8 @@ qboolean VEH_UnlinkPlayer(gentity_t *player, int keepVehicle)
 
     /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
     if (vehicleEnt->health >= 1 && keepVehicle != 0 &&
-        client->vehicleControlTime > level.time - VEH_EXIT_DELAY_MS &&
-        client->vehicleExitState <= 1 &&
+        player->client->vehicleControlTime > level.time - VEH_EXIT_DELAY_MS &&
+        player->client->vehicleExitState <= 1 &&
         vehicleInfo->type == VEHICLE_TYPE_TANK) {
         trap_SendServerCommand((uint32_t)(int)(player - g_entities), 0,
                                va(VEH_UNLINK_EXIT_DELAY_COMMAND));
@@ -1828,13 +1828,15 @@ qboolean VEH_UnlinkPlayer(gentity_t *player, int keepVehicle)
     }
 
     G_EntUnlink(player);
-    vehicleState->passengerEntityNums[client->ps.vehiclePosition] = ENTITYNUM_NONE;
+    /* Seat state uses the current client after unlink's external calls; the
+     * captured client still owns the final player-state cleanup below. */
+    vehicleState->passengerEntityNums[player->client->ps.vehiclePosition] = ENTITYNUM_NONE;
     game_compat_veh_set_entity_passenger_bits(
         vehicleEnt,
         game_compat_veh_entity_passenger_bits(vehicleEnt) &
-            ~(1u << (((uint8_t)client->ps.vehiclePosition) & 0x1f)));
+            ~(1u << (((uint8_t)player->client->ps.vehiclePosition) & 0x1f)));
 
-    if (client->ps.vehiclePosition == VEH_PASSENGER_SLOT_DRIVER) {
+    if (player->client->ps.vehiclePosition == VEH_PASSENGER_SLOT_DRIVER) {
         vehicleEnt->s.eFlags &= ~VEH_VEHICLE_S_FLAG_DRIVER;
         vehicleEnt->passEntityNum = ENTITYNUM_NONE;
         vehicleEnt->s.vehicleEntityNum = ENTITYNUM_NONE;
@@ -1860,12 +1862,12 @@ qboolean VEH_UnlinkPlayer(gentity_t *player, int keepVehicle)
                 vehicleState->animRightTarget = vehicleState->animRightSource;
             }
         }
-    } else if (client->ps.vehiclePosition == VEH_PASSENGER_SLOT_GUNNER) {
-        if (vehicleState->soundBlendEntityNums[2] != ENTITYNUM_NONE &&
+    } else if (player->client->ps.vehiclePosition == VEH_PASSENGER_SLOT_GUNNER) {
+        if (vehicleEnt->vehicle->soundBlendEntityNums[2] != ENTITYNUM_NONE &&
             vehicleState->altWeaponSoundTime > 0) {
             vehicleState->altWeaponSoundTime = 10;
         }
-        client->ps.playerStateFlags &= ~VEH_CLIENT_STANCE_FLAG_GUNNER;
+        player->client->ps.playerStateFlags &= ~VEH_CLIENT_STANCE_FLAG_GUNNER;
     }
 
     if (vehicleEnt->s.vehicleEntityNum == player->s.number) {
@@ -1888,9 +1890,9 @@ qboolean VEH_UnlinkPlayer(gentity_t *player, int keepVehicle)
         SetClientOrigin(player, dismountOrigin);
         if (level.time <
             vehicleState->scriptedDriverEndTime) {
-            client->ps.velocity[2] = VEH_EXIT_VERTICAL_BOOST;
-            client->ps.velocity[0] = 0.0f;
-            client->ps.velocity[1] = 0.0f;
+            player->client->ps.velocity[2] = VEH_EXIT_VERTICAL_BOOST;
+            player->client->ps.velocity[0] = 0.0f;
+            player->client->ps.velocity[1] = 0.0f;
         }
     }
 
@@ -6009,10 +6011,12 @@ void VEH_UpdateClient(gentity_t *ent)
             if (driverClient != NULL &&
                 driverClient->driverUnlinkRequested != 0 &&
                 VEH_UnlinkPlayer(driver, qtrue)) {
-                driverClient->driverUnlinkRequested = 0;
+                /* Unlink invokes script callbacks; reload the entity's client. */
+                driver->client->driverUnlinkRequested = 0;
                 return;
             }
 
+            driverClient = driver->client;
             driverClient->ps.entityStateFlags |= EF_VEHICLE_ACTIVE;
             if (ent->vehiclePrimaryDisabled == 0 &&
                 vehicleState->scriptedInputEndTime < level.time &&
