@@ -103,6 +103,14 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_4WHEEL_STEER_DAMP_RANGE    60.0f
 #define VEH_4WHEEL_MIN_SPEED           10.0f
 #define VEH_4WHEEL_RATE_STEP_SCALE     4.0f
+#define VEH_4WHEEL_TURN_RATE_RANGE     0.9f
+#define VEH_4WHEEL_TURN_RATE_BASE      0.1f
+#define VEH_4WHEEL_STEER_RANGE         0.95f
+#define VEH_4WHEEL_STEER_BASE          0.05f
+#define VEH_4WHEEL_SPEED_BLEND_RANGE   0.7
+#define VEH_4WHEEL_SPEED_BLEND_BASE    0.3
+#define VEH_4WHEEL_MAX_STEERING_SCALE  3.0f
+#define VEH_4WHEEL_YAW_RATE_SCALE      2.0
 #define VEH_ROLL_ACCEL_SCALE           4.0f
 #define VEH_ROLL_ACCEL_MAX_STEP        3.0f
 #define VEH_ROLL_ACCEL_CLAMP           16.0f
@@ -890,6 +898,15 @@ static float game_compat_veh_length3(const vec3_t value)
         (long double)value[0] * (long double)value[0] +
         (long double)value[1] * (long double)value[1] +
         (long double)value[2] * (long double)value[2]));
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: preserve the Z/Y/X fold of the inlined desired
+ * and predicted velocity lengths, including the float square-root result. */
+static float game_compat_veh_length3_zyx(const vec3_t value)
+{
+    return (float)CoduoLibm_Sqrt((double)(
+        ((WIDE_FLOAT)value[2] * value[2] + (WIDE_FLOAT)value[1] * value[1]) +
+        (WIDE_FLOAT)value[0] * value[0]));
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
@@ -5422,7 +5439,6 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
     vehicle_state_t *vehicleState = (vehicle_state_t *)ent->vehicle;
     const vehicleInfo_t *vehicleInfo = game_compat_veh_get_vehicle_info(vehicleState->typeIndex);
     gentity_t *driver = &g_entities[ent->passEntityNum];
-    gclient_t *driverClient = driver->client;
     float maxSpeed;
     float accelLimit;
     vec3_t desiredLocalVelocity;
@@ -5494,10 +5510,7 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
     if (game_compat_veh_float_is_non_zero_or_nan(maxSpeed)) {
         /* This inlined length adds Z/Y/X; the later acceleration length
          * uses X/Y/Z. Round the square root before the speed-cap tests. */
-        speed = (float)CoduoLibm_Sqrt((double)(
-            ((WIDE_FLOAT)desiredLocalVelocity[2] * desiredLocalVelocity[2] +
-             (WIDE_FLOAT)desiredLocalVelocity[1] * desiredLocalVelocity[1]) +
-            (WIDE_FLOAT)desiredLocalVelocity[0] * desiredLocalVelocity[0]));
+        speed = game_compat_veh_length3_zyx(desiredLocalVelocity);
         if (game_compat_veh_float_is_non_zero_or_nan(speed) && maxSpeed < speed) {
             VectorNormalize(desiredLocalVelocity);
             desiredLocalVelocity[0] *= maxSpeed;
@@ -5535,11 +5548,11 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
         if (input[2] < 1) {
             if (input[1] < 0) {
                 targetYawRate = vehicleState->acceleration[1] +
-                                vehicleInfo->steeringRate *
+                                (WIDE_FLOAT)vehicleInfo->steeringRate *
                                 VEH_PHYSICS_FRAME_SECONDS;
             } else if (input[1] > 0) {
                 targetYawRate = vehicleState->acceleration[1] -
-                                vehicleInfo->steeringRate *
+                                (WIDE_FLOAT)vehicleInfo->steeringRate *
                                 VEH_PHYSICS_FRAME_SECONDS;
             } else {
                 targetYawRate = 0.0f;
@@ -5548,19 +5561,19 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
             targetYawRate = game_compat_veh_clamp_abs(targetYawRate,
                                          vehicleInfo->steeringLimit);
             angularAccel[1] =
-                (targetYawRate - vehicleState->acceleration[1]) /
+                ((WIDE_FLOAT)targetYawRate - vehicleState->acceleration[1]) /
                 VEH_PHYSICS_FRAME_SECONDS;
             angularAccel[1] =
                 game_compat_veh_clamp_abs(angularAccel[1], vehicleInfo->steeringRate);
         } else {
             targetYawRate =
-                AngleSubtract(driverClient->ps.viewAngles[1],
+                AngleSubtract(g_entities[ent->passEntityNum].client->ps.viewAngles[1],
                               vehicleState->previousAngles[1]) /
                 VEH_PHYSICS_FRAME_SECONDS;
             targetYawRate = game_compat_veh_clamp_abs(targetYawRate,
                                          vehicleInfo->steeringLimit);
             angularAccel[1] =
-                (targetYawRate - vehicleState->acceleration[1]) /
+                ((WIDE_FLOAT)targetYawRate - vehicleState->acceleration[1]) /
                 VEH_PHYSICS_FRAME_SECONDS;
         }
     } else {
@@ -5574,84 +5587,38 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
         float steeringScale;
         float targetYawRate;
         float yawRateScale;
+        float yawDelta;
+        const float speedLen3 = game_compat_veh_length3(vehicleState->velocity);
+        const float speedFactor = coduo_round_f32(1.0f - (WIDE_FLOAT)speedLen3 / vehicleInfo->maxSpeed);
+        const float positiveFactor = speedFactor > 0.0f ? speedFactor : 0.0f;
 
-        /* 0x7dca9..0x7df34: the clamp conditionals compare the unrounded
-         * 80-bit factor chain; only the pass-through arm rounds, and it
-         * rounds STEPWISE (one float store per operation). */
+        /* Round the shared speed factor before selecting its positive arm.
+         * The scaled clamp expression stays wide; its selected result then
+         * rounds once to float, without an intermediate product store. */
         {
-            const float speedLen3 = game_compat_veh_length3(vehicleState->velocity);
-            const long double speedFactor =
-                1.0f - speedLen3 / vehicleInfo->maxSpeed;
-
-            if (speedFactor > 0.0f) {
-                const long double scaledFactor = speedFactor * 0.9f + 0.1f;
-
-                if (scaledFactor < 0.0f) {
-                    turnRate = 0.0f;                    /* 0x7df22 */
-                } else if (scaledFactor > 1.0f) {
-                    turnRate = 1.0f;                    /* 0x7df14 */
-                } else {
-                    float steppedFactor = (float)speedFactor;   /* 0x7ded6 */
-                    steppedFactor = 0.9f * steppedFactor;       /* 0x7dee8 */
-                    turnRate = 0.1f + steppedFactor;            /* 0x7defe */
-                }
-            } else {
-                turnRate = 0.1f;                        /* 0x7df06 */
-            }
+            const WIDE_FLOAT scaledFactor =
+                (WIDE_FLOAT)positiveFactor * VEH_4WHEEL_TURN_RATE_RANGE + VEH_4WHEEL_TURN_RATE_BASE;
+            turnRate = scaledFactor < 0.0f ? 0.0f : scaledFactor > 1.0f ? 1.0f : coduo_round_f32(scaledFactor);
         }
 
         if (input[1] < 0) {
-            /* 0x7dfa8..0x7e1ef: same stepwise cascade, scaled by the steer
-             * angle as a fourth rounded store; the clamped leaves are the
-             * compile-time folded products. */
-            const float speedLen3 = game_compat_veh_length3(vehicleState->velocity);
-            const long double steerFactor =
-                1.0f - speedLen3 / vehicleInfo->maxSpeed;
-
-            if (steerFactor > 0.0f) {
-                const long double scaledFactor = steerFactor * 0.95f + 0.05f;
-
-                if (scaledFactor < 0.0f) {
-                    targetSteerAngle = -VEH_4WHEEL_STEER_ANGLE * 0.0f;  /* -0.0f @0x7e1dd */
-                } else if (scaledFactor > 1.0f) {
-                    targetSteerAngle = -VEH_4WHEEL_STEER_ANGLE;         /* 0x7e1cf */
-                } else {
-                    float steppedFactor = (float)steerFactor;           /* 0x7e17d */
-                    steppedFactor = 0.95f * steppedFactor;              /* 0x7e191 */
-                    steppedFactor = 0.05f + steppedFactor;              /* 0x7e1a5 */
-                    targetSteerAngle =
-                        -VEH_4WHEEL_STEER_ANGLE * steppedFactor;        /* 0x7e1b9 */
-                }
-            } else {
-                targetSteerAngle = -VEH_4WHEEL_STEER_ANGLE * 0.05f;     /* 0x7e1c1 */
-            }
+            /* Round the selected clamp value before the negative angle
+             * scale, retaining the separate final float multiplication. */
+            const WIDE_FLOAT scaledFactor =
+                (WIDE_FLOAT)positiveFactor * VEH_4WHEEL_STEER_RANGE + VEH_4WHEEL_STEER_BASE;
+            const float clampedFactor = scaledFactor < 0.0f ? 0.0f : scaledFactor > 1.0f ? 1.0f : coduo_round_f32(scaledFactor);
+            targetSteerAngle = -VEH_4WHEEL_STEER_ANGLE * clampedFactor;
         } else if (input[1] > 0) {
-            /* 0x7e20d..0x7e4af: positive-steer mirror of the cascade. */
-            const float speedLen3 = game_compat_veh_length3(vehicleState->velocity);
-            const long double steerFactor =
-                1.0f - speedLen3 / vehicleInfo->maxSpeed;
-
-            if (steerFactor > 0.0f) {
-                const long double scaledFactor = steerFactor * 0.95f + 0.05f;
-
-                if (scaledFactor < 0.0f) {
-                    targetSteerAngle = VEH_4WHEEL_STEER_ANGLE * 0.0f;   /* 0x7e49d */
-                } else if (scaledFactor > 1.0f) {
-                    targetSteerAngle = VEH_4WHEEL_STEER_ANGLE;          /* 0x7e48f */
-                } else {
-                    float steppedFactor = (float)steerFactor;           /* 0x7e43d */
-                    steppedFactor = 0.95f * steppedFactor;              /* 0x7e451 */
-                    steppedFactor = 0.05f + steppedFactor;              /* 0x7e465 */
-                    targetSteerAngle =
-                        VEH_4WHEEL_STEER_ANGLE * steppedFactor;         /* 0x7e479 */
-                }
-            } else {
-                targetSteerAngle = VEH_4WHEEL_STEER_ANGLE * 0.05f;      /* 0x7e481 */
-            }
+            /* Positive steering uses the same clamp and float boundaries. */
+            const WIDE_FLOAT scaledFactor =
+                (WIDE_FLOAT)positiveFactor * VEH_4WHEEL_STEER_RANGE + VEH_4WHEEL_STEER_BASE;
+            const float clampedFactor = scaledFactor < 0.0f ? 0.0f : scaledFactor > 1.0f ? 1.0f : coduo_round_f32(scaledFactor);
+            targetSteerAngle = VEH_4WHEEL_STEER_ANGLE * clampedFactor;
         } else {
             targetSteerAngle = 0.0f;
         }
 
+        gclient_t *driverClient = driver->client;
         if (driverClient == NULL || input[2] < 1) {
             if (driverClient != NULL &&
                 (driverClient->currentButtons & VEH_DRIVER_BUTTON_STRAFE) != 0) {
@@ -5679,25 +5646,15 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
                                             VEH_4WHEEL_STEER_ANGLE);
 
             if (input[0] < 0) {
-                /* 0x7e5bf..0x7e675: the steer-delta chain is compared
-                 * unrounded against DOUBLE 10.0/60.0/1.0; the scaled accel
-                 * rounds to double, then to float. */
-                const double steerDelta =
-                    fabs((double)(vehicleState->steerAngle -
-                                  targetSteerAngle));
+                /* Store the wide absolute difference and damping fraction
+                 * as doubles before their tests. Keep the selected damping
+                 * subtraction and acceleration product wide until the float. */
+                const volatile double steerDelta = fabsl((WIDE_FLOAT)vehicleState->steerAngle - targetSteerAngle);
                 if (steerDelta > VEH_4WHEEL_STEER_CENTER) {
-                    const double accel0 = linearAccel[0];
-                    double scaledAccel;
-
-                    if ((steerDelta - VEH_4WHEEL_STEER_CENTER) /
-                            VEH_4WHEEL_STEER_DAMP_RANGE < 1.0) {
-                        scaledAccel =
-                            (1.0 - (steerDelta - VEH_4WHEEL_STEER_CENTER) /
-                             VEH_4WHEEL_STEER_DAMP_RANGE) * accel0;
-                    } else {
-                        scaledAccel = 0.0 * accel0;     /* 0x7e655 */
-                    }
-                    linearAccel[0] = (float)scaledAccel;
+                    const volatile double dampingFraction =
+                        ((WIDE_FLOAT)steerDelta - VEH_4WHEEL_STEER_CENTER) / VEH_4WHEEL_STEER_DAMP_RANGE;
+                    const double limitedFraction = dampingFraction < 1.0 ? dampingFraction : 1.0;
+                    linearAccel[0] = (1.0 - (WIDE_FLOAT)limitedFraction) * linearAccel[0];
                 }
             } else {
                 targetSteerAngle = -targetSteerAngle;
@@ -5716,54 +5673,47 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
         vehicleState->steerAngle = steerAngle;
 
         AnglesToAxis(vehicleState->viewClampTargetAngles, axis);
-        MatrixTransformVector(linearAccel,
-                              (const vec_t (*)[3])axis,
-                              worldAccel);
+        /* This inline transform folds Z/Y/X for every output lane. */
+        for (int column = 0; column < 3; column++) {
+            worldAccel[column] =
+                ((WIDE_FLOAT)axis[2][column] * linearAccel[2] +
+                 (WIDE_FLOAT)axis[1][column] * linearAccel[1]) +
+                (WIDE_FLOAT)axis[0][column] * linearAccel[0];
+        }
 
         predictedVelocity[0] =
             vehicleState->velocity[0] +
-            worldAccel[0] * VEH_PHYSICS_FRAME_SECONDS;
+            (WIDE_FLOAT)worldAccel[0] * VEH_PHYSICS_FRAME_SECONDS;
         predictedVelocity[1] =
             vehicleState->velocity[1] +
-            worldAccel[1] * VEH_PHYSICS_FRAME_SECONDS;
+            (WIDE_FLOAT)worldAccel[1] * VEH_PHYSICS_FRAME_SECONDS;
         predictedVelocity[2] =
             vehicleState->velocity[2] +
-            worldAccel[2] * VEH_PHYSICS_FRAME_SECONDS;
+            (WIDE_FLOAT)worldAccel[2] * VEH_PHYSICS_FRAME_SECONDS;
 
-        if (game_compat_veh_length3(predictedVelocity) < VEH_4WHEEL_MIN_SPEED) {
+        if (game_compat_veh_length3_zyx(predictedVelocity) < VEH_4WHEEL_MIN_SPEED) {
             predictedVelocity[0] = 0.0f;
             predictedVelocity[1] = 0.0f;
             predictedVelocity[2] = 0.0f;
         }
 
-        for (int row = 0; row < 3; row++) {
-            predictedLocalVelocity[row] =
-                axis[row][0] * predictedVelocity[0] +
-                axis[row][1] * predictedVelocity[1] +
-                axis[row][2] * predictedVelocity[2];
-        }
+        predictedLocalVelocity[0] =
+            ((WIDE_FLOAT)axis[0][2] * predictedVelocity[2] +
+             (WIDE_FLOAT)axis[0][1] * predictedVelocity[1]) +
+            (WIDE_FLOAT)axis[0][0] * predictedVelocity[0];
 
-        /* 0x7e977..0x7ea7d: |pred[0]|/wheelBase is rounded to DOUBLE; the
-         * speed factor is one 80-bit chain with DOUBLE 0.7/0.3 constants
-         * (values differ from 0.7f/0.3f) and no 0..1 clamp at this site;
-         * the product rounds to double, then to float. */
+        /* The remaining-speed factor rounds to double before selection.
+         * Keep both the wheelbase quotient and double-constant blend wide
+         * through their product, then store the steering scale as float. */
         {
-            const double steerQuotient =
-                fabs((double)predictedLocalVelocity[0]) /
-                vehicleState->wheelBaseLength;
-            double scaledQuotient;
-
             speed = game_compat_veh_length3(vehicleState->velocity);
-            if (1.0 - speed / vehicleInfo->maxSpeed > 0.0) {
-                scaledQuotient =
-                    ((1.0 - speed / vehicleInfo->maxSpeed) * 0.7 + 0.3) *
-                    steerQuotient;
-            } else {
-                scaledQuotient = 0.3 * steerQuotient;   /* 0x7ea63 */
-            }
-            steeringScale = (float)scaledQuotient;
+            const volatile double remainingSpeed = 1.0 - (WIDE_FLOAT)speed / vehicleInfo->maxSpeed;
+            const double selectedSpeed = remainingSpeed > 0.0 ? remainingSpeed : 0.0;
+            const WIDE_FLOAT steerQuotient = (WIDE_FLOAT)fabsf(predictedLocalVelocity[0]) / vehicleState->wheelBaseLength;
+            steeringScale = steerQuotient *
+                ((WIDE_FLOAT)selectedSpeed * VEH_4WHEEL_SPEED_BLEND_RANGE + VEH_4WHEEL_SPEED_BLEND_BASE);
         }
-        steeringScale = game_compat_veh_clamp_float(steeringScale, 0.0f, 3.0f);
+        steeringScale = game_compat_veh_clamp_float(steeringScale, 0.0f, VEH_4WHEEL_MAX_STEERING_SCALE);
 
         if (predictedLocalVelocity[0] > 0.0f) {
             targetYawRate = -steerAngle * steeringScale;
@@ -5772,12 +5722,10 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
         } else {
             targetYawRate = 0.0f;
         }
-        /* 0x7eb4c..0x7ebc8: the clamp limit expression stays 80-bit in the
-         * compares; only the clamped leaf stores round. */
-        if (targetYawRate < -vehicleInfo->steeringLimit * steeringScale) {
-            targetYawRate = -vehicleInfo->steeringLimit * steeringScale;
-        } else if (targetYawRate > vehicleInfo->steeringLimit * steeringScale) {
-            targetYawRate = vehicleInfo->steeringLimit * steeringScale;
+        /* Both clamp comparisons use the same rounded float limit. */
+        {
+            const float yawLimit = coduo_round_f32((WIDE_FLOAT)vehicleInfo->steeringLimit * steeringScale);
+            targetYawRate = game_compat_veh_clamp_abs(targetYawRate, yawLimit);
         }
 
         if (game_compat_veh_wheel_surface_at(vehicleState, 0) == 0 &&
@@ -5785,34 +5733,27 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
             game_compat_veh_wheel_surface_at(vehicleState, 2) == 0 &&
             game_compat_veh_wheel_surface_at(vehicleState, 3) == 0) {
             yawRateScale = 0.0f;
-        } else if (game_compat_veh_float_is_non_zero_or_nan(game_compat_veh_length3(predictedVelocity))) {
+        } else if (game_compat_veh_float_is_non_zero_or_nan(game_compat_veh_length3_zyx(predictedVelocity))) {
             const float velocitySpeed = game_compat_veh_length3(vehicleState->velocity);
-
-            if (fabsf(predictedLocalVelocity[0] / velocitySpeed) * 2.0f <
-                2.0f) {
-                yawRateScale =
-                    fabsf(predictedLocalVelocity[0] / velocitySpeed) * 2.0f;
-            } else {
-                yawRateScale = 2.0f;
-            }
+            const volatile double yawFraction =
+                fabsl((WIDE_FLOAT)predictedLocalVelocity[0] / velocitySpeed) * VEH_4WHEEL_YAW_RATE_SCALE;
+            yawRateScale = yawFraction < VEH_4WHEEL_YAW_RATE_SCALE ? yawFraction : VEH_4WHEEL_YAW_RATE_SCALE;
         } else {
-            yawRateScale = 2.0f;
+            yawRateScale = VEH_4WHEEL_YAW_RATE_SCALE;
         }
 
-        if (fabsf(targetYawRate - vehicleState->acceleration[1]) <
-            VEH_4WHEEL_STEER_CENTER) {
+        yawDelta = coduo_round_f32((WIDE_FLOAT)targetYawRate - vehicleState->acceleration[1]);
+        if (fabsf(yawDelta) < VEH_4WHEEL_STEER_CENTER) {
             yawRateScale = 1.0f;
         }
 
         angularAccel[1] =
-            ((targetYawRate - vehicleState->acceleration[1]) * yawRateScale) /
+            ((WIDE_FLOAT)yawDelta * yawRateScale) /
             VEH_PHYSICS_FRAME_SECONDS;
-        /* 0x7ed84..0x7ee0f: the clamp limit expression stays 80-bit in the
-         * compares; only the clamped leaf stores round. */
-        if (angularAccel[1] < -vehicleInfo->steeringRate * yawRateScale) {
-            angularAccel[1] = -vehicleInfo->steeringRate * yawRateScale;
-        } else if (angularAccel[1] > vehicleInfo->steeringRate * yawRateScale) {
-            angularAccel[1] = vehicleInfo->steeringRate * yawRateScale;
+        /* Round the shared rate limit before either clamp comparison. */
+        {
+            const float rateLimit = coduo_round_f32((WIDE_FLOAT)vehicleInfo->steeringRate * yawRateScale);
+            angularAccel[1] = game_compat_veh_clamp_abs(angularAccel[1], rateLimit);
         }
     }
 
