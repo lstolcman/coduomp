@@ -1,16 +1,25 @@
-# Match the Makefile audio policy: retail Miles on i686, Miniaudio on x64.
+# Default to Miniaudio on both architectures; retail Miles remains an x86 option.
 # Generate an import library from the user's DLL; never fetch or bundle it.
 if(NOT CODUOMP_BUILD_CLIENT)
     return()
 endif()
-if(NOT CODUOMP_32BIT_X86)
+set(CODUOMP_AUDIO_BACKEND miniaudio CACHE STRING "Client audio backend: miniaudio or miles (x86 only)")
+set_property(CACHE CODUOMP_AUDIO_BACKEND PROPERTY STRINGS miniaudio miles)
+if(NOT CODUOMP_AUDIO_BACKEND MATCHES "^(miniaudio|miles)$")
+    message(FATAL_ERROR "CODUOMP_AUDIO_BACKEND must be miniaudio or miles.")
+endif()
+message(STATUS "Client audio backend: ${CODUOMP_AUDIO_BACKEND}")
+if(CODUOMP_AUDIO_BACKEND STREQUAL "miniaudio")
     set(CODUOMP_AUDIO_DEFINITION AUDIO_BACKEND_MINIAUDIO)
     return()
+endif()
+if(NOT CODUOMP_32BIT_X86)
+    message(FATAL_ERROR "The Miles audio backend requires an x86 build; use miniaudio on x64.")
 endif()
 
 set(MSS32_DLL "" CACHE FILEPATH "User-supplied retail i386 mss32.dll")
 if(NOT EXISTS "${MSS32_DLL}")
-    message(FATAL_ERROR "The x86 client requires -DMSS32_DLL=<retail mss32.dll>, as in the Makefile build.")
+    message(FATAL_ERROR "The Miles audio backend requires -DMSS32_DLL=<retail mss32.dll>.")
 endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${MSS32_DLL}")
 execute_process(COMMAND "${CMAKE_LINKER}" /dump /headers /exports "${MSS32_DLL}"

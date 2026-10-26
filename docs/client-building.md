@@ -106,12 +106,24 @@ the `msvc` preset for a **32-bit x86** build, which uses
 `/arch:IA32` for compiler-generated x87 arithmetic:
 
 ```sh
-cmake --preset msvc -DMSS32_DLL=C:/Games/CoDUO/mss32.dll
+cmake --preset msvc
 cmake --build --preset msvc --parallel 2
 ```
 
-The x86 build uses Miles and generates its import library from the supplied
-retail `mss32.dll`; keep that DLL beside the executable when running it.
+The CMake build defaults to Miniaudio on both x86 and x64 and does not need
+`MSS32_DLL`. To select Miles for an x86 build:
+
+```sh
+cmake --preset msvc -DCODUOMP_AUDIO_BACKEND=miles -DMSS32_DLL=C:/Games/CoDUO/mss32.dll
+cmake --build --preset msvc --parallel 2
+```
+
+Miles generates its import library from the supplied retail `mss32.dll`;
+keep that DLL beside the executable when running it. Set
+`-DCODUOMP_AUDIO_BACKEND=miniaudio` to switch an existing build back.
+Miles is available only on x86. The MinGW Makefile build continues to default
+to Miles on x86 and Miniaudio on x64.
+
 Explicitly select **64-bit x64** with:
 
 ```sh
@@ -122,8 +134,7 @@ cmake --build --preset msvc-x64 --parallel 2
 **MSVC x64 cannot generate x87 arithmetic from C/C++.** Its compiler-generated
 floating-point expressions use SSE2 or newer instructions, so rounding and
 intermediate results can differ from the original game. Configuration emits
-a warning on this target. The x64 build uses Miniaudio, matching the Makefile
-architecture policy, and does not need `MSS32_DLL`.
+a warning on this target. The x64 build uses Miniaudio.
 
 For **64-bit Windows with native x87 in the existing explicit extended
 expressions**, prefer Clang 22 or newer in clang-cl mode. Install LLVM and
