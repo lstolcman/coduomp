@@ -253,6 +253,7 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_USABLE_SCRIPT_CONTENTS    0x00200000u
 #define VEH_USABLE_MAX_SPEED          100.0f
 #define VEH_INFO_SPEED_SCALE          17.6f
+#define VEH_SPEED_TO_MPH              0.05681818f
 #define VEH_INFO_HALF_SCALE           0.5f
 #define VEH_INFO_SOUND_ALIAS_COUNT    7
 #define VEH_PLAYER_BLEND_TAG_FAIL_WARNING "WARNING: aborting player positioning on turret since '%s' does not exist\n"
@@ -4632,7 +4633,8 @@ void CMD_VEH_GetSpeedMPH(uint32_t scriptObject)
 {
     gentity_t *ent = VEH_GetEntity((int)scriptObject);
 
-    Scr_AddFloat(game_compat_veh_entity_current_speed(ent) / VEH_INFO_SPEED_SCALE);
+    /* Use the binary32 reciprocal before rounding the script result. */
+    Scr_AddFloat((float)((WIDE_FLOAT)game_compat_veh_entity_current_speed(ent) * VEH_SPEED_TO_MPH));
 }
 
 /* ------------------------------------------------------------------ */
