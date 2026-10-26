@@ -8148,14 +8148,16 @@ void VP_DebugPathSegment(const vec3_t start, const vec3_t end,
         return;
     }
 
-    /* direction . vehDebugPathSegmentDir stays 80-bit into a full-width
-     * fucompp (no float spill in the ref build).  The branch at
-     * 0x95c8d flushes only for ordered dot < K, so unordered values coalesce. */
-    if (!(direction[0] * vehDebugPathSegmentDir[0] +
-              direction[1] * vehDebugPathSegmentDir[1] +
-              direction[2] * vehDebugPathSegmentDir[2] <
-          VEH_PATH_DEBUG_SEGMENT_DOT) &&
-        !flushSegment) {
+    /* Keep the products and (Z + Y) + X sum wide through the comparison.
+     * Separate products prevent contraction with either addition. The
+     * ordered dot < K test flushes; unordered values otherwise coalesce. */
+    const volatile WIDE_FLOAT zProduct = (WIDE_FLOAT)vehDebugPathSegmentDir[2] * direction[2];
+    const volatile WIDE_FLOAT yProduct = (WIDE_FLOAT)vehDebugPathSegmentDir[1] * direction[1];
+    const WIDE_FLOAT zySum = zProduct + yProduct;
+    const volatile WIDE_FLOAT xProduct = (WIDE_FLOAT)vehDebugPathSegmentDir[0] * direction[0];
+    const WIDE_FLOAT dot = zySum + xProduct;
+
+    if (!(dot < VEH_PATH_DEBUG_SEGMENT_DOT) && !flushSegment) {
         memcpy(vehDebugPathSegmentEnd, end, sizeof(vehDebugPathSegmentEnd));
         return;
     }
