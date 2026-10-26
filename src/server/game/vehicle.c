@@ -6636,10 +6636,11 @@ void VEH_GroundMove(gentity_t *ent)
     VEH_ClipVelocity(vehicleState->velocity, vehLastGroundTrace.normal,
                      vehicleState->velocity);
 
-    /* Retain the dot product through its positive test on both profiles. */
+    /* Group X with Z before adding Y, and keep the dot wide through its
+     * positive test. Cancellation here selects whether speed is restored. */
     const WIDE_FLOAT velocityDot = ((WIDE_FLOAT)vehicleState->velocity[0] * originalVelocity[0] +
-                                   (WIDE_FLOAT)vehicleState->velocity[1] * originalVelocity[1]) +
-                                  (WIDE_FLOAT)vehicleState->velocity[2] * originalVelocity[2];
+                                   (WIDE_FLOAT)vehicleState->velocity[2] * originalVelocity[2]) +
+                                  (WIDE_FLOAT)vehicleState->velocity[1] * originalVelocity[1];
     if (velocityDot > 0.0f) {
         VectorNormalize(vehicleState->velocity);
         vehicleState->velocity[0] *= speed;
@@ -6811,15 +6812,23 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
     planeDistance = (baseDotZ + baseDotX) + baseDotY;
 
     for (int wheelIndex = 1; wheelIndex < wheelCount; wheelIndex++) {
-        WIDE_FLOAT wheelDot =
-            ((WIDE_FLOAT)wheelPoints[wheelIndex][0] * groundNormal[0] +
-             (WIDE_FLOAT)wheelPoints[wheelIndex][1] * groundNormal[1]) +
-            (WIDE_FLOAT)wheelPoints[wheelIndex][2] * groundNormal[2];
+        const WIDE_FLOAT dotX = (WIDE_FLOAT)groundNormal[0] * wheelPoints[wheelIndex][0];
+        const WIDE_FLOAT dotY = (WIDE_FLOAT)groundNormal[1] * wheelPoints[wheelIndex][1];
+        const WIDE_FLOAT dotZ = (WIDE_FLOAT)groundNormal[2] * wheelPoints[wheelIndex][2];
+        WIDE_FLOAT wheelDot;
+
+        /* The six-wheel path groups Z with Y for wheels 2..4; every other
+         * iteration groups X with Z. Keep that association through the sum. */
+        if (wheelCount == VEH_SUSPENSION_WHEEL_COUNT_TANK &&
+            wheelIndex > 1 && wheelIndex <= VEH_SUSPENSION_WHEEL_COUNT_4WHEEL) {
+            wheelDot = (dotZ + dotY) + dotX;
+        } else {
+            wheelDot = (dotX + dotZ) + dotY;
+        }
         /* Store each dot to float before distance subtraction. */
         wheelDot = coduo_round_f32(wheelDot);
-        /* Linux 0x819ba..0x81ab7 retains the dot through subtraction. Its
-         * update recomputes the same dot minus suspensionTravel; no input
-         * changes between those uses, so the retained value serves both. */
+        /* The plane adjustment reuses the stored dot; no input changes
+         * between the distance comparison and that adjustment. */
         const volatile float wheelDistance = wheelDot - planeDistance;
 
         if (vehicleInfo->suspensionTravel < wheelDistance) {
