@@ -3863,36 +3863,33 @@ void VEH_UpdateScriptedInput(gentity_t *ent, const vec3_t inputVector,
     vehicleState->lastInputTime = level.time;
     AnglesToAxis(vehicleState->viewClampTargetAngles, axis);
 
-    /* inputVector . axis-row dot: 3-mul/2-add chain kept 80-bit until the field
-     * store -> shim (left-assoc (m0+m1)+m2). */
+    /* Accumulate each projection in Z/Y/X order, keeping products and sums
+     * wide until the binary32 field store consumed by VectorNormalize2D. */
     vehicleState->localAccel.components.forward =
-        inputVector[0] * axis[0][0] +
-        inputVector[1] * axis[0][1] +
-        inputVector[2] * axis[0][2];
-    /* 0x7d57e..0x7d5a8: the projection multiplies axis row 1, and
-     * the negation is a sign-bit flip on the stored float (negate commutes with
-     * round-to-nearest, so -store_f32(dot) matches). */
+        ((WIDE_FLOAT)axis[0][2] * inputVector[2] + (WIDE_FLOAT)axis[0][1] * inputVector[1]) +
+        (WIDE_FLOAT)axis[0][0] * inputVector[0];
+    /* The second projection uses axis row 1 and negates the live sum before
+     * its float store; no product or partial sum narrows separately. */
     vehicleState->localAccel.components.vertical =
-        -(inputVector[0] * axis[1][0] +
-          inputVector[1] * axis[1][1] +
-          inputVector[2] * axis[1][2]);
+        -(((WIDE_FLOAT)axis[1][2] * inputVector[2] + (WIDE_FLOAT)axis[1][1] * inputVector[1]) +
+          (WIDE_FLOAT)axis[1][0] * inputVector[0]);
 
     vehicleState->throttleScale = clampedScale * VEH_THROTTLE_SCALE_MULTIPLIER;
     vehicleState->throttleScalePrevious = vehicleState->throttleScale;
     vehicleState->brakeScale = 0.0f;
 
     VectorNormalize2D(vehicleState->localAccel.vector);
-    /* inputScale * clampedScale * accel: 2-mul chain kept 80-bit until the
-     * ClampAbs float arg -> shim ((a*b)*c). */
+    /* Keep each two-multiply scaling chain wide until the float clamp
+     * argument. The clamp tests that rounded value, not the live product. */
     vehicleState->localAccel.components.forward =
         game_compat_veh_clamp_abs(
-            vehicleInfo->forwardInputScale * clampedScale *
+            (WIDE_FLOAT)clampedScale * vehicleInfo->forwardInputScale *
                 vehicleState->localAccel.components.forward,
             VEH_SCRIPTED_INPUT_CLAMP);
     vehicleState->localAccel.components.vertical =
         game_compat_veh_clamp_abs(
-            vehicleInfo->verticalInputScale * clampedScale *
-                vehicleState->localAccel.components.vertical,
+            (WIDE_FLOAT)vehicleInfo->verticalInputScale *
+                vehicleState->localAccel.components.vertical * clampedScale,
             VEH_SCRIPTED_INPUT_CLAMP);
 
     /* 0x7d6e5: fld DWORD [ent+0x1f0] - the slot's float BITS are loaded
