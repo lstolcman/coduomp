@@ -205,9 +205,10 @@ static inline qboolean bg_compat_xanim_is_looped(uint16_t animTree,
     return trap_XAnimIsLooped(anim);
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: retain the original game-module diagnostic edge.
- * Windows calls the local format-only G_Error body; Linux calls Com_Error with
- * ERR_DROP. The existing behavior mode selects which server contract to model. */
+/* NOT_FROM_ORIGINAL_SOURCE: preserve the game-module index diagnostic.
+ * Original Com_Error formats this fixed integer-only message and forwards it
+ * through G_Error("%s", buffer). Direct G_Error preserves the same bounded
+ * text and error syscall. */
 static inline void bg_compat_anim_index_error(uint32_t animIndex,
                                               int32_t entryCount)
 {
@@ -215,8 +216,9 @@ static inline void bg_compat_anim_index_error(uint32_t animIndex,
             entryCount);
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: retain the module-specific original error edge.
- * Windows uses G_Error; Linux uses Com_Error(ERR_DROP, ...). */
+/* NOT_FROM_ORIGINAL_SOURCE: preserve the game-module accessor diagnostic.
+ * Original Com_Error forwards this fixed message through G_Error("%s", buffer).
+ * Direct G_Error preserves the same text and error syscall. */
 static inline void bg_compat_get_animation_index_error(void)
 {
     G_Error("\x15" "BG_GetAnimationForIndex: index out of bounds");
