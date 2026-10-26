@@ -191,7 +191,7 @@ void BG_SetNewAnimation(clientInfo_t *ci, bg_anim_slot_t *slot,
         if (isLegsSlot && bg_compat_animation_stance_changed(
                               ci, oldAnimationWord, animationIndex)) {
             ci->animTransitionTime =
-                bg_compat_animation_time() + BG_ANIM_TRANSITION_PAD_MS;
+                coduo_int32_from_bits((uint32_t)bg_compat_animation_time() + BG_ANIM_TRANSITION_PAD_MS);
         }
     }
 
@@ -214,7 +214,7 @@ void BG_SetNewAnimation(clientInfo_t *ci, bg_anim_slot_t *slot,
         }
 
         const int transitionBlendTime =
-            ci->animTransitionTime - bg_compat_animation_time();
+            coduo_int32_from_bits((uint32_t)ci->animTransitionTime - (uint32_t)bg_compat_animation_time());
         if (minimumBlendTime < transitionBlendTime) {
             minimumBlendTime = transitionBlendTime;
         }
@@ -239,11 +239,10 @@ void BG_SetNewAnimation(clientInfo_t *ci, bg_anim_slot_t *slot,
                 int duration = BG_ANIM_DEFAULT_CYCLE_MS;
 
                 if (bg_compat_animation_is_primitive(oldAnim)) {
-                    duration = bg_compat_animation_get_length(
+                    duration = coduo_int32_from_bits((uint32_t)bg_compat_animation_get_length(
                                    anims,
                                    (uint16_t)(oldAnimationWord &
-                                              ~ANIM_TOGGLEBIT)) +
-                               BG_ANIM_LENGTH_PAD_MS;
+                                              ~ANIM_TOGGLEBIT)) + BG_ANIM_LENGTH_PAD_MS);
                 }
 
                 startTime = bg_compat_initial_loop_time(ci, duration);
@@ -253,19 +252,21 @@ void BG_SetNewAnimation(clientInfo_t *ci, bg_anim_slot_t *slot,
         }
     }
 
+    /* Convert the full signed millisecond value before scaling. Each call
+     * receives a float rounded after the product, including large blend times. */
     if (oldAnimation != NULL) {
         const uint32_t oldAnim =
             bg_compat_anim_slot_xanim(animTreeIndex, oldAnimationWord);
 
         bg_compat_animation_clear_goal_weight(
             animTree, oldAnim,
-            (float)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS);
+            coduo_round_f32((WIDE_FLOAT)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS));
     }
 
     if (animationIndex == 0) {
         if (!isLegsSlot) {
             float blendSeconds =
-                (float)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS;
+                coduo_round_f32((WIDE_FLOAT)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS);
 
             trap_XAnimSetCompleteGoalWeight(
                 animTree,
@@ -275,7 +276,7 @@ void BG_SetNewAnimation(clientInfo_t *ci, bg_anim_slot_t *slot,
                 0.0f, blendSeconds,
                 1.0f, 0, 0);
             blendSeconds =
-                (float)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS;
+                coduo_round_f32((WIDE_FLOAT)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS);
             trap_XAnimSetCompleteGoalWeight(
                 animTree,
                 bg_compat_make_xanim(
@@ -310,7 +311,7 @@ void BG_SetNewAnimation(clientInfo_t *ci, bg_anim_slot_t *slot,
             currentAnimation->moveSpeed != 0 &&
             bg_compat_animation_get_weight(animTree, newAnim) == 0.0f;
         const float blendSeconds =
-            (float)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS;
+            coduo_round_f32((WIDE_FLOAT)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS);
 
         trap_XAnimSetCompleteGoalWeight(
             animTree, newAnim, 1.0f, blendSeconds, 1.0f,
@@ -333,7 +334,7 @@ void BG_SetNewAnimation(clientInfo_t *ci, bg_anim_slot_t *slot,
             bg_compat_animation_set_time(animTree, newAnim, 1.0f);
         } else {
             const float blendSeconds =
-                (float)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS;
+                coduo_round_f32((WIDE_FLOAT)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS);
             trap_XAnimSetCompleteGoalWeight(
                 animTree, newAnim, 1.0f, blendSeconds, 1.0f, 0, 0);
         }
@@ -341,7 +342,7 @@ void BG_SetNewAnimation(clientInfo_t *ci, bg_anim_slot_t *slot,
 
     if (!isLegsSlot) {
         float blendSeconds =
-            (float)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS;
+            coduo_round_f32((WIDE_FLOAT)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS);
         trap_XAnimSetCompleteGoalWeight(
             animTree,
             bg_compat_make_xanim(
@@ -350,7 +351,7 @@ void BG_SetNewAnimation(clientInfo_t *ci, bg_anim_slot_t *slot,
             1.0f, blendSeconds, 1.0f,
             (uint16_t)currentAnimation->usedByScript, 0);
         blendSeconds =
-            (float)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS;
+            coduo_round_f32((WIDE_FLOAT)slot->blendTime * BG_ANIM_MILLISECONDS_TO_SECONDS);
         trap_XAnimSetCompleteGoalWeight(
             animTree,
             bg_compat_make_xanim(
