@@ -898,13 +898,17 @@ void G_ExplodeMissile(gentity_t *ent)
 
     ent->skipTypeDispatch = 1;
     if (ent->splashDamage != 0) {
-        /* 0x5e6d0..0x5e700: the original adds a (0, 0, 10) offset vector
-         * component-wise, storing an fadd result for all three components;
-         * the + 0.0f adds are kept because they normalize -0.0 to +0.0. */
-        splashEnd[0] = ent->currentOrigin[0] + 0.0f;
-        splashEnd[1] = ent->currentOrigin[1] + 0.0f;
-        splashEnd[2] = ent->currentOrigin[2] + MISSILE_SPLASH_TRACE_OFFSET;
-        trap_Trace(&trace, ent->currentOrigin, vec3_origin, vec3_origin,
+        vec3_t splashOrigin;
+
+        /* Copy the trace start before raising the endpoint. X and Y retain
+         * their bits, including signed zero; only Z has an addition. */
+        splashOrigin[0] = ent->currentOrigin[0];
+        splashOrigin[1] = ent->currentOrigin[1];
+        splashOrigin[2] = ent->currentOrigin[2];
+        splashEnd[0] = splashOrigin[0];
+        splashEnd[1] = splashOrigin[1];
+        splashEnd[2] = splashOrigin[2] + MISSILE_SPLASH_TRACE_OFFSET;
+        trap_Trace(&trace, splashOrigin, vec3_origin, vec3_origin,
                    splashEnd, ent->s.number,
                    MASK_GRENADE_TRACE);
         G_RadiusDamage(trace.endpos, ent, attacker, (float)ent->splashDamage,
