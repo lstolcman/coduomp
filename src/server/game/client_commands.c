@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "compat/crt/atof_compat.h"
+#include "compat/crt/atoi_compat.h"
 #include "compat/crt/scan_compat.h"
 #include "compat/coduo_ctype_compat.h"
 #include "recovered_game.h"
@@ -304,7 +305,7 @@ int ClientNumberFromString(gentity_t *to, const char *text)
         return -1;
     }
 
-    int clientNum = atoi(text);
+    int clientNum = coduo_compat_atoi(text);
     if (clientNum < 0 || clientNum >= level.maxclients) {
         trap_SendServerCommand(
             (uint32_t)(int)(to - g_entities),
@@ -381,12 +382,13 @@ static void game_compat_command_clear_weapon_ammo(gclient_t *client, int weapon)
     client->ps.clips[BG_ClipForWeapon(weapon)] = 0;
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: helper for Cmd_Give_f all-weapons branch. */
-static void game_compat_command_give_all_weapons(gclient_t *client)
+/* NOT_FROM_ORIGINAL_SOURCE: helper for Cmd_Give_f all-weapons branch;
+ * reload the current client between weapon-registration callbacks. */
+static void game_compat_command_give_all_weapons(gentity_t *ent)
 {
     level.spawning = 1;
     for (int weapon = 1; weapon <= BG_GetNumWeapons(); weapon++) {
-        BG_GivePlayerWeapon(&client->ps, weapon);
+        BG_GivePlayerWeapon(&ent->client->ps, weapon);
     }
     level.spawning = 0;
 }
@@ -461,7 +463,7 @@ void Cmd_Give_f(gentity_t *ent)
     }
 
     amountText = ConcatArgs(2);
-    amount = atoi(amountText);
+    amount = coduo_compat_atoi(amountText);
     name = ConcatArgs(1);
     if (name == 0 || name[0] == '\0') {
         return;
@@ -483,7 +485,7 @@ void Cmd_Give_f(gentity_t *ent)
     }
 
     if (all || Q_stricmp(name, "weapons") == 0) {
-        game_compat_command_give_all_weapons(ent->client);
+        game_compat_command_give_all_weapons(ent);
         if (!all) {
             level.spawning = 0;
             return;
@@ -530,7 +532,7 @@ void Cmd_Take_f(gentity_t *ent)
     }
 
     amountText = ConcatArgs(2);
-    amount = atoi(amountText);
+    amount = coduo_compat_atoi(amountText);
     name = ConcatArgs(1);
     if (name == 0 || name[0] == '\0') {
         return;
@@ -800,7 +802,7 @@ qboolean Cmd_Killcam_f(gentity_t *ent)
     int32_t archiveMsec;
 
     trap_Argv(1, arg, sizeof(arg));
-    seconds = atoi(arg);
+    seconds = coduo_compat_atoi(arg);
     if (seconds < 1) {
         seconds = DEFAULT_KILLCAM_SECONDS;
     }
@@ -1272,7 +1274,7 @@ void Cmd_Tell_f(gentity_t *ent)
     }
 
     trap_Argv(1, arg, MAX_STRING_CHARS);
-    targetClientNum = atoi(arg);
+    targetClientNum = coduo_compat_atoi(arg);
     if (targetClientNum < 0 || targetClientNum >= level.maxclients) {
         return;
     }
@@ -1313,9 +1315,9 @@ void Cmd_GameCommand_f(gentity_t *ent)
     }
 
     trap_Argv(1, arg, MAX_STRING_CHARS);
-    clientNum = atoi(arg);
+    clientNum = coduo_compat_atoi(arg);
     trap_Argv(2, arg, MAX_STRING_CHARS);
-    commandIndex = atoi(arg);
+    commandIndex = coduo_compat_atoi(arg);
 
     if (clientNum < 0 || clientNum >= level.maxclients ||
         commandIndex < 0 ||
@@ -1419,7 +1421,7 @@ void Cmd_FlameDamageClient_f(gentity_t *ent)
     }
 
     trap_Argv(1, arg, FLAME_DAMAGE_ARG_BUFFER_SIZE);
-    inflictor = atoi(arg);
+    inflictor = coduo_compat_atoi(arg);
     if (inflictor < 0 || level.maxclients < inflictor) {
         G_Printf("Cmd_FlameDamageClient_f: bad inflictor num\n");
         return;
@@ -1439,12 +1441,12 @@ void Cmd_MenuResponse_f(gentity_t *ent)
 
     if (trap_Argc() == 4) {
         trap_Argv(1, arg, MAX_STRING_CHARS);
-        if (atoi(arg) != trap_Cvar_VariableIntegerValue("sv_serverId")) {
+        if (coduo_compat_atoi(arg) != trap_Cvar_VariableIntegerValue("sv_serverId")) {
             return;
         }
 
         trap_Argv(2, menu, MAX_STRING_CHARS);
-        menuIndex = atoi(menu);
+        menuIndex = coduo_compat_atoi(menu);
         if (menuIndex >= 0 &&
             menuIndex < MENU_RESPONSE_CONFIGSTRING_COUNT) {
             trap_GetConfigstring(
@@ -1559,7 +1561,7 @@ static int game_compat_command_callvote_client_from_arg(const char *command,
             }
         }
     } else {
-        clientNum = atoi(arg);
+        clientNum = coduo_compat_atoi(arg);
         if ((clientNum == 0 && Q_stricmp(arg, "0") != 0) || clientNum < 0 ||
             clientNum >= SCOREBOARD_MAX_CLIENTS ||
             level.clients[clientNum].connectedState != CON_CONNECTED) {
