@@ -31,7 +31,7 @@ typedef struct pm_weapon_angle_state_s {
     float recoilPitchVelocity;              /* +0x38 */
     float recoilYawVelocity;                /* +0x3c */
     int32_t weaponRecoilState;              /* +0x40 */
-    vec2_t baseAngles;                      /* +0x44 */
+    vec3_t baseAngles;                      /* +0x44; complete angle vector, including the unused roll lane */
 } pm_weapon_angle_state_t;
 
 /* View-angle companion record used by the same source subsystem. */
@@ -46,7 +46,7 @@ typedef struct bg_view_angle_state_s {
 
 #if UINTPTR_MAX == UINT32_MAX
 typedef char pm_weapon_angle_state_size[
-    sizeof(pm_weapon_angle_state_t) == 0x4c ? 1 : -1];
+    sizeof(pm_weapon_angle_state_t) == 0x50 ? 1 : -1];
 typedef char pm_weapon_angle_state_recoil_state_offset[
     offsetof(pm_weapon_angle_state_t, weaponRecoilState) == 0x40 ? 1 : -1];
 typedef char pm_weapon_angle_state_base_angles_offset[

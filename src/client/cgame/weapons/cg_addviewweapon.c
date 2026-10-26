@@ -110,6 +110,7 @@ void CG_AddViewWeapon(void)
            sizeof(state.weaponRecoilState));
     state.baseAngles[0] = cg_weaponSwayAngles[0];
     state.baseAngles[1] = cg_weaponSwayAngles[1];
+    state.baseAngles[2] = cg_weaponSwayAngles[2];
 
     BG_CalculateWeaponAngles(&state, angleOffset);
     AnglesToAxisNegRight(offsetAxis, angleOffset);

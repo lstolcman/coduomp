@@ -14,7 +14,7 @@
 #include "game_globals.h"
 #include "g_syscalls.h"
 #include "game_functions.h"
-#include "compat/libm/coduo_libm.h"
+#include "compat/coduo_native_x87.h"
 
 /* Values observed in the original ClientThink_real instruction stream. */
 #define CLIENT_THINK_TIME_CLAMP_MAX 200
@@ -29,9 +29,6 @@
 #define CLIENT_THINK_VIEW_CLAMP_YAW_DELTA 70.0f
 #define CLIENT_THINK_VEHICLE_KNOCKBACK_FLAG 0x00000200u
 #define CLIENT_THINK_BUTTON_USE PM_BUTTON_ACTIVATE
-#define CLIENT_THINK_SHELLSHOCK_SWAY_BLEND_MS 3000
-#define CLIENT_THINK_SHELLSHOCK_SWAY_BLEND_LAST_MS \
-    (CLIENT_THINK_SHELLSHOCK_SWAY_BLEND_MS - 1)
 
 /* ------------------------------------------------------------------ */
 /*  0x40c91  ClientThink_real                                         */
@@ -216,41 +213,6 @@ void ClientThink_real(gentity_t *ent, usercmd_t *command)
         muzzleAngles[0] = client->ps.viewAngles[0] + viewKickAngles[0];
         muzzleAngles[1] = client->ps.viewAngles[1] + viewKickAngles[1];
         muzzleAngles[2] = client->ps.viewAngles[2] + viewKickAngles[2];
-        {
-            const weaponInfo_t *weaponInfo =
-                (const weaponInfo_t *)BG_GetInfoForWeapon(client->ps.currentWeapon);
-            int shellshockTimeRemaining = coduo_int32_from_bits(
-                (uint32_t)client->ps.motionState.shellshock.time +
-                (uint32_t)client->ps.motionState.shellshock.duration -
-                (uint32_t)level.time);
-            float shellshockSwayScale;
-
-            if (shellshockTimeRemaining > 0) {
-                float shellshockFraction = 1.0f;
-
-                if (shellshockTimeRemaining <=
-                    CLIENT_THINK_SHELLSHOCK_SWAY_BLEND_LAST_MS) {
-                    /* The binary divides by 3000.0f (fdivp at 0x412bc), not
-                     * a multiply by the reciprocal, and smooths as
-                     * (3 - (f + f)) * f * f (0x412c4..0x412e4). */
-                    shellshockFraction =
-                        (float)shellshockTimeRemaining /
-                        (float)CLIENT_THINK_SHELLSHOCK_SWAY_BLEND_MS;
-                    shellshockFraction =
-                        (3.0f - (shellshockFraction + shellshockFraction)) *
-                        shellshockFraction * shellshockFraction;
-                }
-
-                shellshockSwayScale =
-                    1.0f + (weaponInfo->swayShellShockScale - 1.0f) *
-                               shellshockFraction;
-            } else {
-                shellshockSwayScale = 1.0f;
-            }
-
-            /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
-            (void)shellshockSwayScale;
-        }
         BG_CalculateWeaponPosition_Sway(&client->ps,
                                         client->weaponPreviousViewAngles,
                                         client->weaponSwayOffsets,
@@ -260,7 +222,7 @@ void ClientThink_real(gentity_t *ent, usercmd_t *command)
             weaponContext.ps = &client->ps;
             weaponContext.speed = clientSpeed;
             weaponContext.frameTime =
-                (float)((long double)msec * (long double)0.001f);
+                (float)((WIDE_FLOAT)msec * 0.001f);
             weaponContext.moveOffset[0] = client->weaponMoveOffset[0];
             weaponContext.moveOffset[1] = client->weaponMoveOffset[1];
             weaponContext.moveOffset[2] = client->weaponMoveOffset[2];
@@ -277,6 +239,7 @@ void ClientThink_real(gentity_t *ent, usercmd_t *command)
             weaponContext.weaponRecoilState = client->weaponRecoilState;
             weaponContext.baseAngles[0] = client->weaponSwayAngles[0];
             weaponContext.baseAngles[1] = client->weaponSwayAngles[1];
+            weaponContext.baseAngles[2] = client->weaponSwayAngles[2];
 
             /* 0x414c6 passes the same stack vector that received the view-kick
              * output; the weapon-angle call overwrites it in place. */
@@ -338,14 +301,11 @@ void ClientThink_real(gentity_t *ent, usercmd_t *command)
                     away[2] = 0.0f;
                     velocityDir[2] = 0.0f;
 
-                    /* The binary compares the full three-term dot (the z term
-                     * is the zeroed products) straight from the x87 register
-                     * against 0.8f (0x41723..0x41753); a float local would add
-                     * a rounding it does not perform. */
+                    /* The Windows binary compares the horizontal dot directly
+                     * from the live x87 sum against 0.8f. Neither the products
+                     * nor the sum pass through a float store. */
                     if (playerSpeed < 1.0f ||
-                        away[0] * velocityDir[0] + away[1] * velocityDir[1] +
-                                away[2] * velocityDir[2] >
-                            0.8f) {
+                        (WIDE_FLOAT)away[0] * velocityDir[0] + (WIDE_FLOAT)away[1] * velocityDir[1] > 0.8f) {
                         vehicleUnlinkedForPmove = hitEnt;
                         trap_UnlinkEntity(hitEnt);
 
@@ -353,25 +313,23 @@ void ClientThink_real(gentity_t *ent, usercmd_t *command)
                             playerSpeed < 1.0f) {
                             vehicle_state_t *vehicleState =
                                 (vehicle_state_t *)hitEnt->vehicle;
-                            float vehicleSpeed =
-                                (float)CoduoLibm_Sqrt((double)(vehicleState->velocity[0] *
-                                                     vehicleState->velocity[0] +
-                                                     vehicleState->velocity[1] *
-                                                     vehicleState->velocity[1] +
-                                                     vehicleState->velocity[2] *
-                                                     vehicleState->velocity[2]));
+                            /* Both speed tests retain the sum and FSQRT result
+                             * until comparison; there is no intervening float
+                             * or double store. VectorNormalize2's playerSpeed,
+                             * in contrast, has already rounded in its callee. */
+                            WIDE_FLOAT vehicleSpeed = coduo_x87_sqrtl(
+                                (WIDE_FLOAT)vehicleState->velocity[0] * vehicleState->velocity[0] +
+                                (WIDE_FLOAT)vehicleState->velocity[1] * vehicleState->velocity[1] +
+                                (WIDE_FLOAT)vehicleState->velocity[2] * vehicleState->velocity[2]);
 
                             if (vehicleSpeed > 1.0f) {
-                                float knockbackSpeed;
+                                WIDE_FLOAT knockbackSpeed;
 
                                 VEH_PlayerCollision(hitEnt, ent);
-                                knockbackSpeed =
-                                    (float)CoduoLibm_Sqrt((double)(client->ps.velocity[0] *
-                                                         client->ps.velocity[0] +
-                                                         client->ps.velocity[1] *
-                                                         client->ps.velocity[1] +
-                                                         client->ps.velocity[2] *
-                                                         client->ps.velocity[2]));
+                                knockbackSpeed = coduo_x87_sqrtl(
+                                    (WIDE_FLOAT)client->ps.velocity[0] * client->ps.velocity[0] +
+                                    (WIDE_FLOAT)client->ps.velocity[1] * client->ps.velocity[1] +
+                                    (WIDE_FLOAT)client->ps.velocity[2] * client->ps.velocity[2]);
                                 if (knockbackSpeed <
                                     CLIENT_THINK_VEHICLE_KNOCKBACK_SPEED) {
                                     VectorNormalize(client->ps.velocity);
