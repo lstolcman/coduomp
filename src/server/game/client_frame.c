@@ -255,25 +255,22 @@ static qboolean game_compat_stuck_capsule_box_overlap(const gentity_t *capsule,
                                        float deltaY)
 {
     float normal[2];
-    float adjustedX;
+    WIDE_FLOAT adjustedX;
     float adjustedY;
 
     normal[0] = deltaX;
     normal[1] = deltaY;
     VectorNormalize2D(normal);
 
-    /* The binary computes maxs[0] * -1.0f * normal[k] + delta (0x42863,
-     * 0x4287f); value-identical to delta - maxs[0]*normal[k], form kept for
-     * instruction-stream parity. */
-    /* Stock 0x42863..0x42879: (maxs[0]*-1.0)*normal[k] + delta kept 80-bit, one
-     * store -> shim. */
-    adjustedX = (float)(((long double)capsule->maxs[0] * -1.0L) *
-                        (long double)normal[0] + (long double)deltaX);
-    adjustedY = (float)(((long double)capsule->maxs[0] * -1.0L) *
-                        (long double)normal[1] + (long double)deltaY);
+    /* Scale the normalized direction by the negative capsule radius, then
+     * add the stored origin delta. Keep that operation order. */
+    /* X remains live through its absolute-value comparison; Y is stored as
+     * float before either comparison. The asymmetry is intentional. */
+    adjustedX = ((WIDE_FLOAT)capsule->maxs[0] * -1.0f) * normal[0] + deltaX;
+    adjustedY = (float)(((WIDE_FLOAT)capsule->maxs[0] * -1.0f) * normal[1] + deltaY);
 
     /* Stock rejects only when both ordered greater-than tests succeed. */
-    return !(game_compat_abs_float(adjustedX) > box->maxs[0]) ||
+    return !((adjustedX < 0.0f ? -adjustedX : adjustedX) > box->maxs[0]) ||
            !(game_compat_abs_float(adjustedY) > box->maxs[1]);
 }
 
@@ -282,25 +279,23 @@ static qboolean game_compat_stuck_shapes_overlap(const gentity_t *ent, const gen
 {
     qboolean entCapsule = game_compat_stuck_entity_uses_capsule(ent);
     qboolean otherCapsule = game_compat_stuck_entity_uses_capsule(other);
-    float dx;
-    float dy;
+    WIDE_FLOAT dx;
+    WIDE_FLOAT dy;
 
     if (!entCapsule && !otherCapsule) {
         return 1;
     }
 
-    dx = other->currentOrigin[0] - ent->currentOrigin[0];
-    dy = other->currentOrigin[1] - ent->currentOrigin[1];
+    dx = (WIDE_FLOAT)other->currentOrigin[0] - ent->currentOrigin[0];
+    dy = (WIDE_FLOAT)other->currentOrigin[1] - ent->currentOrigin[1];
 
     if (entCapsule && otherCapsule) {
-        float radius = ent->maxs[0] + other->maxs[0];
+        WIDE_FLOAT radius = (WIDE_FLOAT)other->maxs[0] + ent->maxs[0];
 
-        /* dx*dx+dy*dy vs radius*radius kept 80-bit, full-width compare -> shim */
-        long double distanceSquared =
-            (long double)dx * (long double)dx +
-            (long double)dy * (long double)dy;
-        long double radiusSquared =
-            (long double)radius * (long double)radius;
+        /* Capsule deltas and the radius sum remain wide through their
+         * squares and comparison. Only capsule/box arguments round to float. */
+        WIDE_FLOAT distanceSquared = dx * dx + dy * dy;
+        WIDE_FLOAT radiusSquared = radius * radius;
 
         return !(distanceSquared > radiusSquared);
     }
@@ -313,17 +308,14 @@ static qboolean game_compat_stuck_shapes_overlap(const gentity_t *ent, const gen
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local factoring for StuckInClient speed selection. */
-static float game_compat_stuck_client_move_speed(gclient_t *client)
+static WIDE_FLOAT game_compat_stuck_client_move_speed(gclient_t *client)
 {
-    /* The binary tests (float)CoduoLibm_Sqrt((double)(vx*vx + vy*vy)) > 0.0f
-     * (0x42a34..0x42a6a): the planar speed rounds to double at the sqrt call
-     * boundary and to float at the result store. */
-    long double speedSquared =
-        (long double)client->ps.velocity[0] *
-            (long double)client->ps.velocity[0] +
-        (long double)client->ps.velocity[1] *
-            (long double)client->ps.velocity[1];
-    float speed2D = (float)CoduoLibm_Sqrt((double)speedSquared);
+    /* FSQRT consumes the live sum and its result is compared directly with
+     * zero. The selected integer speed remains wide until the caller's store. */
+    WIDE_FLOAT speedSquared =
+        (WIDE_FLOAT)client->ps.velocity[0] * client->ps.velocity[0] +
+        (WIDE_FLOAT)client->ps.velocity[1] * client->ps.velocity[1];
+    WIDE_FLOAT speed2D = coduo_x87_sqrtl(speedSquared);
 
     if (speed2D > 0.0f) {
         return client->ps.speed;
@@ -333,7 +325,7 @@ static float game_compat_stuck_client_move_speed(gclient_t *client)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local factoring for StuckInClient velocity/pmTime writes. */
-static void game_compat_stuck_apply_push(gclient_t *client, const float *dir, float speed)
+static void game_compat_stuck_apply_push(gclient_t *client, const float *dir, WIDE_FLOAT speed)
 {
     client->ps.velocity[0] = dir[0] * speed;
     client->ps.velocity[1] = dir[1] * speed;
@@ -1077,22 +1069,20 @@ qboolean StuckInClient(gentity_t *ent)
         }
 
         float dir[2];
-        float otherSpeed;
+        WIDE_FLOAT otherSpeed;
         float entSpeed;
 
-        /* The binary rounds each origin delta to float (fstp at
-         * 0x429ab/0x429c0) before adding the extended-precision jitter. */
+        /* Each origin delta rounds to float before adding the wide jitter. */
         dir[0] = other->currentOrigin[0] - ent->currentOrigin[0];
         dir[1] = other->currentOrigin[1] - ent->currentOrigin[1];
-        /* Stock 0x429ab rounds dir[k] to float before adding a fresh signed
-         * random jitter for each component. */
-        dir[0] = (float)((long double)dir[0] +
-                         (long double)coduo_server_rand_signed_unit());
-        dir[1] = (float)((long double)dir[1] +
-                         (long double)coduo_server_rand_signed_unit());
+        /* Consume a fresh signed random jitter for each stored component. */
+        dir[0] = (float)((WIDE_FLOAT)dir[0] + coduo_server_rand_signed_unit());
+        dir[1] = (float)((WIDE_FLOAT)dir[1] + coduo_server_rand_signed_unit());
         VectorNormalize2D(dir);
 
         otherSpeed = game_compat_stuck_client_move_speed(otherClient);
+        /* Only this player's selected integer speed rounds to float before
+         * the fallback test and reciprocal pushes. */
         entSpeed = game_compat_stuck_client_move_speed(client);
         if (otherSpeed < STUCK_SPEED_EPSILON &&
             entSpeed < STUCK_SPEED_EPSILON) {
