@@ -7219,7 +7219,6 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
     vehicle_state_t *vehicleState = (vehicle_state_t *)ent->vehicle;
     const vehicleInfo_t *vehicleInfo =
         game_compat_veh_get_vehicle_info(vehicleState->typeIndex);
-    const float dismountSideOffset = game_compat_veh_dismount_side_offset(vehicleInfo);
     const vec3_t traceMins = {
         VEH_SOLID_TRACE_MINS_XY,
         VEH_SOLID_TRACE_MINS_XY,
@@ -7300,23 +7299,19 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
         int bump = 0;
         uint32_t ignoredContents = 0;
 
-        /* 0x82b92..0x82dd5: the original accumulates sweepDelta with one
-         * float store per term -- the (stepSize + 2.0f) axis term first
-         * (before the offsets), then one += per axis row -- and the
-         * stepSize term is NOT grouped with offset[2]. */
-        sweepDelta[0] = 0.0f;
-        sweepDelta[1] = 0.0f;
-        sweepDelta[2] = 0.0f;
-        sweepDelta[0] += (vehicleInfo->stepSize + 2.0f) * axis[2][0];
-        sweepDelta[1] += (vehicleInfo->stepSize + 2.0f) * axis[2][1];
-        sweepDelta[2] += (vehicleInfo->stepSize + 2.0f) * axis[2][2];
+        /* Round step height and side extent before scaling. Each product
+         * stays wide through its addition, then the accumulated component
+         * rounds to float. The step term precedes the three offset rows. */
+        const float stepHeight = coduo_round_f32((WIDE_FLOAT)vehicleInfo->stepSize + 2.0f);
+        for (int component = 0; component < 3; component++) {
+            volatile WIDE_FLOAT product = (WIDE_FLOAT)stepHeight * axis[2][component];
+            sweepDelta[component] = coduo_round_f32(product + 0.0f);
+        }
 
-        offset[0] = (dismountSideOffset - VEH_SOLID_STANDOFF) *
-                    vehCheckSolidOffsets[sweep][0];
-        offset[1] = (dismountSideOffset - VEH_SOLID_STANDOFF) *
-                    vehCheckSolidOffsets[sweep][1];
-        offset[2] = (dismountSideOffset - VEH_SOLID_STANDOFF) *
-                    vehCheckSolidOffsets[sweep][2];
+        const float sideExtent = coduo_round_f32((WIDE_FLOAT)vehicleInfo->collisionBoundsSource[3] - traceMaxs[0]);
+        for (int component = 0; component < 3; component++) {
+            offset[component] = coduo_round_f32((WIDE_FLOAT)sideExtent * vehCheckSolidOffsets[sweep][component]);
+        }
 
         if (vehCheckSolidOffsets[sweep][0] > 0.0f) {
             offset[0] = vehicleInfo->dismountForwardOffset;
@@ -7324,33 +7319,32 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
             offset[0] = -vehicleInfo->dismountBackOffset;
         }
 
-        sweepDelta[0] += axis[0][0] * offset[0];
-        sweepDelta[1] += axis[0][1] * offset[0];
-        sweepDelta[2] += axis[0][2] * offset[0];
-        sweepDelta[0] += axis[1][0] * offset[1];
-        sweepDelta[1] += axis[1][1] * offset[1];
-        sweepDelta[2] += axis[1][2] * offset[1];
-        sweepDelta[0] += axis[2][0] * offset[2];
-        sweepDelta[1] += axis[2][1] * offset[2];
-        sweepDelta[2] += axis[2][2] * offset[2];
+        for (int row = 0; row < 3; row++) {
+            for (int component = 0; component < 3; component++) {
+                volatile WIDE_FLOAT product = (WIDE_FLOAT)axis[row][component] * offset[row];
+                sweepDelta[component] = coduo_round_f32(product + sweepDelta[component]);
+            }
+        }
 
         start[0] = vehicleState->origin[0];
         start[1] = vehicleState->origin[1];
         start[2] = vehicleState->origin[2] + vehicleInfo->suspensionTravel;
 
-        do {
+        while (sweepFraction < 1.0f) {
             vec3_t end;
             int traceMask;
 
-            if (sweepFraction >= 1.0f ||
-                bump >= VEH_SOLID_MAX_SLIDE_BUMPS) {
+            if (bump++ >= VEH_SOLID_MAX_SLIDE_BUMPS) {
                 break;
             }
-            bump++;
 
-            end[0] = start[0] + (1.0f - sweepFraction) * sweepDelta[0];
-            end[1] = start[1] + (1.0f - sweepFraction) * sweepDelta[1];
-            end[2] = start[2] + (1.0f - sweepFraction) * sweepDelta[2];
+            /* The remaining fraction is stored once before the products;
+             * each endpoint retains its product through the start addition. */
+            const float remainingFraction = coduo_round_f32(1.0f - (WIDE_FLOAT)sweepFraction);
+            for (int component = 0; component < 3; component++) {
+                volatile WIDE_FLOAT product = (WIDE_FLOAT)remainingFraction * sweepDelta[component];
+                end[component] = product + start[component];
+            }
             traceMask =
                 (int)((ent->clipmask | VEH_SOLID_BODY_CONTENTS) &
                       ~ignoredContents) |
@@ -7359,7 +7353,7 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
                        ent->s.number, traceMask);
 
             if (trace.fraction < 1.0f &&
-                trace.entityNum < (uint16_t)level.maxclients) {
+                trace.entityNum < level.maxclients) {
                 VEH_PlayerCollision(ent, &g_entities[trace.entityNum]);
                 ignoredContents = VEH_SOLID_IGNORED_BODY_MASK;
                 continue;
@@ -7390,7 +7384,8 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
                 trace.fraction < 1.0f &&
                 vehicleState->velocity[2] > VEH_SOLID_MIN_FALL_SPEED &&
                 trace.normal[2] >= VEH_SOLID_GROUND_MIN_Z) {
-                sweepFraction += (1.0f - sweepFraction) * trace.fraction;
+                volatile WIDE_FLOAT advance = (WIDE_FLOAT)remainingFraction * trace.fraction;
+                sweepFraction = coduo_round_f32(advance + sweepFraction);
                 start[0] = trace.endpos[0] + trace.normal[0];
                 start[1] = trace.endpos[1] + trace.normal[1];
                 start[2] = trace.endpos[2] + trace.normal[2];
@@ -7405,13 +7400,13 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
             if ((uint32_t)trace.entityNum ==
                 (uint32_t)vehicleState->cachedCollisionEntityNum) {
                 gentity_t *cachedEnt = &g_entities[trace.entityNum];
-                vec3_t cachedDelta = {
-                    cachedEnt->currentOrigin[0] - vehicleState->origin[0],
-                    cachedEnt->currentOrigin[1] - vehicleState->origin[1],
-                    cachedEnt->currentOrigin[2] - vehicleState->origin[2]
-                };
+                /* This replaces the displacement used by subsequent bumps,
+                 * including when the cached-entity dot is positive. */
+                sweepDelta[0] = cachedEnt->currentOrigin[0] - vehicleState->origin[0];
+                sweepDelta[1] = cachedEnt->currentOrigin[1] - vehicleState->origin[1];
+                sweepDelta[2] = cachedEnt->currentOrigin[2] - vehicleState->origin[2];
 
-                if (game_compat_veh_dot3(cachedDelta, vehicleState->velocity) <= 0.0f) {
+                if (game_compat_veh_dot3(sweepDelta, vehicleState->velocity) <= 0.0f) {
                     movingAwayFromCachedEnt = qtrue;
                     break;
                 }
@@ -7426,7 +7421,11 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
                 bestSweep = sweep;
                 hitFound = qtrue;
             }
-        } while (trace.fraction != 0.0f);
+            /* Player and ground retries bypass this zero-fraction stop. */
+            if (trace.fraction == 0.0f) {
+                break;
+            }
+        }
     }
 
     if (hitFound) {
@@ -7456,7 +7455,10 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
         vehicleState->collisionNormal[1] = trace.normal[1];
         vehicleState->collisionNormal[2] = trace.normal[2];
 
-        collisionInputScale = fabsf(vehicleState->acceleration[1]) / 100.0f;
+        /* The magnitude quotient rounds to double, then to float. Its
+         * positive divisor makes the original lower clamp redundant. */
+        volatile double collisionFraction = fabsl((WIDE_FLOAT)vehicleState->acceleration[1]) / 100.0;
+        collisionInputScale = collisionFraction;
         /* 0x834d6: sqrt takes the dot rounded to double, result to float. */
         impactSpeedScale = game_compat_veh_length3(vehicleState->velocity);
         if (game_compat_veh_float_is_non_zero_or_nan(impactSpeedScale)) {
@@ -7464,24 +7466,20 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
              * chain; only the quotient is rounded. */
             float speedFraction =
                 impactSpeedScale /
-                (vehicleInfo->maxSpeed * VEH_SOLID_SPEED_SCALE_DENOM);
+                ((WIDE_FLOAT)vehicleInfo->maxSpeed * VEH_SOLID_SPEED_SCALE_DENOM);
 
             speedFraction = game_compat_veh_clamp_float(speedFraction, 0.0f, 1.0f);
             VectorNormalize2(vehicleState->velocity, velocityDir);
-            /* 0x8361a..0x83697: the dot is never rounded on its own -- it
-             * feeds the compare and the negate-multiply in registers, and
-             * the sign test is on the dot itself (dot >= 0 yields the
-             * speedFraction * 0.0f product). */
-            if (game_compat_veh_dot3(velocityDir, trace.normal) < 0.0f) {
-                impactFromNormal =
-                    -game_compat_veh_dot3(velocityDir, trace.normal) * speedFraction;
-            } else {
-                impactFromNormal = speedFraction * 0.0f;
-            }
-            /* 0x836a9..0x836e4: min against 0.5f; the sum is compared in
-             * registers and rounded only on the store. */
-            if (collisionInputScale + impactFromNormal < 0.5f) {
-                collisionInputScale = collisionInputScale + impactFromNormal;
+            /* The negated dot rounds to float before the positive-value
+             * selection; unordered values select zero. The scaled impact
+             * and its sum each have their own float boundary. */
+            const float opposingNormal = coduo_round_f32(-game_compat_veh_dot3(velocityDir, trace.normal));
+            impactFromNormal = coduo_round_f32((WIDE_FLOAT)(opposingNormal > 0.0f ? opposingNormal : 0.0f) * speedFraction);
+            /* Compare the stored sum against 0.5f, including the unordered
+             * path which selects the upper limit. */
+            const float combinedInput = coduo_round_f32((WIDE_FLOAT)impactFromNormal + collisionInputScale);
+            if (combinedInput < 0.5f) {
+                collisionInputScale = combinedInput;
             } else {
                 collisionInputScale = 0.5f;
             }
