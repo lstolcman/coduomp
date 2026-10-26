@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "compat/crt/atof_compat.h"
+#include "compat/crt/scan_compat.h"
 #include "compat/coduo_ctype_compat.h"
 #include "recovered_game.h"
 #include "game_globals.h"
@@ -25,6 +26,7 @@
 #define COMMAND_SEND_UNRELIABLE 0
 #define COMMAND_SEND_RELIABLE 1
 #define FOG_CONFIGSTRING 13
+#define FOG_VALUE_COUNT 7
 #define COLOR_ESCAPE_BYTE 27
 #define GIVE_ALL_AMMO_AMOUNT 998
 #define ITEM_AUTO_TOUCH_ENABLED 1
@@ -160,16 +162,15 @@ void DeathmatchScoreboardMessage(gentity_t *ent)
     }
 
     for (index = 0; index < count; index++) {
-        int clientNum = scoreboardLevel->sortedClients[index];
-        gclient_t *client = &level.clients[clientNum];
+        gclient_t *client = &level.clients[scoreboardLevel->sortedClients[index]];
         int ping = client->connectedState == SCOREBOARD_CLIENT_CONNECTING
                        ? -1
-                       : trap_GetClientPing(clientNum);
+                       : trap_GetClientPing(scoreboardLevel->sortedClients[index]);
         size_t entryLength;
 
         Com_sprintf(entry, MAX_STRING_CHARS,
                     " %i %i %i %i %i",
-                    clientNum, client->score, ping, client->deaths,
+                    scoreboardLevel->sortedClients[index], client->score, ping, client->deaths,
                     client->statusIcon);
 
         entryLength = strlen(entry);
@@ -327,19 +328,20 @@ int ClientNumberFromString(gentity_t *to, const char *text)
 /* VERIFIED_DECOMPILER(0x4a59a, 5a59a_G_setfog.c, VERIFY-CLIENT-COMMANDS-CHEATS-FOG-2026-06-17): DATAFLOW_VERIFIED - configstring 13, FLT_MAX resets, seven-float parse, third-value gate, and opaque distance stores checked. */
 void G_setfog(const char *fog)
 {
-    float values[7];
+    float values[FOG_VALUE_COUNT];
 
     trap_SetConfigstring(FOG_CONFIGSTRING, fog);
 
     level.fogOpaqueDist = FLT_MAX;
     level.fogOpaqueDistSq = FLT_MAX;
 
-    if (sscanf(fog, "%f %f %f %f %f %f %f",
-               &values[0], &values[1], &values[2], &values[3], &values[4],
-               &values[5], &values[6]) == 7 &&
+    if (coduo_crt_scan_floats(fog, values, FOG_VALUE_COUNT) == FOG_VALUE_COUNT &&
         values[2] >= 1.0f) {
-        level.fogOpaqueDist = (values[1] - values[0]) + values[0];
-        level.fogOpaqueDistSq = level.fogOpaqueDist * level.fogOpaqueDist;
+        /* Retain the distance through subtraction and addition. The square
+         * multiplies that live value by its separately rounded float copy. */
+        const WIDE_FLOAT distance = ((WIDE_FLOAT)values[1] - values[0]) + values[0];
+        level.fogOpaqueDist = (float)coduo_round_f32(distance);
+        level.fogOpaqueDistSq = (float)(distance * (WIDE_FLOAT)level.fogOpaqueDist);
     }
 }
 

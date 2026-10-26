@@ -1,4 +1,5 @@
 #include "compat/crt/msvc_compat.h"
+#include "compat/crt/scan_compat.h"
 #include "compat/coduo_int32_bits.h"
 
 #include <string.h>
@@ -647,6 +648,20 @@ int coduo_crt_scan_vec3(const char *text, float *output)
 {
     int count = 0;
     while (count != CODUO_CRT_SCAN_VECTOR_LANES) {
+        int result = coduo_crt_scan_float_cursor(&text, &output[count]);
+        if (result != CODUO_CRT_SCAN_CONVERTED)
+            return count == 0 ? result : count;
+        ++count;
+    }
+    return count;
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: repeat the same conversion and assignment-count
+ * rules for longer fixed float sequences, including the seven-value fog format. */
+int coduo_crt_scan_floats(const char *text, float *output, int valueCount)
+{
+    int count = 0;
+    while (count < valueCount) {
         int result = coduo_crt_scan_float_cursor(&text, &output[count]);
         if (result != CODUO_CRT_SCAN_CONVERTED)
             return count == 0 ? result : count;
