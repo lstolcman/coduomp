@@ -1372,7 +1372,7 @@ static void game_compat_veh_path_clear_vector(vec3_t value)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-static float game_compat_veh_path_position_speed_at_node(const vehicle_path_position_t *position)
+static float game_compat_veh_path_position_speed_at_node(const vehicle_path_position_t *position, WIDE_FLOAT fraction)
 {
     const vehicle_path_node_t *node = game_compat_veh_path_node_at(position->nodeIndex);
 
@@ -1380,14 +1380,14 @@ static float game_compat_veh_path_position_speed_at_node(const vehicle_path_posi
         return node->speed;
     }
 
-    return node->speed +
-           (game_compat_veh_path_node_at(node->nextNodeIndex)->speed - node->speed) *
-           position->fraction;
+    const volatile WIDE_FLOAT offset =
+        ((WIDE_FLOAT)game_compat_veh_path_node_at(node->nextNodeIndex)->speed - node->speed) * fraction;
+    return (float)(offset + node->speed);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
 static float game_compat_veh_path_position_look_ahead_at_node(
-    const vehicle_path_position_t *position)
+    const vehicle_path_position_t *position, WIDE_FLOAT fraction)
 {
     const vehicle_path_node_t *node = game_compat_veh_path_node_at(position->nodeIndex);
 
@@ -1395,9 +1395,9 @@ static float game_compat_veh_path_position_look_ahead_at_node(
         return node->lookAhead;
     }
 
-    return node->lookAhead +
-           (game_compat_veh_path_node_at(node->nextNodeIndex)->lookAhead - node->lookAhead) *
-           position->fraction;
+    const volatile WIDE_FLOAT offset =
+        ((WIDE_FLOAT)game_compat_veh_path_node_at(node->nextNodeIndex)->lookAhead - node->lookAhead) * fraction;
+    return (float)(offset + node->lookAhead);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
@@ -8590,13 +8590,13 @@ void VP_GetNodeAngles(int16_t nodeIndex, vec3_t outAngles)
 /* VERIFIED_DECOMPILER(0x96cc2, a6cc2_FUN_000a6cc2.c, VERIFY-VEHICLE-PATH-TAIL-2026-06-17): DATAFLOW_VERIFIED */
 float VP_GetPathPositionSpeed(const vehicle_path_position_t *position)
 {
-    return game_compat_veh_path_position_speed_at_node(position);
+    return game_compat_veh_path_position_speed_at_node(position, position->fraction);
 }
 
 /* VERIFIED_DECOMPILER(0x96d3e, a6d3e_FUN_000a6d3e.c, VERIFY-VEHICLE-PATH-TAIL-2026-06-17): DATAFLOW_VERIFIED */
 float VP_GetPathPositionLookAhead(const vehicle_path_position_t *position)
 {
-    return game_compat_veh_path_position_look_ahead_at_node(position);
+    return game_compat_veh_path_position_look_ahead_at_node(position, position->fraction);
 }
 
 /* VERIFIED_DECOMPILER(0x96dbc, a6dbc_FUN_000a6dbc.c, VERIFY-VEHICLE-PATH-TAIL-2026-06-17): DATAFLOW_VERIFIED */
@@ -8661,14 +8661,13 @@ void VP_CalcPathPosition(const vehicle_path_position_t *position,
                          vec3_t outOrigin)
 {
     const vehicle_path_node_t *node = game_compat_veh_path_node_at(position->nodeIndex);
-    /* 0x970ac..0x970c4: lookAhead*speed is spilled to its own float slot
-     * before the fraction*segmentLength term is added. */
-    const float lookAheadDistance = position->lookAhead * position->speed;
-    /* lookAheadDistance is a single mul stored to a float (native); distance =
-     * fraction*segmentLength + lookAheadDistance is mul+add kept 80-bit until the
-     * store (reading the stored lookAheadDistance) -> shim. */
-    float distance =
-        position->fraction * node->segmentLength + lookAheadDistance;
+    /* Keep both products wide and separate from the sum; neither product
+     * has an intermediate binary32 store. */
+    const volatile WIDE_FLOAT segmentDistance = (WIDE_FLOAT)position->fraction * node->segmentLength;
+    const volatile WIDE_FLOAT lookAheadDistance = (WIDE_FLOAT)position->lookAhead * position->speed;
+    /* The same live distance survives the segment walk and all three
+     * direction products, until each final origin store. */
+    WIDE_FLOAT distance = segmentDistance + lookAheadDistance;
 
     for (int16_t count = 0; count < vehPathNodeCount; count++) {
         if (node->nextNodeIndex < 0 || node->segmentLength == 0.0f) {
@@ -8684,10 +8683,11 @@ void VP_CalcPathPosition(const vehicle_path_position_t *position,
         node = game_compat_veh_path_node_at(node->nextNodeIndex);
     }
 
-    /* origin[i] + direction[i]*distance: mul then add, 80-bit, one store */
-    outOrigin[0] = node->origin[0] + node->direction[0] * distance;
-    outOrigin[1] = node->origin[1] + node->direction[1] * distance;
-    outOrigin[2] = node->origin[2] + node->direction[2] * distance;
+    /* Preserve each separate wide multiply/add and final binary32 store. */
+    for (int axis = 0; axis < 3; axis++) {
+        const volatile WIDE_FLOAT offset = distance * node->direction[axis];
+        outOrigin[axis] = offset + node->origin[axis];
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -8697,19 +8697,19 @@ void VP_CalcPathPosition(const vehicle_path_position_t *position,
 /* VERIFIED_DECOMPILER(0x97194, a7194_FUN_000a7194.c, VERIFY-VEHICLE-PATH-TAIL-2026-06-17): DATAFLOW_VERIFIED */
 qboolean VP_ProjectPathPosition(vehicle_path_position_t *position,
                                 const vec3_t projectDirection,
-                                int stopNodeIndex)
+                                int16_t stopNodeIndex)
 {
     int16_t nodeIndex = position->nodeIndex;
     const vehicle_path_node_t *node = game_compat_veh_path_node_at(nodeIndex);
-    float fraction = position->fraction;
+    WIDE_FLOAT fraction = position->fraction;
     qboolean passedStopNode = qfalse;
 
     for (int16_t count = 0; count < vehPathNodeCount; count++) {
         const vehicle_path_node_t *nextNode;
-        vec3_t enterDelta;
-        vec3_t exitDelta;
-        float enterDistance;
-        float exitDistance;
+        wide_vec3_t enterDelta;
+        wide_vec3_t exitDelta;
+        volatile float enterDistance;
+        volatile float exitDistance;
 
         node = game_compat_veh_path_node_at(nodeIndex);
         if (nodeIndex == stopNodeIndex) {
@@ -8722,23 +8722,26 @@ qboolean VP_ProjectPathPosition(vehicle_path_position_t *position,
         }
 
         nextNode = game_compat_veh_path_node_at(node->nextNodeIndex);
-        /* 0x9726c..0x97307: the origin deltas are spilled to float slots
-         * before each dot, and the dots accumulate components 0,1,2 in
-         * that order. */
-        enterDelta[0] = position->origin[0] - node->origin[0];
-        enterDelta[1] = position->origin[1] - node->origin[1];
-        enterDelta[2] = position->origin[2] - node->origin[2];
-        /* deltas are single subs stored to floats (native); each dot is a
-         * 3-mul/2-add chain kept 80-bit until its store -> shim. */
-        enterDistance = enterDelta[0] * projectDirection[0] +
-                        enterDelta[1] * projectDirection[1] +
-                        enterDelta[2] * projectDirection[2];
-        exitDelta[0] = nextNode->origin[0] - position->origin[0];
-        exitDelta[1] = nextNode->origin[1] - position->origin[1];
-        exitDelta[2] = nextNode->origin[2] - position->origin[2];
-        exitDistance = exitDelta[0] * projectDirection[0] +
-                       exitDelta[1] * projectDirection[1] +
-                       exitDelta[2] * projectDirection[2];
+        /* Origin deltas remain wide; each projection sums Z, then Y, then X
+         * before its binary32 store. */
+        enterDelta[0] = (WIDE_FLOAT)position->origin[0] - node->origin[0];
+        enterDelta[1] = (WIDE_FLOAT)position->origin[1] - node->origin[1];
+        enterDelta[2] = (WIDE_FLOAT)position->origin[2] - node->origin[2];
+        /* Separate products prevent contraction from changing the two-add
+         * projection graph. Only the completed projection narrows to float. */
+        const volatile WIDE_FLOAT enterZ = enterDelta[2] * projectDirection[2];
+        const volatile WIDE_FLOAT enterY = enterDelta[1] * projectDirection[1];
+        const WIDE_FLOAT enterZY = enterZ + enterY;
+        const volatile WIDE_FLOAT enterX = enterDelta[0] * projectDirection[0];
+        enterDistance = (enterZY + enterX);
+        exitDelta[0] = (WIDE_FLOAT)nextNode->origin[0] - position->origin[0];
+        exitDelta[1] = (WIDE_FLOAT)nextNode->origin[1] - position->origin[1];
+        exitDelta[2] = (WIDE_FLOAT)nextNode->origin[2] - position->origin[2];
+        const volatile WIDE_FLOAT exitZ = exitDelta[2] * projectDirection[2];
+        const volatile WIDE_FLOAT exitY = exitDelta[1] * projectDirection[1];
+        const WIDE_FLOAT exitZY = exitZ + exitY;
+        const volatile WIDE_FLOAT exitX = exitDelta[0] * projectDirection[0];
+        exitDistance = (exitZY + exitX);
 
         if (enterDistance == 0.0f && exitDistance == 0.0f) {
             fraction = 0.0f;
@@ -8749,9 +8752,9 @@ qboolean VP_ProjectPathPosition(vehicle_path_position_t *position,
          * ordered-negative.  Unordered values therefore take this fraction
          * path too; spelling this as >= would reject them. */
         if (!(enterDistance < 0.0f) && !(exitDistance < 0.0f)) {
-            /* enterDistance / (enterDistance + exitDistance): the sum is an
-             * inline 80-bit add, then divide, stored to fraction -> shim. */
-            fraction = enterDistance / (enterDistance + exitDistance);
+            /* Retain the wide sum and quotient through the later scalar
+             * interpolation, including across the stored fraction field. */
+            fraction = (WIDE_FLOAT)enterDistance / ((WIDE_FLOAT)exitDistance + enterDistance);
             break;
         }
 
@@ -8761,8 +8764,10 @@ qboolean VP_ProjectPathPosition(vehicle_path_position_t *position,
     position->nodeIndex = nodeIndex;
     position->reachedEnd = node->nextNodeIndex < 0 ? 1 : 0;
     position->fraction = fraction;
-    position->speed = VP_GetPathPositionSpeed(position);
-    position->lookAhead = VP_GetPathPositionLookAhead(position);
+    /* These inlined scalar calculations consume the live quotient; curve
+     * fraction below intentionally reads the rounded field instead. */
+    position->speed = game_compat_veh_path_position_speed_at_node(position, fraction);
+    position->lookAhead = game_compat_veh_path_position_look_ahead_at_node(position, fraction);
     position->curveFraction = VP_GetPathPositionCurveFraction(position);
     return passedStopNode;
 }
