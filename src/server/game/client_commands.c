@@ -1619,7 +1619,6 @@ static qboolean game_compat_command_callvote_allowed_cvar(const char *command,
 void Cmd_CallVote_f(gentity_t *ent)
 {
     level_locals_t *lvl = &level;
-    gclient_t *client = ent->client;
     char command[CALLVOTE_ARG_BUFFER_SIZE];
     char arg[CALLVOTE_ARG_BUFFER_SIZE];
     char currentValue[CALLVOTE_CVAR_BUFFER_SIZE];
@@ -1640,12 +1639,12 @@ void Cmd_CallVote_f(gentity_t *ent)
     /* Retail tests calledVotes against three, but the original game module
      * contains no write to that field. The shipped behavior therefore permits
      * unlimited sequential vote calls while retaining this dormant gate. */
-    if (client->calledVotes >= CALLVOTE_MAX_CALLED) {
+    if (ent->client->calledVotes >= CALLVOTE_MAX_CALLED) {
         game_compat_command_send_literal_status(ent, "e \"GAME_MAXVOTESCALLED\"");
         return;
     }
 
-    if (client->clientState.team == TEAM_SPECTATOR) {
+    if (ent->client->clientState.team == TEAM_SPECTATOR) {
         game_compat_command_send_literal_status(ent, "e \"GAME_NOSPECTATORCALLVOTE\"");
         return;
     }
@@ -1875,7 +1874,7 @@ void Cmd_CallVote_f(gentity_t *ent)
     trap_SendServerCommand(SERVER_COMMAND_ALL_CLIENTS,
                            COMMAND_SEND_UNRELIABLE,
                            va("e \"GAME_CALLEDAVOTE\x15%s\"",
-                              client->clientState.name));
+                              ent->client->clientState.name));
     lvl->voteTime = coduo_int32_from_bits(
         (uint32_t)trap_Milliseconds() + CALLVOTE_DURATION_MS);
     lvl->voteYes = 1;
@@ -1884,7 +1883,7 @@ void Cmd_CallVote_f(gentity_t *ent)
         gclient_t *voteClient = &level.clients[index];
         voteClient->ps.entityStateFlags &= ~PS_FLAG_VOTE_CAST;
     }
-    client->ps.entityStateFlags |= PS_FLAG_VOTE_CAST;
+    ent->client->ps.entityStateFlags |= PS_FLAG_VOTE_CAST;
     trap_SetConfigstring(CS_VOTE_TIME,
                          va("%i", CALLVOTE_DURATION_MS));
     trap_SetConfigstring(CS_VOTE_STRING,
@@ -2060,7 +2059,6 @@ qboolean Cmd_Activate_f(gentity_t *ent)
 void Cmd_MatchTimeout_f(gentity_t *ent)
 {
     level_locals_t *lvl = &level;
-    gclient_t *client = ent->client;
     const char *teamName;
     char cleanName[CALLVOTE_CLIENT_NAME_BUFFER_SIZE];
 
@@ -2071,8 +2069,8 @@ void Cmd_MatchTimeout_f(gentity_t *ent)
         return;
     }
 
-    if (client->sessionState != SESS_STATE_PLAYING ||
-        client->clientState.team == TEAM_SPECTATOR) {
+    if (ent->client->sessionState != SESS_STATE_PLAYING ||
+        ent->client->clientState.team == TEAM_SPECTATOR) {
         trap_SendServerCommand((uint32_t)(int)(ent - g_entities),
                                COMMAND_SEND_UNRELIABLE,
                                "e \"PATCH_1_5_TIMEOUT_MUSTBEPLAYING\"");
@@ -2087,7 +2085,7 @@ void Cmd_MatchTimeout_f(gentity_t *ent)
         return;
     }
 
-    if (client->clientState.team == TEAM_ALLIES) {
+    if (ent->client->clientState.team == TEAM_ALLIES) {
         teamName = "GAME_ALLIES";
         if (g_timeoutsAllowed.integer <= lvl->timeoutUsedAllies) {
             trap_SendServerCommand(
@@ -2114,7 +2112,7 @@ void Cmd_MatchTimeout_f(gentity_t *ent)
             lvl->matchTimeoutDuration = g_timeoutLength.integer;
         }
     } else {
-        if (client->clientState.team != TEAM_AXIS) {
+        if (ent->client->clientState.team != TEAM_AXIS) {
             trap_SendServerCommand(
                 (uint32_t)(int)(ent - g_entities),
                 COMMAND_SEND_UNRELIABLE,
@@ -2149,7 +2147,7 @@ void Cmd_MatchTimeout_f(gentity_t *ent)
         }
     }
 
-    Q_strncpyz(cleanName, client->clientState.name,
+    Q_strncpyz(cleanName, ent->client->clientState.name,
                CALLVOTE_CLIENT_NAME_BUFFER_SIZE);
     Q_CleanStr(cleanName);
     trap_Cvar_Set("timescale", "0");
@@ -2168,7 +2166,6 @@ void Cmd_MatchTimeout_f(gentity_t *ent)
 void Cmd_MatchTimein_f(gentity_t *ent)
 {
     level_locals_t *lvl = &level;
-    gclient_t *client = ent->client;
     char cleanName[CALLVOTE_CLIENT_NAME_BUFFER_SIZE];
     int now;
 
@@ -2186,15 +2183,15 @@ void Cmd_MatchTimein_f(gentity_t *ent)
         return;
     }
 
-    if (client->sessionState != SESS_STATE_PLAYING ||
-        client->clientState.team == TEAM_SPECTATOR) {
+    if (ent->client->sessionState != SESS_STATE_PLAYING ||
+        ent->client->clientState.team == TEAM_SPECTATOR) {
         trap_SendServerCommand((uint32_t)(int)(ent - g_entities),
                                COMMAND_SEND_UNRELIABLE,
                                "e \"PATCH_1_5_TIMEIN_MUSTBEPLAYING\"");
         return;
     }
 
-    if (client->clientState.team != lvl->matchTimeoutTeam) {
+    if (ent->client->clientState.team != lvl->matchTimeoutTeam) {
         trap_SendServerCommand((uint32_t)(int)(ent - g_entities),
                                COMMAND_SEND_UNRELIABLE,
                                "e \"PATCH_1_5_TIMEIN_WRONGTEAM\"");
@@ -2203,30 +2200,21 @@ void Cmd_MatchTimein_f(gentity_t *ent)
 
     Com_sprintf(lvl->timeoutMessage, sizeof(lvl->timeoutMessage),
                 "PATCH_1_5_TIMEOUT_ENDING\x15");
-    Q_strncpyz(cleanName, client->clientState.name,
+    Q_strncpyz(cleanName, ent->client->clientState.name,
                CALLVOTE_CLIENT_NAME_BUFFER_SIZE);
     Q_CleanStr(cleanName);
     now = trap_Milliseconds();
-    if (lvl->matchTimeoutTeam == TEAM_ALLIES) {
-        int elapsed = coduo_int32_from_bits(
-            (uint32_t)now - (uint32_t)lvl->matchTimeoutStartTime);
-
-        lvl->timeoutCache1 = coduo_int32_from_bits(
-            (uint32_t)lvl->timeoutCache1 - (uint32_t)elapsed);
-    } else {
-        /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-        int elapsed = coduo_int32_from_bits(
-            (uint32_t)now - (uint32_t)lvl->matchTimeoutStartTime);
-
-        lvl->timeoutCache2 = coduo_int32_from_bits(
-            (uint32_t)lvl->timeoutCache2 - (uint32_t)elapsed);
-    }
+    /* Both team paths debit the first timeout bank, with 32-bit wraparound. */
+    lvl->timeoutCache1 = coduo_int32_from_bits(
+        (uint32_t)lvl->timeoutCache1 -
+        ((uint32_t)now - (uint32_t)lvl->matchTimeoutStartTime));
 
     lvl->matchTimeoutDuration = 0;
-    /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
+    /* Read the recovery interval after sampling the clock. */
+    now = trap_Milliseconds();
     lvl->matchTimeoutRecoveryEndTime = coduo_int32_from_bits(
         (uint32_t)g_timeoutRecovery.integer +
-        (uint32_t)trap_Milliseconds());
+        (uint32_t)now);
     trap_SetConfigstring(CS_TIMEOUT_TIME,
                          va("%i", g_timeoutRecovery.integer));
     trap_SetConfigstring(CS_TIMEOUT_STRING,
