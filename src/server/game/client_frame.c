@@ -142,8 +142,7 @@
 #define DAMAGE_FEEDBACK_KICK_SCALE 0.2f
 #define DAMAGE_FEEDBACK_KICK_MIN 5.0f
 #define DAMAGE_FEEDBACK_KICK_MAX 90.0f
-#define DAMAGE_FEEDBACK_BYTE_SCALE 256.0f
-#define DAMAGE_FEEDBACK_DEGREES_PER_CIRCLE 360.0f
+#define DAMAGE_FEEDBACK_ANGLE_TO_BYTE_SCALE 0.7111111f /* binary32 256/360, bits 0x3f360b61 */
 #define DAMAGE_FEEDBACK_EVENT_INTERVAL_MS 700
 #define DAMAGE_FEEDBACK_TIME_BACKDATE_MS 20
 #define FLAME_DAMAGE_WINDOW_MS 3000
@@ -375,16 +374,15 @@ void P_DamageFeedback(gentity_t *ent)
         damageTaken = DAMAGE_FEEDBACK_MAX_COUNT;
     }
 
-    client->ps.aimSpreadScale =
-        (float)((long double)damageTaken +
-                (long double)client->ps.aimSpreadScale);
-    if (client->ps.aimSpreadScale > DAMAGE_FEEDBACK_ALPHA_MAX) {
+    WIDE_FLOAT spread = (WIDE_FLOAT)damageTaken + client->ps.aimSpreadScale;
+    client->ps.aimSpreadScale = (float)spread;
+    if (spread > DAMAGE_FEEDBACK_ALPHA_MAX) {
         client->ps.aimSpreadScale = DAMAGE_FEEDBACK_ALPHA_MAX;
     }
 
-    float kick = (float)((long double)damageTaken *
-                         (long double)DAMAGE_FEEDBACK_KICK_SCALE);
-    if (kick < DAMAGE_FEEDBACK_KICK_MIN) {
+    WIDE_FLOAT liveKick = (WIDE_FLOAT)damageTaken * DAMAGE_FEEDBACK_KICK_SCALE;
+    float kick = (float)liveKick;
+    if (liveKick < DAMAGE_FEEDBACK_KICK_MIN) {
         kick = DAMAGE_FEEDBACK_KICK_MIN;
     } else if (kick > DAMAGE_FEEDBACK_KICK_MAX) {
         kick = DAMAGE_FEEDBACK_KICK_MAX;
@@ -398,31 +396,22 @@ void P_DamageFeedback(gentity_t *ent)
         vectoangles(damageFrom, damageAngles);
         AnglesToAxis(client->ps.viewAngles, axis);
 
-        /* Stock 0x3f7f4..0x3f823: the damageFrom.axis dot is a 3-mul/2-add chain
-         * kept 80-bit, multiplied by (-)kick, one store -> shim. */
-        long double rollDot =
-            ((long double)damageFrom[0] * (long double)axis[1][0] +
-             (long double)damageFrom[1] * (long double)axis[1][1]) +
-            (long double)damageFrom[2] * (long double)axis[1][2];
-        long double pitchDot =
-            ((long double)damageFrom[0] * (long double)axis[0][0] +
-             (long double)damageFrom[1] * (long double)axis[0][1]) +
-            (long double)damageFrom[2] * (long double)axis[0][2];
+        /* Windows sums z+y before x, scales the live dot, then stores float.
+         * The roll sign change follows multiplication by the stored kick. */
+        WIDE_FLOAT rollDot = ((WIDE_FLOAT)axis[1][2] * damageFrom[2] +
+                              (WIDE_FLOAT)axis[1][1] * damageFrom[1]) +
+                             (WIDE_FLOAT)axis[1][0] * damageFrom[0];
+        WIDE_FLOAT pitchDot = ((WIDE_FLOAT)axis[0][2] * damageFrom[2] +
+                               (WIDE_FLOAT)axis[0][1] * damageFrom[1]) +
+                              (WIDE_FLOAT)axis[0][0] * damageFrom[0];
 
-        client->damageRoll = (float)(-(long double)kick * rollDot);
-        client->damagePitch = (float)((long double)kick * pitchDot);
-        /* Stock 0x3f86b..0x3f884: (angle/circle)*scale kept 80-bit, fistp with
-         * RC=truncate DIRECTLY (no float rounding of the scaled angle). */
-        client->ps.damagePitch =
-            game_compat_int32_from_long_double_trunc(
-                ((long double)damageAngles[0] /
-                 (long double)DAMAGE_FEEDBACK_DEGREES_PER_CIRCLE) *
-                (long double)DAMAGE_FEEDBACK_BYTE_SCALE);
-        client->ps.damageYaw =
-            game_compat_int32_from_long_double_trunc(
-                ((long double)damageAngles[1] /
-                 (long double)DAMAGE_FEEDBACK_DEGREES_PER_CIRCLE) *
-                (long double)DAMAGE_FEEDBACK_BYTE_SCALE);
+        client->damageRoll = (float)-(rollDot * kick);
+        client->damagePitch = (float)(pitchDot * kick);
+        /* Windows loads the pre-rounded binary32 ratio, then converts the
+         * live product through the CRT's qword result and consumes its low
+         * dword. Dividing by 360 at runtime introduces a different boundary. */
+        client->ps.damagePitch = coduo_fp_to_i32_extended((WIDE_FLOAT)damageAngles[0] * DAMAGE_FEEDBACK_ANGLE_TO_BYTE_SCALE);
+        client->ps.damageYaw = coduo_fp_to_i32_extended((WIDE_FLOAT)damageAngles[1] * DAMAGE_FEEDBACK_ANGLE_TO_BYTE_SCALE);
     } else {
         client->damageRoll = 0.0f;
         client->damagePitch = -kick;
@@ -434,13 +423,10 @@ void P_DamageFeedback(gentity_t *ent)
     /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
     if (ent->painEventTime < level.time &&
         (ent->flags & ENTITY_FLAG_GODMODE) == 0) {
-        /* The binary truncates (fistp with RC=truncate at 0x3f90c) straight
-         * from the x87 register; the fild operands feed the divide with no
-         * intermediate float store. */
-        int healthPercent =
-            game_compat_int32_from_long_double_trunc(
-                ((long double)client->ps.stats[STAT_HEALTH] /
-                 (long double)client->ps.stats[STAT_MAX_HEALTH]) * 100.0L);
+        /* The integer operands feed the divide and scale without a float
+         * store. Clamping follows the CRT low-dword conversion. */
+        int healthPercent = coduo_fp_to_i32_extended(
+            ((WIDE_FLOAT)client->ps.stats[STAT_HEALTH] / client->ps.stats[STAT_MAX_HEALTH]) * 100.0f);
 
         if (healthPercent < 0) {
             healthPercent = 0;
