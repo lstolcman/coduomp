@@ -6195,13 +6195,13 @@ void VEH_GroundTrace(gentity_t *ent)
         trace.fraction != 1.0f) {
         qboolean acceptableImpact = qtrue;
 
-        /* 0x7fe02..0x7fe42 performs the dot rejection only after an
-         * ordered velocity-z > 0 branch.  Unordered velocity or dot values
-         * therefore remain acceptable. */
+        /* Windows 0x41843..0x41883 keeps the dot wide through rejection,
+         * after an ordered velocity-z > 0 branch. Unordered velocity or
+         * dot values therefore remain acceptable. */
         if (vehicleState->velocity[2] > 0.0f &&
-            vehicleState->velocity[0] * trace.normal[0] +
-                vehicleState->velocity[1] * trace.normal[1] +
-                vehicleState->velocity[2] * trace.normal[2] >
+            (WIDE_FLOAT)vehicleState->velocity[1] * trace.normal[1] +
+                (WIDE_FLOAT)vehicleState->velocity[0] * trace.normal[0] +
+                (WIDE_FLOAT)vehicleState->velocity[2] * trace.normal[2] >
                     VEH_GROUND_MAX_IMPACT_DOT) {
             acceptableImpact = qfalse;
         }
