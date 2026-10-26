@@ -15,6 +15,7 @@
 
 #include "recovered_game.h"
 #include "compat/crt/atof_compat.h"
+#include "compat/crt/atoi_compat.h"
 #include "compat/crt/scan_compat.h"
 #include "compat/coduo_ctype_compat.h"
 #include "compat/coduo_fp_conversion.h"
@@ -1341,7 +1342,7 @@ int G_SpawnInt(const char *key, const char *defaultValue, int *out)
     const char *text;
     int found = G_SpawnString(key, defaultValue, &text);
 
-    *out = atoi(text);
+    *out = coduo_compat_atoi(text);
     return found;
 }
 
@@ -1400,7 +1401,7 @@ void G_ParseDynamicEntityField(const char *key, const char *value, gentity_t *en
         if (fieldType != SCRIPT_VAR_INT) {
             return;
         }
-        Scr_AddInt(atoi(value));
+        Scr_AddInt(coduo_compat_atoi(value));
     }
 
     GScr_SetDynamicEntityField(ent, fieldName);
@@ -1437,7 +1438,7 @@ void G_ParseEntityField(const char *key, const char *value, gentity_t *ent)
     base = game_compat_script_spawn_entity_byte_slot(ent, field->offset);
     switch (field->type) {
     case SCRIPT_SPAWN_FIELD_INT:
-        *(int32_t *)(void *)base = atoi(value);
+        *(int32_t *)(void *)base = coduo_compat_atoi(value);
         break;
     case SCRIPT_SPAWN_FIELD_FLOAT:
         *(float *)(void *)base = (float)coduo_compat_atof(value);
@@ -1457,7 +1458,7 @@ void G_ParseEntityField(const char *key, const char *value, gentity_t *ent)
         if (value[0] == '*') {
             *(uint32_t *)(void *)game_compat_script_spawn_entity_byte_slot(
                 ent, SPAWN_FIELD_BRUSHMODEL_INDEX_OFFSET) =
-                (uint32_t)atoi(&value[1]) & 0xffffu;
+                (uint32_t)coduo_compat_atoi(&value[1]) & 0xffffu;
         } else {
             *game_compat_script_spawn_entity_byte_slot(ent, SPAWN_FIELD_MODEL_INDEX_OFFSET) =
                 (uint8_t)G_ModelIndex(value);
@@ -2178,7 +2179,7 @@ void SP_worldspawn(void)
     }
 
     G_SpawnString("spawnflags", WORLDSPAWN_DEFAULT_ZERO, &value);
-    world->worldspawnSpawnflagsScratch = atoi(value);
+    world->worldspawnSpawnflagsScratch = coduo_compat_atoi(value);
     world->spawnflags = world->worldspawnSpawnflagsScratch;
     world->s.number = ENTITYNUM_WORLD;
     Scr_SetString(game_compat_script_entity_string_slot(world, SPAWN_FIELD_CLASSNAME_OFFSET),
@@ -2234,7 +2235,7 @@ qboolean StringToFilter(const char *text, ipFilter_t *filter)
         }
         octet[length] = '\0';
 
-        compare[index] = (uint8_t)atoi(octet);
+        compare[index] = (uint8_t)coduo_compat_atoi(octet);
         if (compare[index] != 0) {
             mask[index] = 0xffu;
         }
@@ -2472,7 +2473,7 @@ void Svcmd_EntityList_f(void)
 gclient_t *ClientForString(const char *text)
 {
     if (text[0] >= '0' && text[0] <= '9') {
-        int clientNum = atoi(text);
+        int clientNum = coduo_compat_atoi(text);
         gclient_t *client;
 
         if (clientNum < 0 || clientNum >= level.maxclients) {
