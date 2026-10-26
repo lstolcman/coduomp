@@ -8358,8 +8358,8 @@ float VP_GetNodeSpeed(int16_t nodeIndex)
     const vehicle_path_node_t *node = game_compat_veh_path_node_at(nodeIndex);
     const vehicle_path_node_t *previousNode = NULL;
     const vehicle_path_node_t *nextNode = NULL;
-    float previousDistance = 0.0f;
-    float nextDistance = 0.0f;
+    WIDE_FLOAT previousDistance = 0.0f;
+    WIDE_FLOAT nextDistance = 0.0f;
     float previousSpeed = -1.0f;
     float nextSpeed = -1.0f;
 
@@ -8406,19 +8406,21 @@ float VP_GetNodeSpeed(int16_t nodeIndex)
     if (nextSpeed < 0.0f) {
         return previousSpeed;
     }
-    /* 0x9656a..0x965a5: the distance sum and the fraction are rounded to
-     * their own float slots before the blend. */
+    /* Distance totals stay wide across the walks and their sum. Only the
+     * previous-distance numerator is reloaded from a binary32 store. */
     {
-        const float distanceSum = previousDistance + nextDistance;
-        float fraction;
+        const volatile float storedPreviousDistance = (float)previousDistance;
+        const WIDE_FLOAT distanceSum = previousDistance + nextDistance;
+        WIDE_FLOAT fraction;
 
         if (distanceSum <= 0.0f) {
             return 0.0f;
         }
-        /* distanceSum is a single add stored to a float (native); the divide and
-         * the (next-prev)*fraction+prev blend are width-sensitive -> shim. */
-        fraction = previousDistance / distanceSum;
-        return (nextSpeed - previousSpeed) * fraction + previousSpeed;
+        /* Keep the quotient and interpolation wide, with separate multiply
+         * and add operations, until the caller stores the returned scalar. */
+        fraction = (WIDE_FLOAT)storedPreviousDistance / distanceSum;
+        const volatile WIDE_FLOAT offset = ((WIDE_FLOAT)nextSpeed - previousSpeed) * fraction;
+        return (float)(offset + previousSpeed);
     }
 }
 
@@ -8432,8 +8434,8 @@ float VP_GetNodeLookAhead(int16_t nodeIndex)
     const vehicle_path_node_t *node = game_compat_veh_path_node_at(nodeIndex);
     const vehicle_path_node_t *previousNode = NULL;
     const vehicle_path_node_t *nextNode = NULL;
-    float previousDistance = 0.0f;
-    float nextDistance = 0.0f;
+    WIDE_FLOAT previousDistance = 0.0f;
+    WIDE_FLOAT nextDistance = 0.0f;
     float previousLookAhead = -1.0f;
     float nextLookAhead = -1.0f;
 
@@ -8480,20 +8482,21 @@ float VP_GetNodeLookAhead(int16_t nodeIndex)
     if (nextLookAhead < 0.0f) {
         return previousLookAhead;
     }
-    /* 0x967b6..0x967f1: the distance sum and the fraction are rounded to
-     * their own float slots before the blend. */
+    /* Distance totals stay wide across the walks and their sum. Only the
+     * previous-distance numerator is reloaded from a binary32 store. */
     {
-        const float distanceSum = previousDistance + nextDistance;
-        float fraction;
+        const volatile float storedPreviousDistance = (float)previousDistance;
+        const WIDE_FLOAT distanceSum = previousDistance + nextDistance;
+        WIDE_FLOAT fraction;
 
         if (distanceSum <= 0.0f) {
             return 0.0f;
         }
-        /* same shape as VP_GetNodeSpeed: native add + guard, shim the divide and
-         * the (next-prev)*fraction+prev blend. */
-        fraction = previousDistance / distanceSum;
-        return (nextLookAhead - previousLookAhead) * fraction +
-               previousLookAhead;
+        /* Keep the quotient and interpolation wide, with separate multiply
+         * and add operations, until the caller stores the returned scalar. */
+        fraction = (WIDE_FLOAT)storedPreviousDistance / distanceSum;
+        const volatile WIDE_FLOAT offset = ((WIDE_FLOAT)nextLookAhead - previousLookAhead) * fraction;
+        return (float)(offset + previousLookAhead);
     }
 }
 
