@@ -1373,14 +1373,9 @@ void ClientEndFrame(gentity_t *ent)
                                             : PM_TYPE_NORMAL;
     }
 
-    /* VERIFIED_DECOMPILER(0x42f59, 52f59_ClientEndFrame.c, VERIFY-WAVE2-CLIENT-FRAME-STATE-2026-06-17): DATAFLOW_VERIFIED - gravity cvar assignment uses generated ROUND before speed and damage-alpha stores. */
-#if   defined(__i386__) || defined(__x86_64__)
-    client->ps.gravity =
-        CODUO_X87_TRUNCATE_I32((long double)g_gravity.value);
-#else
-    client->ps.gravity =
-        game_compat_int32_from_float_trunc(g_gravity.value);
-#endif
+    /* Gravity consumes the low dword of the CRT's signed-qword conversion,
+     * including values outside the signed-dword range. */
+    client->ps.gravity = coduo_fp_to_i32_extended((WIDE_FLOAT)g_gravity.value);
     client->ps.speed = client->maxSpeed;
     /* Stock 0x432a8: aimSpreadScale / 255.0 kept 80-bit, rounded to float on
      * store -> shim (divide). */
