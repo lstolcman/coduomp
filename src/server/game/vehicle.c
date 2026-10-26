@@ -6746,7 +6746,22 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
     CrossProduct(groundNormal, axis.axis[0], axis.axis[1]);
     VectorNormalize(axis.axis[1]);
     CrossProduct(axis.axis[1], groundNormal, axis.axis[0]);
-    VectorNormalize(axis.axis[0]);
+    {
+        /* The inlined forward-axis normalization adds squares X/Z/Y.
+         * Preserve the float stores of the squared length, root and reciprocal. */
+        volatile wide_vec3_t squares;
+        for (int component = 0; component < 3; component++) {
+            squares[component] = (WIDE_FLOAT)axis.axis[0][component] * axis.axis[0][component];
+        }
+        const float squaredLength = coduo_round_f32((squares[0] + squares[2]) + squares[1]);
+        const float length = coduo_round_f32(CoduoLibm_Sqrt((double)squaredLength));
+        if (length != 0.0f) {
+            const float inverseLength = coduo_round_f32((WIDE_FLOAT)1.0f / length);
+            for (int component = 0; component < 3; component++) {
+                axis.axis[0][component] *= inverseLength;
+            }
+        }
+    }
     AxisToAngles((const vec_t (*)[3])axis.axis, targetAngles);
 
     vehicleState->viewClampTargetAngles[0] =
