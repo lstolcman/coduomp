@@ -1592,8 +1592,8 @@ static void game_compat_g_binary_mover_schedule_return(gentity_t *ent,
 {
     if ((ent->flags & BINARY_MOVER_TOGGLE_FLAG) == 0) {
         if (ent->itemWait != BINARY_MOVER_NO_AUTORETURN_WAIT) {
-            int32_t wait = game_compat_int32_from_long_double_trunc(
-                (long double)ent->itemWait);
+            /* Keep the low dword of the CRT's signed-qword conversion. */
+            int32_t wait = coduo_fp_to_i32_extended((WIDE_FLOAT)ent->itemWait);
 
             ent->think = think;
             /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
@@ -1806,8 +1806,7 @@ void Use_BinaryMover(gentity_t *ent, gentity_t *other, gentity_t *activator)
     } else if (ent->moverState == MOVER_STATE_DOOR_POS2) {
         if ((ent->flags & BINARY_MOVER_TOGGLE_FLAG) == 0) {
             if (ent->itemWait != BINARY_MOVER_NO_AUTORETURN_WAIT) {
-                int32_t wait = game_compat_int32_from_long_double_trunc(
-                    (long double)ent->itemWait);
+                int32_t wait = coduo_fp_to_i32_extended((WIDE_FLOAT)ent->itemWait);
 
                 ent->nextthink = coduo_int32_from_bits(
                     (uint32_t)level.time + (uint32_t)wait);
@@ -1818,8 +1817,7 @@ void Use_BinaryMover(gentity_t *ent, gentity_t *other, gentity_t *activator)
         }
     } else if (ent->moverState == MOVER_STATE_ROTATE_POS2) {
         if ((ent->flags & BINARY_MOVER_TOGGLE_FLAG) == 0) {
-            int32_t wait = game_compat_int32_from_long_double_trunc(
-                (long double)ent->itemWait);
+            int32_t wait = coduo_fp_to_i32_extended((WIDE_FLOAT)ent->itemWait);
 
             ent->nextthink = coduo_int32_from_bits(
                 (uint32_t)level.time + (uint32_t)wait);
