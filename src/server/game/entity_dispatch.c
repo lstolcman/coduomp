@@ -1311,8 +1311,7 @@ void G_MoverTeam(gentity_t *ent)
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original InitMoverRotate (0x631c0); no standalone original body. */
 static uint32_t game_compat_g_mover_light_component(float value, float scale)
 {
-    int32_t component = game_compat_int32_from_long_double_trunc(
-        (long double)value * (long double)scale);
+    int32_t component = coduo_fp_to_i32_extended((WIDE_FLOAT)value * scale);
 
     if (component > 255) {
         component = 255;
@@ -1332,25 +1331,31 @@ static int game_compat_g_binary_mover_has_alt_speed(const gentity_t *ent)
 /* NOT_FROM_ORIGINAL_SOURCE: linear position trajectory setup; extracted during reconstruction of 0x61791. */
 /* VERIFIED_DECOMPILER(0x61791, 71791_SetMoverState.c, VERIFY-ENTITY-DISPATCH-MOVER-PACKET-2026-06-17): DATAFLOW_VERIFIED - source-only helper checked against pos.trBase, trDuration, trDelta, and TR_LINEAR_STOP stores for door move cases 3 through 6. */
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original SetMoverState (0x61791); no standalone original body. */
-static void game_compat_g_binary_mover_set_pos_move(gentity_t *ent, const float *start,
-                                    const float *end, int duration)
+static void game_compat_g_binary_mover_set_pos_move(gentity_t *ent, const float *start, const float *end, int duration, binary_mover_state_t state)
 {
-    vec3_t delta;
-    float scale;
+    WIDE_FLOAT delta[3];
+    WIDE_FLOAT scale;
 
     game_compat_g_copy_vector3(start, ent->s.pos.trBase);
     ent->s.pos.trDuration = duration;
-    /* 0x618e7..0x61952: stock rounds end-start to a float vector first,
-     * then multiplies by scale -- two roundings per component.  The fild
-     * keeps duration exact: no (float)duration cast rounding. */
-    delta[0] = end[0] - start[0];
-    delta[1] = end[1] - start[1];
-    delta[2] = end[2] - start[2];
-    /* Stock 0x61923: 1000.0f / duration, duration via fild (int->80, exact, no
-     * (float)duration round) -> single divide, shim. delta subs and the
-     * delta*scale trDelta muls are single ops stored to floats (native). */
-    scale = (float)((long double)1000.0f / (long double)duration);
+    /* The return-to-pos1 branch rounds only the Y difference. Other linear
+     * branches round Z; their X/Y differences remain live through scaling.
+     * Convert duration directly to the wide type, without a float boundary. */
+    delta[0] = (WIDE_FLOAT)end[0] - start[0];
+    delta[1] = (WIDE_FLOAT)end[1] - start[1];
+    delta[2] = (WIDE_FLOAT)end[2] - start[2];
+    if (state == MOVER_STATE_DOOR_MOVING_TO_POS1) {
+        delta[1] = coduo_round_f32(delta[1]);
+    } else {
+        delta[2] = coduo_round_f32(delta[2]);
+    }
+    /* The scale stays wide for X. The return branch also retains it for Y/Z;
+     * the other branches reload the binary32 scale for those two lanes. */
+    scale = (WIDE_FLOAT)1000.0f / duration;
     ent->s.pos.trDelta[0] = delta[0] * scale;
+    if (state != MOVER_STATE_DOOR_MOVING_TO_POS1) {
+        scale = coduo_round_f32(scale);
+    }
     ent->s.pos.trDelta[1] = delta[1] * scale;
     ent->s.pos.trDelta[2] = delta[2] * scale;
     ent->s.pos.trType = TR_LINEAR_STOP;
@@ -1370,33 +1375,29 @@ static void game_compat_g_binary_mover_set_angle_stationary(gentity_t *ent)
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original SetMoverState (0x61791); no standalone original body. */
 static void game_compat_g_binary_mover_set_rotate_move_to_pos2(gentity_t *ent, int slow)
 {
-    float scale;
+    WIDE_FLOAT scale;
 
     ent->s.apos.trBase[0] = 0.0f;
     ent->s.apos.trBase[1] = 0.0f;
     ent->s.apos.trBase[2] = 0.0f;
 
-    /* 0x61c6c/0x61c93: fild keeps moverDuration exact -- no (float) cast
-     * rounding on the divisor. */
-    /* Stock 0x61c6c/0x61c93: const / moverDuration, moverDuration via fild
-     * (int->80, exact) -> single divide, shim. */
+    /* FILD keeps moverDuration exact, without a float cast on the divisor. */
+    /* Keep the quotient and yaw product wide until each trajectory store. */
     if (slow == 0) {
-        scale = (float)((long double)1000.0f /
-                        (long double)ent->moverDuration);
+        scale = (WIDE_FLOAT)1000.0f / ent->moverDuration;
         ent->s.apos.trDuration = ent->moverDuration;
     } else {
-        scale = (float)((long double)500.0f /
-                        (long double)ent->moverDuration);
+        scale = (WIDE_FLOAT)500.0f / ent->moverDuration;
         ent->s.apos.trDuration = coduo_int32_from_bits(
             (uint32_t)ent->moverDuration * UINT32_C(2));
     }
 
-    /* 0x61cbc..0x61d07: stock multiplies scale*doorYawOffset first, then by
-     * damageDir -- keep that 80-bit grouping (fmul is not associative) -> shim
-     * each (scale*doorYawOffset)*damageDir[i] 2-mul cascade. */
-    ent->s.apos.trDelta[0] = scale * ent->doorYawOffset * ent->damageDir[0];
-    ent->s.apos.trDelta[1] = scale * ent->doorYawOffset * ent->damageDir[1];
-    ent->s.apos.trDelta[2] = scale * ent->doorYawOffset * ent->damageDir[2];
+    /* Multiply scale by doorYawOffset before applying the direction lanes;
+     * regrouping the two products changes their rounding. */
+    scale *= ent->doorYawOffset;
+    ent->s.apos.trDelta[0] = scale * ent->damageDir[0];
+    ent->s.apos.trDelta[1] = scale * ent->damageDir[1];
+    ent->s.apos.trDelta[2] = scale * ent->damageDir[2];
     ent->s.apos.trType = TR_LINEAR_STOP;
 }
 
@@ -1405,16 +1406,19 @@ static void game_compat_g_binary_mover_set_rotate_move_to_pos2(gentity_t *ent, i
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original SetMoverState (0x61791); no standalone original body. */
 static void game_compat_g_binary_mover_set_rotate_move_to_pos1(gentity_t *ent, int slow)
 {
-    /* Stock 0x61d64: 1000.0f / moverDuration, moverDuration via fild (int->80,
-     * exact) -> single divide, shim. trBase = damageDir*doorYawOffset,
-     * scale*=0.5 (exact) and trDelta = -trBase*scale (negate + single mul) all
-     * native. */
-    float scale = (float)((long double)1000.0f /
-                          (long double)ent->moverDuration);
+    /* Store all three bases as floats, but retain the live X/Z products for
+     * velocity. Y is reloaded from a float store. The quotient, optional
+     * half-speed adjustment and negation stay wide through velocity stores. */
+    WIDE_FLOAT base[3];
+    WIDE_FLOAT scale = (WIDE_FLOAT)1000.0f / ent->moverDuration;
 
-    ent->s.apos.trBase[0] = ent->damageDir[0] * ent->doorYawOffset;
-    ent->s.apos.trBase[1] = ent->damageDir[1] * ent->doorYawOffset;
-    ent->s.apos.trBase[2] = ent->damageDir[2] * ent->doorYawOffset;
+    base[0] = (WIDE_FLOAT)ent->damageDir[0] * ent->doorYawOffset;
+    base[1] = (WIDE_FLOAT)ent->damageDir[1] * ent->doorYawOffset;
+    base[2] = (WIDE_FLOAT)ent->damageDir[2] * ent->doorYawOffset;
+    ent->s.apos.trBase[0] = base[0];
+    ent->s.apos.trBase[1] = base[1];
+    ent->s.apos.trBase[2] = base[2];
+    base[1] = coduo_round_f32(base[1]);
     ent->s.apos.trDuration = ent->moverDuration;
 
     if (slow != 0) {
@@ -1423,9 +1427,10 @@ static void game_compat_g_binary_mover_set_rotate_move_to_pos1(gentity_t *ent, i
         scale *= 0.5f;
     }
 
-    ent->s.apos.trDelta[0] = -ent->s.apos.trBase[0] * scale;
-    ent->s.apos.trDelta[1] = -ent->s.apos.trBase[1] * scale;
-    ent->s.apos.trDelta[2] = -ent->s.apos.trBase[2] * scale;
+    scale = -scale;
+    ent->s.apos.trDelta[0] = scale * base[0];
+    ent->s.apos.trDelta[1] = scale * base[1];
+    ent->s.apos.trDelta[2] = scale * base[2];
     ent->s.apos.trType = TR_LINEAR_STOP;
 }
 
@@ -1458,21 +1463,21 @@ void SetMoverState(gentity_t *ent, int moverState, int time)
         break;
     case MOVER_STATE_DOOR_MOVING_TO_POS2:
         game_compat_g_binary_mover_set_pos_move(ent, ent->moverPos1, ent->moverPos2,
-                                ent->moverDuration);
+                                ent->moverDuration, MOVER_STATE_DOOR_MOVING_TO_POS2);
         break;
     case MOVER_STATE_DOOR_MOVING_TO_POS1:
         game_compat_g_binary_mover_set_pos_move(ent, ent->moverPos2, ent->moverPos1,
                                 game_compat_g_binary_mover_has_alt_speed(ent)
                                     ? ent->moverAltDuration
-                                    : ent->moverDuration);
+                                    : ent->moverDuration, MOVER_STATE_DOOR_MOVING_TO_POS1);
         break;
     case MOVER_STATE_DOOR_MOVING_TO_POS3:
         game_compat_g_binary_mover_set_pos_move(ent, ent->moverPos2, ent->damagePoint,
-                                ent->s.pos.trDuration);
+                                ent->s.pos.trDuration, MOVER_STATE_DOOR_MOVING_TO_POS3);
         break;
     case MOVER_STATE_DOOR_MOVING_TO_POS2_FROM_POS3:
         game_compat_g_binary_mover_set_pos_move(ent, ent->damagePoint, ent->moverPos2,
-                                ent->s.pos.trDuration);
+                                ent->s.pos.trDuration, MOVER_STATE_DOOR_MOVING_TO_POS2_FROM_POS3);
         break;
     case MOVER_STATE_ROTATE_POS1:
     case MOVER_STATE_ROTATE_POS2:
@@ -1872,8 +1877,8 @@ void InitMover(gentity_t *ent)
     vec3_t color;
     int hasLight;
     int hasColor;
-    vec3_t delta;
-    float distance;
+    WIDE_FLOAT delta[3];
+    WIDE_FLOAT distance;
     int duration;
 
     if (G_SpawnString("noise", "100", &noise) != 0) {
@@ -1909,27 +1914,22 @@ void InitMover(gentity_t *ent)
     ent->s.pos.trType = TR_STATIONARY;
     game_compat_g_copy_vector3(ent->moverPos1, ent->s.pos.trBase);
 
-    delta[0] = ent->moverPos2[0] - ent->moverPos1[0];
-    delta[1] = ent->moverPos2[1] - ent->moverPos1[1];
-    delta[2] = ent->moverPos2[2] - ent->moverPos1[2];
-    /* Stock 0x630bd..0x630d6: the delta.delta dot is computed in 80 bits
-     * (fmul;faddp chain, no per-term double rounding) and stored to a QWORD once
-     * for sqrt -> shim (store_f64), then (float)sqrt. */
-    distance = (float)CoduoLibm_Sqrt((double)delta[0] * (double)delta[0] +
-                           (double)delta[1] * (double)delta[1] +
-                           (double)delta[2] * (double)delta[2]);
+    delta[0] = (WIDE_FLOAT)ent->moverPos2[0] - ent->moverPos1[0];
+    delta[1] = (WIDE_FLOAT)ent->moverPos2[1] - ent->moverPos1[1];
+    delta[2] = (WIDE_FLOAT)ent->moverPos2[2] - ent->moverPos1[2];
+    /* Keep the coordinate differences, Z/Y/X sum and native square root live
+     * through duration scaling. There is no intervening float or double store. */
+    distance = coduo_x87_sqrtl((delta[2] * delta[2] + delta[1] * delta[1]) + delta[0] * delta[0]);
 
     if ((*game_compat_g_binary_mover_speed(ent)) == 0.0f) {
         (*game_compat_g_binary_mover_speed(ent)) =
             BINARY_MOVER_DEFAULT_SPEED;
     }
 
-    /* Stock 0x63113..0x63130: distance*1000 then /speed kept 80-bit, fistp
-     * DIRECTLY on the quotient (no float spill) -> truncate the 80-bit quotient.
-     * The #else forces the 80-bit product/quotient with a long double multiply
-     * (1000 exact) so the reference build also fistp's directly. */
-    duration = game_compat_int32_from_long_double_trunc(
-        (long double)distance * 1000.0f /
+    /* Keep distance*1000/speed wide through the CRT conversion, which retains
+     * the low dword of a truncated signed-qword result before the lower clamp. */
+    duration = coduo_fp_to_i32_extended(
+        (WIDE_FLOAT)distance * 1000.0f /
         (*game_compat_g_binary_mover_speed(ent)));
     if (duration < 1) {
         duration = 1;
@@ -1942,8 +1942,8 @@ void InitMover(gentity_t *ent)
     if (game_compat_g_binary_mover_has_alt_speed(ent) != 0) {
         /* Same as the primary duration: distance*1000 / doorAltSpeed kept 80-bit,
          * fistp directly on the quotient. */
-        duration = game_compat_int32_from_long_double_trunc(
-            (long double)distance * 1000.0f / ent->doorAltSpeed);
+        duration = coduo_fp_to_i32_extended(
+            (WIDE_FLOAT)distance * 1000.0f / ent->doorAltSpeed);
         if (duration < 1) {
             duration = 1;
         }
@@ -1992,8 +1992,7 @@ void InitMoverRotate(gentity_t *ent)
             BINARY_MOVER_DEFAULT_SPEED;
     }
 
-    duration = game_compat_int32_from_float_trunc(
-        *game_compat_g_binary_mover_speed(ent));
+    duration = coduo_fp_to_i32_extended(*game_compat_g_binary_mover_speed(ent));
     if (duration < 1) {
         duration = 1;
     }
