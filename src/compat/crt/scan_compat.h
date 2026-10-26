@@ -10,4 +10,16 @@
 #define coduo_compat_scan_vec3 coduo_crt_scan_vec3
 #define coduo_compat_scan_int coduo_crt_scan_int
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* NOT_FROM_ORIGINAL_SOURCE: scan a fixed sequence of unqualified %f values
+ * separated by format whitespace. Successful earlier values survive failure. */
+int coduo_crt_scan_floats(const char *text, float *output, int valueCount);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif
