@@ -5446,16 +5446,20 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
     }
 
     if (input[0] < 0) {
+        const float reverseLimit = coduo_round_f32(-(WIDE_FLOAT)maxSpeed * VEH_REVERSE_SPEED_SCALE);
+
+        /* Keep the acceleration product live until the velocity store; the
+         * reverse limit is rounded separately before the comparison. */
         desiredLocalVelocity[0] =
             vehicleState->angularVelocity[0] -
-            accelLimit * VEH_PHYSICS_FRAME_SECONDS;
-        if (desiredLocalVelocity[0] < -maxSpeed * VEH_REVERSE_SPEED_SCALE) {
-            desiredLocalVelocity[0] = -maxSpeed * VEH_REVERSE_SPEED_SCALE;
+            (WIDE_FLOAT)accelLimit * VEH_PHYSICS_FRAME_SECONDS;
+        if (desiredLocalVelocity[0] < reverseLimit) {
+            desiredLocalVelocity[0] = reverseLimit;
         }
     } else if (input[0] > 0) {
         desiredLocalVelocity[0] =
             vehicleState->angularVelocity[0] +
-            accelLimit * VEH_PHYSICS_FRAME_SECONDS;
+            (WIDE_FLOAT)accelLimit * VEH_PHYSICS_FRAME_SECONDS;
     } else if (vehicleInfo->type == VEHICLE_TYPE_4_WHEEL &&
                game_compat_veh_float_is_non_zero_or_nan(vehicleState->angularVelocity[0])) {
         desiredLocalVelocity[0] =
@@ -5467,13 +5471,14 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
 
     if (vehicleInfo->type == VEHICLE_TYPE_4_WHEEL &&
         fabsf(vehicleState->angularVelocity[0]) < VEH_4WHEEL_LATERAL_SPEED) {
-        /* 0x7d9af..0x7d9e3: the 80-bit multiply chain runs in this order. */
+        /* The quotient, subtraction and products stay wide through the
+         * final float store. Apply lateral acceleration before its scale. */
         desiredLocalVelocity[1] =
-            (1.0f - fabsf(vehicleState->angularVelocity[0]) /
+            (1.0 - (WIDE_FLOAT)fabsf(vehicleState->angularVelocity[0]) /
              VEH_4WHEEL_LATERAL_SPEED) *
             fabsf(desiredLocalVelocity[0]) *
-            VEH_4WHEEL_LATERAL_SCALE *
-            vehicleState->acceleration[1] / VEH_4WHEEL_LATERAL_DIVISOR;
+            vehicleState->acceleration[1] *
+            VEH_4WHEEL_LATERAL_SCALE / VEH_4WHEEL_LATERAL_DIVISOR;
     } else {
         desiredLocalVelocity[1] = 0.0f;
     }
@@ -5481,13 +5486,18 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
     desiredLocalVelocity[2] = vehicleState->angularVelocity[2];
 
     if (vehicleState->viewClampTargetAngles[0] < 0.0f) {
-        maxSpeed *= 1.0f - vehicleState->viewClampTargetAngles[0] / -90.0f;
+        maxSpeed *= 1.0f - (WIDE_FLOAT)vehicleState->viewClampTargetAngles[0] / -90.0f;
     } else {
-        maxSpeed *= vehicleState->viewClampTargetAngles[0] / 90.0f + 1.0f;
+        maxSpeed *= (WIDE_FLOAT)vehicleState->viewClampTargetAngles[0] / 90.0f + 1.0f;
     }
 
     if (game_compat_veh_float_is_non_zero_or_nan(maxSpeed)) {
-        speed = game_compat_veh_length3(desiredLocalVelocity);
+        /* This inlined length adds Z/Y/X; the later acceleration length
+         * uses X/Y/Z. Round the square root before the speed-cap tests. */
+        speed = (float)CoduoLibm_Sqrt((double)(
+            ((WIDE_FLOAT)desiredLocalVelocity[2] * desiredLocalVelocity[2] +
+             (WIDE_FLOAT)desiredLocalVelocity[1] * desiredLocalVelocity[1]) +
+            (WIDE_FLOAT)desiredLocalVelocity[0] * desiredLocalVelocity[0]));
         if (game_compat_veh_float_is_non_zero_or_nan(speed) && maxSpeed < speed) {
             VectorNormalize(desiredLocalVelocity);
             desiredLocalVelocity[0] *= maxSpeed;
@@ -5498,7 +5508,7 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
 
     for (int axis = 0; axis < 3; axis++) {
         linearAccel[axis] =
-            (desiredLocalVelocity[axis] - vehicleState->angularVelocity[axis]) /
+            ((WIDE_FLOAT)desiredLocalVelocity[axis] - vehicleState->angularVelocity[axis]) /
             VEH_PHYSICS_FRAME_SECONDS;
     }
 
