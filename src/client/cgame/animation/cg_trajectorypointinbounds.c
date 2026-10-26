@@ -24,6 +24,7 @@
 #include <stddef.h>
 
 #include "client/cgame/client_recovered.h"
+#include "compat/coduo_x87_eval.h"
 
 // Offsets this function relies on (i386 target proves 4-byte pointer width):
 //   entity->currentState.pos at +0x0c  (EBX = ECX + 0x0c handed to BG_EvaluateTrajectory)
@@ -52,9 +53,10 @@ qboolean CG_TrajectoryPointInBounds(const centity_t *entity,
     /* The DLL leaves each axis delta (FLD psOrigin[i]; FSUB pos[i]) in ST0 and
      * FCOM/FCOMPs it against the box limits WITHOUT ever FSTP-DWORDing it to a
      * float slot (0x30005d82..0x30005de4). A `float d` would round the difference
-     * to float before the boundary compares; long double keeps the 80-bit delta
-     * the compares actually run on. */
-    long double d;
+     * to float before the boundary compares. Promote an operand before the
+     * subtraction so WIDE_FLOAT retains the live difference; assigning a
+     * float expression to a wider result would already have rounded it. */
+    WIDE_FLOAT d;
 
     // 30005d76: EBX = ECX + 0x0c = &entity->currentState.pos
     // 30005d7d: ECX = &pos (result buffer)
@@ -67,7 +69,7 @@ qboolean CG_TrajectoryPointInBounds(const centity_t *entity,
     // 30005d85: FSUB pos[0]
     // 30005d8a/8d90/8d92/8d95: FCOM +36.0; JZ out-of-box when delta > +36.0
     // 30005d97/9d9d/9d9f/9da2: FCOMP -36.0; delta < -36.0 -> out-of-box
-    d = ps->psOrigin[0] - pos[0];
+    d = (WIDE_FLOAT)ps->psOrigin[0] - pos[0];
     if (d > CG_TRAJBOX_XY_MAX || d < CG_TRAJBOX_XY_MIN) {
         return qfalse;
     }
@@ -76,7 +78,7 @@ qboolean CG_TrajectoryPointInBounds(const centity_t *entity,
     // 30005da4: FLD ps->psOrigin[1]   (ESI+0x18)
     // 30005da7: FSUB pos[1]
     // 30005dab..30005dc3: same +36.0 / -36.0 window
-    d = ps->psOrigin[1] - pos[1];
+    d = (WIDE_FLOAT)ps->psOrigin[1] - pos[1];
     if (d > CG_TRAJBOX_XY_MAX || d < CG_TRAJBOX_XY_MIN) {
         return qfalse;
     }
@@ -85,7 +87,7 @@ qboolean CG_TrajectoryPointInBounds(const centity_t *entity,
     // 30005dc5: FLD ps->psOrigin[2]   (ESI+0x1c)
     // 30005dc8: FSUB pos[2]
     // 30005dcc..30005de4: FCOM +18.0 (JZ out when > +18.0); FCOMP -88.0 (out when < -88.0)
-    d = ps->psOrigin[2] - pos[2];
+    d = (WIDE_FLOAT)ps->psOrigin[2] - pos[2];
     if (d > CG_TRAJBOX_Z_MAX || d < CG_TRAJBOX_Z_MIN) {
         return qfalse;
     }
