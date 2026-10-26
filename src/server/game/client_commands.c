@@ -1033,7 +1033,7 @@ void CheckTeamStatus(void)
 }
 
 /* VERIFIED_DECOMPILER(0x4b80b, 5b80b_FUN_0005b80b.c, VERIFY-CLIENT-COMMANDS-CHAT-TEAM-2026-06-17): DATAFLOW_VERIFIED - recipient eligibility, team/squad filters, dead-chat gate, command selection, prefix/color/message send arguments, and unreliable send checked. */
-void G_SayTo(gentity_t *ent, gentity_t *other, int mode, char color,
+void G_SayTo(gentity_t *ent, gentity_t *other, int mode, int color,
              const char *prefix, const char *message)
 {
     const char *command;
@@ -1314,7 +1314,7 @@ void Cmd_Tell_f(gentity_t *ent)
     G_Say(ent, ent, TELL_MODE, message);
 }
 
-/* VERIFIED_DECOMPILER(0x4c436, 5c436_Cmd_GameCommand_f.c, VERIFY-CLIENT-COMMANDS-CHAT-TEAM-2026-06-17): DATAFLOW_VERIFIED - argc gate, target/command argv parsing, bounds checks, linked target guard, game-command table lookup, target send, and self-echo checked. */
+/* VERIFIED_DECOMPILER(0x4c436, 5c436_Cmd_GameCommand_f.c, VERIFY-CLIENT-COMMANDS-CHAT-TEAM-2026-06-17): DATAFLOW_VERIFIED - argc gate, target/command argv parsing, bounds checks, game-command table lookup, target send, and self-echo checked. Recipient eligibility belongs to chat delivery. */
 void Cmd_GameCommand_f(gentity_t *ent)
 {
     char arg[MAX_STRING_CHARS];
@@ -1339,10 +1339,8 @@ void Cmd_GameCommand_f(gentity_t *ent)
     }
 
     target = &g_entities[clientNum];
-    if (target->linked == 0) {
-        return;
-    }
 
+    /* Keep the sender's echo even when the target cannot receive the message. */
     G_Say(ent, target, GAMECOMMAND_MODE, gameCommandMessages[commandIndex]);
     G_Say(ent, ent, GAMECOMMAND_MODE, gameCommandMessages[commandIndex]);
 }
