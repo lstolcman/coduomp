@@ -9579,7 +9579,7 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
     if (vehicleInfo->maxSpeed > 0.0f) {
         vec3_t forward;
         vec3_t right;
-        WIDE_FLOAT direction[3];
+        wide_vec3_t direction;
         WIDE_FLOAT localForwardRaw;
         float localForward;
         float localRight;

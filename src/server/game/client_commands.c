@@ -717,7 +717,7 @@ void StopFollowing(gentity_t *ent)
 
     /* Keep the horizontal back-offsets wide through the up-offset addition.
      * Only the vertical back-offset rounds to float before that addition. */
-    WIDE_FLOAT backOffset[3];
+    wide_vec3_t backOffset;
     for (int axis = 0; axis < 3; axis++) {
         backOffset[axis] = (WIDE_FLOAT)origin[axis] - (WIDE_FLOAT)forward[axis] * STOPFOLLOW_BACK_DISTANCE;
     }

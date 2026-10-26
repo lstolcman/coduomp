@@ -908,7 +908,7 @@ void G_PlayerTurretPositionAndBlend(gentity_t *player, gentity_t *turret)
     matrix43_t combinedAxis;
     vec3_t deltaRotation;
     vec3_t deltaTranslation;
-    WIDE_FLOAT viewDelta[3];
+    wide_vec3_t viewDelta;
     float tagForwardOffset;
     float targetForwardOffset;
     float turretYaw;
