@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+#include "compat/coduo_x87_eval.h"
+
 /* Canonical Quake vector scalar, fixed-size vectors, and 3x3 basis. */
 typedef float vec_t;
 typedef vec_t vec2_t[2];
@@ -10,6 +12,10 @@ typedef vec_t vec3_t[3];
 typedef vec_t vec4_t[4];
 typedef vec_t vec5_t[5];
 typedef vec3_t axis_t[3];
+
+/* Wide arithmetic intermediates; keep explicit float/double rounding points
+ * in the calculation. This is not an external ABI or stored-data type. */
+typedef WIDE_FLOAT wide_vec3_t[3];
 
 /* Quake orientation transform shared by the engine and game modules.  The
  * byte-identical Windows conversion cluster in CoDUOMP.exe (0x004506f0),

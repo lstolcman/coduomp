@@ -484,7 +484,7 @@ void G_MissileLandAngles(gentity_t *ent, trace_t *trace, float *angles,
 int G_BounceMissile(gentity_t *ent, trace_t *trace)
 {
     vec3_t velocity;
-    WIDE_FLOAT delta[3];
+    wide_vec3_t delta;
     int pointContents;
     int impactTime;
 

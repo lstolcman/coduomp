@@ -1333,7 +1333,7 @@ static int game_compat_g_binary_mover_has_alt_speed(const gentity_t *ent)
 /* NOT_FROM_ORIGINAL_SOURCE: source-level factoring of original SetMoverState (0x61791); no standalone original body. */
 static void game_compat_g_binary_mover_set_pos_move(gentity_t *ent, const float *start, const float *end, int duration, binary_mover_state_t state)
 {
-    WIDE_FLOAT delta[3];
+    wide_vec3_t delta;
     WIDE_FLOAT scale;
 
     game_compat_g_copy_vector3(start, ent->s.pos.trBase);
@@ -1409,7 +1409,7 @@ static void game_compat_g_binary_mover_set_rotate_move_to_pos1(gentity_t *ent, i
     /* Store all three bases as floats, but retain the live X/Z products for
      * velocity. Y is reloaded from a float store. The quotient, optional
      * half-speed adjustment and negation stay wide through velocity stores. */
-    WIDE_FLOAT base[3];
+    wide_vec3_t base;
     WIDE_FLOAT scale = (WIDE_FLOAT)1000.0f / ent->moverDuration;
 
     base[0] = (WIDE_FLOAT)ent->damageDir[0] * ent->doorYawOffset;
@@ -1876,7 +1876,7 @@ void InitMover(gentity_t *ent)
     vec3_t color;
     int hasLight;
     int hasColor;
-    WIDE_FLOAT delta[3];
+    wide_vec3_t delta;
     WIDE_FLOAT distance;
     int duration;
 
