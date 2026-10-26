@@ -1,8 +1,8 @@
 # MSVC and clang-cl client and module build. Makefile targets remain authoritative on other
 # toolchains; source ownership comes from their shared build-mk manifests.
 #
-# See docs/client-building.md for x86 Miles input and architecture selection.
-# cmake --preset msvc -DMSS32_DLL=C:/Games/CoDUO/mss32.dll
+# See docs/client-building.md for audio backend and architecture selection.
+# cmake --preset msvc
 # cmake --build --preset msvc
 # The msvc preset selects x86; msvc-x64 explicitly selects the 64-bit port.
 cmake_minimum_required(VERSION 3.24)
