@@ -378,8 +378,10 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_SOLID_BOUNCE_MIN_SPEED    120.0f
 #define VEH_SOLID_BOUNCE_MAX_SPEED    160.0f
 #define VEH_SOLID_BOUNCE_MIN_PUSH     40.0f
-#define VEH_SOLID_BOUNCE_SCALE        0.85f
-#define VEH_SOLID_BOUNCE_SPEED        150.0f
+#define VEH_SOLID_BOUNCE_PUSH_SPEED   127.5f
+#define VEH_SOLID_SPIN_DIRECTION_EPSILON 0.1f
+#define VEH_SOLID_SPIN_STEERING_RATE  70.0f
+#define VEH_SOLID_SPIN_MAX_MAGNITUDE  80.0
 #define VEH_SOLID_SECOND_PASS_SPEED_DIVISOR 4.0f
 #define VEH_SOLID_NOTIFY_RECENT_MS    200
 #define VEH_SOLID_NOTIFY_COOLDOWN_MS  1000
@@ -7634,51 +7636,65 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
         hitDirection[0] = trace.endpos[0] - vehicleState->origin[0];
         hitDirection[1] = trace.endpos[1] - vehicleState->origin[1];
         hitDirection[2] = trace.endpos[2] - vehicleState->origin[2];
-        VectorNormalize(hitDirection);
-
-        if (game_compat_veh_dot3(hitDirection, axis[1]) > 0.1f) {
-            if (game_compat_veh_dot3(hitDirection, axis[0]) < -0.1f) {
-                spinScale = 1.0f;
-            } else if (game_compat_veh_dot3(hitDirection, axis[0]) > 0.1f) {
-                spinScale = -1.0f;
+        {
+            /* This inlined normalization adds squares Z/Y/X, then stores
+             * the squared length, root and reciprocal separately as floats. */
+            volatile wide_vec3_t squares;
+            for (int component = 0; component < 3; component++) {
+                squares[component] = (WIDE_FLOAT)hitDirection[component] * hitDirection[component];
             }
-        } else if (game_compat_veh_dot3(hitDirection, axis[1]) < -0.1f) {
-            if (game_compat_veh_dot3(hitDirection, axis[0]) < -0.1f) {
-                spinScale = -1.0f;
-            } else if (game_compat_veh_dot3(hitDirection, axis[0]) > 0.1f) {
-                spinScale = 1.0f;
+            const float squaredLength = coduo_round_f32((squares[2] + squares[1]) + squares[0]);
+            const float length = (float)CoduoLibm_Sqrt((double)squaredLength);
+            if (length != 0.0f) {
+                const float inverseLength = coduo_round_f32((WIDE_FLOAT)1.0f / length);
+                for (int component = 0; component < 3; component++) {
+                    hitDirection[component] *= inverseLength;
+                }
+            }
+        }
+
+        {
+            /* Both Z/Y/X direction dots round to float before the spin
+             * threshold comparisons. The forward dot is needed only when
+             * the side dot lies outside the dead zone. */
+            volatile wide_vec3_t products;
+            for (int component = 0; component < 3; component++) {
+                products[component] = (WIDE_FLOAT)axis[1][component] * hitDirection[component];
+            }
+            const float sideDot = coduo_round_f32((products[2] + products[1]) + products[0]);
+            if (sideDot > VEH_SOLID_SPIN_DIRECTION_EPSILON || sideDot < -VEH_SOLID_SPIN_DIRECTION_EPSILON) {
+                for (int component = 0; component < 3; component++) {
+                    products[component] = (WIDE_FLOAT)axis[0][component] * hitDirection[component];
+                }
+                const float forwardDot = coduo_round_f32((products[2] + products[1]) + products[0]);
+                if (forwardDot < -VEH_SOLID_SPIN_DIRECTION_EPSILON) {
+                    spinScale = sideDot > 0.0f ? 1.0f : -1.0f;
+                } else if (forwardDot > VEH_SOLID_SPIN_DIRECTION_EPSILON) {
+                    spinScale = sideDot > 0.0f ? -1.0f : 1.0f;
+                }
             }
         }
 
         if (game_compat_veh_vector3_is_non_zero(vehicleState->velocity)) {
             VectorNormalize2(vehicleState->velocity, cornerDir);
         }
-        /* 0x84b8c..0x84dc3: steeringRate/70 and the spin factor are stored
-         * to double slots, the magnitude term stays in 80-bit registers
-         * through the double-constant clamp compares, and the product is
-         * rounded once to double, then once to float. */
+        /* Store the magnitude and its clamp result as double. Keep the
+         * steering quotient wide, multiply by the spin sign first, then
+         * by the clamped magnitude, and round only the result to float. */
         {
-            const double steeringScale = vehicleInfo->steeringRate / 70.0f;
-            const double spinFactor = spinScale;
-            const float spinSpeed =
-                game_compat_veh_length3(vehicleState->velocity);
-            const double accelMagnitude =
-                fabsf(vehicleState->acceleration[1]);
-            double spinProduct;
-
-            if (spinSpeed * 0.5f + accelMagnitude < 0.0) {
-                spinProduct = 0.0 * steeringScale * spinFactor;
-            } else if (spinSpeed * 0.5f + accelMagnitude > 80.0) {
-                spinProduct = 80.0 * steeringScale * spinFactor;
-            } else {
-                spinProduct = (spinSpeed * 0.5f + accelMagnitude) *
-                              steeringScale * spinFactor;
+            const float spinSpeed = game_compat_veh_length3(vehicleState->velocity);
+            volatile WIDE_FLOAT halfSpeed = (WIDE_FLOAT)spinSpeed * 0.5f;
+            volatile double spinMagnitude = halfSpeed + fabsl((WIDE_FLOAT)vehicleState->acceleration[1]);
+            if (spinMagnitude < 0.0) {
+                spinMagnitude = 0.0;
+            } else if (spinMagnitude > VEH_SOLID_SPIN_MAX_MAGNITUDE) {
+                spinMagnitude = VEH_SOLID_SPIN_MAX_MAGNITUDE;
             }
-            spinScale = spinProduct;
+            spinScale = (WIDE_FLOAT)vehicleInfo->steeringRate / VEH_SOLID_SPIN_STEERING_RATE * spinScale * spinMagnitude;
         }
         if (game_compat_veh_float_is_non_zero_or_nan(spinScale)) {
-            /* 0x84de2..0x84e2d: the corner dot, both fabs, and the doubling
-             * stay on the x87 stack; one rounding at the store. */
+            /* The XYZ corner dot, both absolute values and the doubling
+             * stay wide through the final acceleration store. */
             vehicleState->acceleration[1] =
                 (1.0f -
                  fabsl(fabsl(game_compat_veh_dot3(cornerDir, trace.normal)) - 0.5) *
@@ -7713,28 +7729,22 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
                 bounceDir[2] = -hitDirection[2];
             }
 
-            if (game_compat_veh_dot3(bounceDir, vehicleState->velocity) < 0.0f) {
+            volatile wide_vec3_t bounceProducts;
+            for (int component = 0; component < 3; component++) {
+                bounceProducts[component] = (WIDE_FLOAT)bounceDir[component] * vehicleState->velocity[component];
+            }
+            const WIDE_FLOAT bounceDot = (bounceProducts[2] + bounceProducts[0]) + bounceProducts[1];
+            if (bounceDot < 0.0f) {
                 VEH_ClipVelocity(vehicleState->velocity, bounceDir,
                                  vehicleState->velocity);
-                /* 0x8508c..0x8528a: the push term is never stored -- each
-                 * component's chain keeps it in 80-bit registers and rounds
-                 * once on the velocity store. */
+                /* The folded push multiplier is exactly 127.5f. Store the
+                 * scaled quotient to float before the max selection on
+                 * each lane, then retain the product through the addition. */
                 for (int component = 0; component < 3; component++) {
-                    if (bounceSpeed / vehicleInfo->maxSpeed *
-                            VEH_SOLID_BOUNCE_SPEED * VEH_SOLID_BOUNCE_SCALE >
-                        VEH_SOLID_BOUNCE_MIN_PUSH) {
-                        vehicleState->velocity[component] =
-                            bounceSpeed / vehicleInfo->maxSpeed *
-                                VEH_SOLID_BOUNCE_SPEED *
-                                VEH_SOLID_BOUNCE_SCALE *
-                                bounceDir[component] +
-                            vehicleState->velocity[component];
-                    } else {
-                        vehicleState->velocity[component] =
-                            VEH_SOLID_BOUNCE_MIN_PUSH *
-                                bounceDir[component] +
-                            vehicleState->velocity[component];
-                    }
+                    const float scaledSpeed = coduo_round_f32((WIDE_FLOAT)bounceSpeed / vehicleInfo->maxSpeed * VEH_SOLID_BOUNCE_PUSH_SPEED);
+                    const float push = scaledSpeed > VEH_SOLID_BOUNCE_MIN_PUSH ? scaledSpeed : VEH_SOLID_BOUNCE_MIN_PUSH;
+                    volatile WIDE_FLOAT delta = (WIDE_FLOAT)push * bounceDir[component];
+                    vehicleState->velocity[component] = delta + vehicleState->velocity[component];
                 }
             } else {
                 const float clampedSpeed =
@@ -7760,7 +7770,7 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
 
             if (game_compat_veh_float_is_non_zero_or_nan(ent->doorAltSpeed)) {
                 overMaxSpeed = solidSpeed >
-                               vehicleInfo->maxSpeed * ent->doorAltSpeed;
+                               (WIDE_FLOAT)vehicleInfo->maxSpeed * ent->doorAltSpeed;
             } else {
                 overMaxSpeed = solidSpeed > vehicleInfo->maxSpeed;
             }
@@ -7768,13 +7778,13 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
                 VectorNormalize(vehicleState->velocity);
                 if (game_compat_veh_float_is_non_zero_or_nan(ent->doorAltSpeed)) {
                     vehicleState->velocity[0] =
-                        vehicleInfo->maxSpeed * ent->doorAltSpeed *
+                        (WIDE_FLOAT)vehicleInfo->maxSpeed * ent->doorAltSpeed *
                         vehicleState->velocity[0];
                     vehicleState->velocity[1] =
-                        vehicleInfo->maxSpeed * ent->doorAltSpeed *
+                        (WIDE_FLOAT)vehicleInfo->maxSpeed * ent->doorAltSpeed *
                         vehicleState->velocity[1];
                     vehicleState->velocity[2] =
-                        vehicleInfo->maxSpeed * ent->doorAltSpeed *
+                        (WIDE_FLOAT)vehicleInfo->maxSpeed * ent->doorAltSpeed *
                         vehicleState->velocity[2];
                 } else {
                     vehicleState->velocity[0] *= vehicleInfo->maxSpeed;
@@ -7787,20 +7797,10 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
         if (g_vehicleEnableCollisionDamage.integer != 0 &&
             impactFromNormal > 0.5f) {
             static const float half = 0.5f;
-            /* 0x856ea..0x85721: fistp consumes the 80-bit chain directly;
-             * no float rounding before the int truncation. */
-#if   defined(__x86_64__)
-            register long double halfOffset =
-                (long double)collisionInputScale - (long double)half;
-            const int damage = CODUO_X87_TRUNCATE_I32(
-                (halfOffset + halfOffset) *
-                (long double)vehicleInfo->collisionDamageScale);
-#else
-            const int damage =
-                (int)(((collisionInputScale - half) +
-                       (collisionInputScale - half)) *
-                      vehicleInfo->collisionDamageScale);
-#endif
+            /* Multiply the wide difference before doubling it. The original
+             * qword conversion passes its low dword to the damage call. */
+            volatile WIDE_FLOAT scaledDamage = ((WIDE_FLOAT)collisionInputScale - half) * vehicleInfo->collisionDamageScale;
+            const int damage = coduo_fp_to_i32_extended(scaledDamage + scaledDamage);
 
             G_Damage(ent, ent, ent, trace.normal, trace.endpos, damage, 0,
                      MOD_COLLISION, 2);
@@ -7820,11 +7820,14 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
                 level.time - VEH_SOLID_NOTIFY_COOLDOWN_MS &&
             collisionInputScale > 0.25f &&
             game_compat_veh_float_is_non_zero_or_nan(game_compat_veh_length3(trace.normal))) {
-            vec3_t notifyPoint = {
-                trace.endpos[0] - VEH_SOLID_STANDOFF * trace.normal[0],
-                trace.endpos[1] - VEH_SOLID_STANDOFF * trace.normal[1],
-                trace.endpos[2] - VEH_SOLID_STANDOFF * trace.normal[2]
-            };
+            /* The offset scale is a float argument; each scaled normal stays
+             * wide through its addition to the trace endpoint. */
+            const float notifyOffset = -traceMaxs[0];
+            vec3_t notifyPoint;
+            for (int component = 0; component < 3; component++) {
+                volatile WIDE_FLOAT offset = (WIDE_FLOAT)notifyOffset * trace.normal[component];
+                notifyPoint[component] = offset + trace.endpos[component];
+            }
 
             Scr_AddVector(trace.normal);
             Scr_AddVector(notifyPoint);
@@ -7837,17 +7840,16 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
             vehicleState->collisionSoundTime <
                 level.time - VEH_SOLID_NOTIFY_COOLDOWN_MS &&
             vehicleInfo->collisionSound != 0) {
-            /* 0x8599d..0x85a09: the offset vector is built in its own float
-             * slots (so the z term rounds once there) and then added to the
-             * endpos per component. */
+            /* Keep the vertical difference and product wide until the
+             * offset's float store, then add it to the trace endpoint. */
             vec3_t soundOffset;
             vec3_t soundOrigin;
 
             soundOffset[0] = 0.0f;
             soundOffset[1] = 0.0f;
             soundOffset[2] = 0.0f;
-            soundOffset[2] +=
-                (1.0f - collisionInputScale) * VEH_SOLID_SOUND_Z_SCALE;
+            volatile WIDE_FLOAT soundLift = ((WIDE_FLOAT)1.0 - collisionInputScale) * VEH_SOLID_SOUND_Z_SCALE;
+            soundOffset[2] += soundLift;
             soundOrigin[0] = trace.endpos[0] + soundOffset[0];
             soundOrigin[1] = trace.endpos[1] + soundOffset[1];
             soundOrigin[2] = trace.endpos[2] + soundOffset[2];
@@ -7868,13 +7870,13 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
 
             VectorNormalize(away);
             vehicleState->velocity[0] =
-                away[0] * (vehicleInfo->maxSpeed /
+                away[0] * ((WIDE_FLOAT)vehicleInfo->maxSpeed /
                            VEH_SOLID_SECOND_PASS_SPEED_DIVISOR);
             vehicleState->velocity[1] =
-                away[1] * (vehicleInfo->maxSpeed /
+                away[1] * ((WIDE_FLOAT)vehicleInfo->maxSpeed /
                            VEH_SOLID_SECOND_PASS_SPEED_DIVISOR);
             vehicleState->velocity[2] =
-                away[2] * (vehicleInfo->maxSpeed /
+                away[2] * ((WIDE_FLOAT)vehicleInfo->maxSpeed /
                            VEH_SOLID_SECOND_PASS_SPEED_DIVISOR);
         }
 
