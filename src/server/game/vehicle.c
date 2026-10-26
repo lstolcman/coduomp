@@ -3425,12 +3425,13 @@ void VEH_UpdateSteering(gentity_t *ent)
 /* VERIFIED_DECOMPILER(0x86aa1, 96aa1_FUN_00096aa1.c, VERIFY-VEHICLE-SETUP-LIFECYCLE-2026-06-17): DATAFLOW_VERIFIED; texture-scroll branch, cvar fallback, NaN test, and cast-style time update checked. */
 void VEH_UpdateShaderTime(gentity_t *ent)
 {
+    static const float inverseSpeedScale = 1.0f / VEH_TEXTURE_SCROLL_SPEED_SCALE;
     const vehicle_state_t *vehicleState = (const vehicle_state_t *)ent->vehicle;
     const vehicleInfo_t *vehicleInfo =
         game_compat_veh_get_vehicle_info(vehicleState->typeIndex);
     float scrollSpeed;
     float scrollScale;
-    float scrollStep;
+    WIDE_FLOAT scrollStep;
 
     if (vehicleInfo->textureScroll == 0) {
         ent->s.time = -1;
@@ -3446,18 +3447,14 @@ void VEH_UpdateShaderTime(gentity_t *ent)
     scrollScale = g_vehicleTexScrollScale.value > 0.0f ?
         g_vehicleTexScrollScale.value :
         vehicleInfo->textureScrollScale;
-    /* Stock 0x86b3c..0x86c4b (float DWORD constants, stepwise stores): each
-     * scroll-step stage is its own float store, so the leading divide is the
-     * only width-sensitive one (80-bit quotient rounded once at the store, vs
-     * SSE's 32-bit divide) -> shim. Each *= is a single mul stored to a float
-     * (native, docs rule 1). But the final *1000 product feeds fistp DIRECTLY
-     * at 0x86c42 -- NOT spilled to a float -- so the 80-bit product is truncated
-     * to int; our -mfpmath=387 build spills it (deviating), so force the 80-bit
-     * product with a long double multiply (1000 is exact) and truncate it. */
-    scrollStep = scrollSpeed / VEH_TEXTURE_SCROLL_SPEED_SCALE;
-    scrollStep *= VEH_PHYSICS_FRAME_SECONDS;
+    /* Windows 0x45da0..0x45df5 multiplies by the float reciprocal, texture
+     * scale, frame interval and milliseconds in that order, without narrowing
+     * the intermediates. Add the conversion's low dword with wrapping. */
+    scrollStep = (WIDE_FLOAT)scrollSpeed * inverseSpeedScale;
     scrollStep *= scrollScale;
-    ent->s.time += (int)((long double)scrollStep * 1000.0f);
+    scrollStep *= VEH_PHYSICS_FRAME_SECONDS;
+    ent->s.time = coduo_int32_from_bits((uint32_t)ent->s.time +
+        coduo_fp_to_u32_extended(scrollStep * 1000.0f));
 }
 
 /* ------------------------------------------------------------------ */
