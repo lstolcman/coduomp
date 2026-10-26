@@ -38,7 +38,7 @@
 #define PS_FLAGS_STOPFOLLOW_CLEAR 0x00106000u
 #define STOPFOLLOW_TRACE_MASK 0x810011
 #define STOPFOLLOW_VIEW_PITCH_OFFSET 15.0f
-#define STOPFOLLOW_BACK_OFFSET -40.0f
+#define STOPFOLLOW_BACK_DISTANCE 40.0f
 #define STOPFOLLOW_UP_OFFSET 10.0f
 #define STOPFOLLOW_CAPSULE_EXTENT 8.0f
 #define GAMECOMMAND_MODE 2
@@ -710,13 +710,15 @@ void StopFollowing(gentity_t *ent)
     origin[2] = client->ps.psOrigin[2] + client->ps.viewHeightCurrent;
     G_AddLean(ent, origin);
 
-    /* The binary rounds the back-offset point to float per axis and then
-     * reloads it for the up-offset pass (fstp/fld at 0x4b3ad..0x4b40c). */
+    /* Keep the horizontal back-offsets wide through the up-offset addition.
+     * Only the vertical back-offset rounds to float before that addition. */
+    WIDE_FLOAT backOffset[3];
     for (int axis = 0; axis < 3; axis++) {
-        end[axis] = origin[axis] + forward[axis] * STOPFOLLOW_BACK_OFFSET;
+        backOffset[axis] = (WIDE_FLOAT)origin[axis] - (WIDE_FLOAT)forward[axis] * STOPFOLLOW_BACK_DISTANCE;
     }
+    backOffset[2] = coduo_round_f32(backOffset[2]);
     for (int axis = 0; axis < 3; axis++) {
-        end[axis] = end[axis] + up[axis] * STOPFOLLOW_UP_OFFSET;
+        end[axis] = (float)((WIDE_FLOAT)up[axis] * STOPFOLLOW_UP_OFFSET + backOffset[axis]);
     }
 
     trap_TraceCapsule(&trace, origin, mins, maxs, end, ENTITYNUM_NONE,
@@ -863,28 +865,19 @@ gentity_t *Team_GetLocation(gentity_t *ent)
 
     for (gentity_t *location = level.targetLocationHead; location != NULL;
          location = location->targetLocationNext) {
-        /* The binary keeps each axis delta in the x87 stack (recomputing it
-         * for both factors) and rounds only the final sum (0x75d20..0x75d6f);
-         * float delta temporaries would add roundings it does not perform. */
-        float distanceSquared = (float)(
-            ((long double)origin[0] -
-             (long double)location->currentOrigin[0]) *
-                ((long double)origin[0] -
-                 (long double)location->currentOrigin[0]) +
-            ((long double)origin[1] -
-             (long double)location->currentOrigin[1]) *
-                ((long double)origin[1] -
-                 (long double)location->currentOrigin[1]) +
-            ((long double)origin[2] -
-             (long double)location->currentOrigin[2]) *
-                ((long double)origin[2] -
-                 (long double)location->currentOrigin[2]));
+        /* Keep the axis deltas and sum wide for the distance comparison.
+         * Save a separate float copy before the PVS call for the best update. */
+        const WIDE_FLOAT dx = (WIDE_FLOAT)origin[0] - location->currentOrigin[0];
+        const WIDE_FLOAT dy = (WIDE_FLOAT)origin[1] - location->currentOrigin[1];
+        const WIDE_FLOAT dz = (WIDE_FLOAT)origin[2] - location->currentOrigin[2];
+        const WIDE_FLOAT distanceSquared = (dx * dx + dy * dy) + dz * dz;
+        const volatile float storedDistanceSquared = distanceSquared;
 
-        /* 0x75d72..0x75d81 rejects only ordered greater-than; unordered
-         * values continue to the PVS call. */
+        /* Reject only ordered greater-than; unordered values continue to
+         * the PVS call. The float copy does not replace the live wide sum. */
         if (!(distanceSquared > bestDistanceSquared) &&
             trap_InPVS(origin, location->currentOrigin) != qfalse) {
-            bestDistanceSquared = distanceSquared;
+            bestDistanceSquared = storedDistanceSquared;
             bestLocation = location;
         }
     }
@@ -931,17 +924,16 @@ int Team_GetLocationMsg(gentity_t *ent, char *buffer, int bufferSize)
 /* VERIFIED_DECOMPILER(0x75ec2, 85ec2_TeamplayInfoMessage.c, VERIFY-CLIENT-COMMANDS-CHAT-TEAM-2026-06-17): DATAFLOW_VERIFIED - playing/no-team clear, muzzle and spectator trace setup, trace mask, target client/team-token gate, and target stores checked. */
 void TeamplayInfoMessage(gentity_t *ent)
 {
-    gclient_t *client = ent->client;
     vec3_t start;
     vec3_t end;
     trace_t trace;
     uint32_t targetNum;
     int32_t targetLocation;
 
-    if (client->sessionState == SESS_STATE_PLAYING) {
-        if (client->clientState.team == TEAM_FREE) {
-            client->ps.stats[STAT_IDENT_CLIENT_NUM] = -1;
-            client->ps.stats[STAT_IDENT_CLIENT_HEALTH] = 0;
+    if (ent->client->sessionState == SESS_STATE_PLAYING) {
+        if (ent->client->clientState.team == TEAM_FREE) {
+            ent->client->ps.stats[STAT_IDENT_CLIENT_NUM] = -1;
+            ent->client->ps.stats[STAT_IDENT_CLIENT_HEALTH] = 0;
             return;
         }
 
@@ -963,12 +955,12 @@ void TeamplayInfoMessage(gentity_t *ent)
     } else {
         vec3_t forward;
 
-        AngleVectors(client->ps.viewAngles, forward, NULL, NULL);
+        AngleVectors(ent->client->ps.viewAngles, forward, NULL, NULL);
         CalcMuzzlePoint(ent, start);
-        if (client->ps.viewHeightCurrent < TEAM_STATUS_MIN_VIEWHEIGHT) {
+        if (ent->client->ps.viewHeightCurrent < TEAM_STATUS_MIN_VIEWHEIGHT) {
             start[2] = (float)(
                 ((long double)TEAM_STATUS_MIN_VIEWHEIGHT -
-                 (long double)client->ps.viewHeightCurrent) +
+                 (long double)ent->client->ps.viewHeightCurrent) +
                 (long double)start[2]);
         }
 
@@ -984,7 +976,7 @@ void TeamplayInfoMessage(gentity_t *ent)
     }
 
     trap_Trace(&trace, start, vec3_origin, vec3_origin, end,
-               client->ps.psClientNum, TEAM_STATUS_TRACE_MASK);
+               ent->client->ps.psClientNum, TEAM_STATUS_TRACE_MASK);
 
     targetNum = (uint16_t)trace.entityNum;
     if (targetNum < TEAM_STATUS_MAX_TARGETS) {
@@ -1004,8 +996,8 @@ void TeamplayInfoMessage(gentity_t *ent)
         targetLocation = 0;
     }
 
-    client->ps.stats[STAT_IDENT_CLIENT_NUM] = (int32_t)targetNum;
-    client->ps.stats[STAT_IDENT_CLIENT_HEALTH] = targetLocation;
+    ent->client->ps.stats[STAT_IDENT_CLIENT_NUM] = (int32_t)targetNum;
+    ent->client->ps.stats[STAT_IDENT_CLIENT_HEALTH] = targetLocation;
 }
 
 /* VERIFIED_DECOMPILER(0x76164, 86164_CheckTeamStatus.c, VERIFY-CLIENT-COMMANDS-CHAT-TEAM-LOCAL-2026-06-17): DATAFLOW_VERIFIED - void signature, throttle guard, team-status timestamp store, maxclients loop, linked/following gates, and TeamplayInfoMessage argument checked. */
