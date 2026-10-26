@@ -6,6 +6,7 @@
 #include "bg_trajectory_binding.h"
 #include "compat/coduo_int32_bits.h"
 #include "compat/coduo_native_x87.h"
+#include "compat/coduo_x87_eval.h"
 #include "math/q_math.h"
 
 
@@ -40,7 +41,7 @@ void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime,
                            vec3_t result)
 {
     int32_t elapsedMs;
-    long double deltaTime;
+    WIDE_FLOAT deltaTime;
 
     switch (tr->trType) {
     case TR_STATIONARY:
@@ -56,13 +57,13 @@ void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime,
         /* 0x30005f60..0x30005fda: signed FILD of the wrapping i386 SUB. */
         elapsedMs = (int32_t)((uint32_t)atTime - (uint32_t)tr->trTime);
         deltaTime =
-            (long double)elapsedMs * (long double)TRAJECTORY_MSEC_TO_SEC;
-        result[0] = (float)((long double)tr->trBase[0] +
-                            deltaTime * (long double)tr->trDelta[0]);
-        result[1] = (float)((long double)tr->trBase[1] +
-                            deltaTime * (long double)tr->trDelta[1]);
-        result[2] = (float)((long double)tr->trBase[2] +
-                            deltaTime * (long double)tr->trDelta[2]);
+            (WIDE_FLOAT)elapsedMs * (WIDE_FLOAT)TRAJECTORY_MSEC_TO_SEC;
+        result[0] = (float)((WIDE_FLOAT)tr->trBase[0] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[0]);
+        result[1] = (float)((WIDE_FLOAT)tr->trBase[1] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[1]);
+        result[2] = (float)((WIDE_FLOAT)tr->trBase[2] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[2]);
         return;
 
     case TR_LINEAR_STOP: {
@@ -79,17 +80,17 @@ void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime,
         elapsedMs =
             coduo_int32_from_bits((uint32_t)clampedTime - (uint32_t)startTime);
         deltaTime =
-            (long double)elapsedMs * (long double)TRAJECTORY_MSEC_TO_SEC;
+            (WIDE_FLOAT)elapsedMs * (WIDE_FLOAT)TRAJECTORY_MSEC_TO_SEC;
         /* 0x30005fa9..0x30005fb8: negative elapsed time is clamped to zero. */
         if (deltaTime < 0.0f) {
             deltaTime = 0.0f;
         }
-        result[0] = (float)((long double)tr->trBase[0] +
-                            deltaTime * (long double)tr->trDelta[0]);
-        result[1] = (float)((long double)tr->trBase[1] +
-                            deltaTime * (long double)tr->trDelta[1]);
-        result[2] = (float)((long double)tr->trBase[2] +
-                            deltaTime * (long double)tr->trDelta[2]);
+        result[0] = (float)((WIDE_FLOAT)tr->trBase[0] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[0]);
+        result[1] = (float)((WIDE_FLOAT)tr->trBase[1] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[1]);
+        result[2] = (float)((WIDE_FLOAT)tr->trBase[2] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[2]);
         return;
     }
 
@@ -97,59 +98,59 @@ void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime,
         elapsedMs = (int32_t)((uint32_t)atTime - (uint32_t)tr->trTime);
         /* 0x30005f7a..0x30005f89: FILD, integer-memory FDIV, 2*pi, FSIN. */
         deltaTime = coduo_x87_sinl(
-            ((long double)elapsedMs / (long double)tr->trDuration) *
-            (long double)TRAJECTORY_FULL_CIRCLE);
-        result[0] = (float)((long double)tr->trBase[0] +
-                            deltaTime * (long double)tr->trDelta[0]);
-        result[1] = (float)((long double)tr->trBase[1] +
-                            deltaTime * (long double)tr->trDelta[1]);
-        result[2] = (float)((long double)tr->trBase[2] +
-                            deltaTime * (long double)tr->trDelta[2]);
+            ((WIDE_FLOAT)elapsedMs / (WIDE_FLOAT)tr->trDuration) *
+            (WIDE_FLOAT)TRAJECTORY_FULL_CIRCLE);
+        result[0] = (float)((WIDE_FLOAT)tr->trBase[0] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[0]);
+        result[1] = (float)((WIDE_FLOAT)tr->trBase[1] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[1]);
+        result[2] = (float)((WIDE_FLOAT)tr->trBase[2] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[2]);
         return;
 
     case TR_GRAVITY:
         elapsedMs = (int32_t)((uint32_t)atTime - (uint32_t)tr->trTime);
         deltaTime =
-            (long double)elapsedMs * (long double)TRAJECTORY_MSEC_TO_SEC;
-        result[0] = (float)((long double)tr->trBase[0] +
-                            deltaTime * (long double)tr->trDelta[0]);
-        result[1] = (float)((long double)tr->trBase[1] +
-                            deltaTime * (long double)tr->trDelta[1]);
+            (WIDE_FLOAT)elapsedMs * (WIDE_FLOAT)TRAJECTORY_MSEC_TO_SEC;
+        result[0] = (float)((WIDE_FLOAT)tr->trBase[0] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[0]);
+        result[1] = (float)((WIDE_FLOAT)tr->trBase[1] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[1]);
         result[2] = (float)(
-            (long double)tr->trBase[2] +
-            deltaTime * (long double)tr->trDelta[2] -
+            (WIDE_FLOAT)tr->trBase[2] +
+            deltaTime * (WIDE_FLOAT)tr->trDelta[2] -
             deltaTime * deltaTime *
-                (long double)TRAJECTORY_HALF_GRAVITY);
+                (WIDE_FLOAT)TRAJECTORY_HALF_GRAVITY);
         return;
 
     case TR_GRAVITY_LOW:
         elapsedMs = (int32_t)((uint32_t)atTime - (uint32_t)tr->trTime);
         deltaTime =
-            (long double)elapsedMs * (long double)TRAJECTORY_MSEC_TO_SEC;
-        result[0] = (float)((long double)tr->trBase[0] +
-                            deltaTime * (long double)tr->trDelta[0]);
-        result[1] = (float)((long double)tr->trBase[1] +
-                            deltaTime * (long double)tr->trDelta[1]);
+            (WIDE_FLOAT)elapsedMs * (WIDE_FLOAT)TRAJECTORY_MSEC_TO_SEC;
+        result[0] = (float)((WIDE_FLOAT)tr->trBase[0] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[0]);
+        result[1] = (float)((WIDE_FLOAT)tr->trBase[1] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[1]);
         result[2] = (float)(
-            (long double)tr->trBase[2] +
-            deltaTime * (long double)tr->trDelta[2] -
+            (WIDE_FLOAT)tr->trBase[2] +
+            deltaTime * (WIDE_FLOAT)tr->trDelta[2] -
             deltaTime * deltaTime *
-                (long double)TRAJECTORY_HALF_LOW_GRAVITY);
+                (WIDE_FLOAT)TRAJECTORY_HALF_LOW_GRAVITY);
         return;
 
     case TR_GRAVITY_FLOAT:
         elapsedMs = (int32_t)((uint32_t)atTime - (uint32_t)tr->trTime);
         deltaTime =
-            (long double)elapsedMs * (long double)TRAJECTORY_MSEC_TO_SEC;
-        result[0] = (float)((long double)tr->trBase[0] +
-                            deltaTime * (long double)tr->trDelta[0]);
-        result[1] = (float)((long double)tr->trBase[1] +
-                            deltaTime * (long double)tr->trDelta[1]);
+            (WIDE_FLOAT)elapsedMs * (WIDE_FLOAT)TRAJECTORY_MSEC_TO_SEC;
+        result[0] = (float)((WIDE_FLOAT)tr->trBase[0] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[0]);
+        result[1] = (float)((WIDE_FLOAT)tr->trBase[1] +
+                            deltaTime * (WIDE_FLOAT)tr->trDelta[1]);
         /* The 80.0 term is linear in time (0x3000609b..0x300060a3). */
         result[2] = (float)(
-            (long double)tr->trBase[2] +
-            deltaTime * (long double)tr->trDelta[2] -
-            deltaTime * (long double)TRAJECTORY_FLOAT_GRAVITY);
+            (WIDE_FLOAT)tr->trBase[2] +
+            deltaTime * (WIDE_FLOAT)tr->trDelta[2] -
+            deltaTime * (WIDE_FLOAT)TRAJECTORY_FLOAT_GRAVITY);
         return;
 
     case TR_ACCELERATE: {
@@ -158,9 +159,9 @@ void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime,
         int32_t endTime =
             coduo_int32_from_bits((uint32_t)duration + (uint32_t)startTime);
         int32_t clampedTime = atTime;
-        long double speed;
+        WIDE_FLOAT speed;
         float acceleration;
-        long double distance;
+        WIDE_FLOAT distance;
 
         if (clampedTime > endTime) {
             clampedTime = endTime;
@@ -168,32 +169,32 @@ void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime,
         elapsedMs =
             coduo_int32_from_bits((uint32_t)clampedTime - (uint32_t)startTime);
         const float storedDeltaTime = (float)(
-            (long double)elapsedMs * (long double)TRAJECTORY_MSEC_TO_SEC);
-        deltaTime = (long double)storedDeltaTime;
+            (WIDE_FLOAT)elapsedMs * (WIDE_FLOAT)TRAJECTORY_MSEC_TO_SEC);
+        deltaTime = (WIDE_FLOAT)storedDeltaTime;
 
         /* 0x300060d6..0x30006102: inline VectorLength and acceleration. */
         speed = sqrtl(
-            ((long double)tr->trDelta[0] *
-                 (long double)tr->trDelta[0] +
-             (long double)tr->trDelta[1] *
-                 (long double)tr->trDelta[1]) +
-            (long double)tr->trDelta[2] *
-                (long double)tr->trDelta[2]);
+            ((WIDE_FLOAT)tr->trDelta[0] *
+                 (WIDE_FLOAT)tr->trDelta[0] +
+             (WIDE_FLOAT)tr->trDelta[1] *
+                 (WIDE_FLOAT)tr->trDelta[1]) +
+            (WIDE_FLOAT)tr->trDelta[2] *
+                (WIDE_FLOAT)tr->trDelta[2]);
         acceleration = (float)(
             speed /
-            ((long double)duration *
-             (long double)TRAJECTORY_MSEC_TO_SEC));
+            ((WIDE_FLOAT)duration *
+             (WIDE_FLOAT)TRAJECTORY_MSEC_TO_SEC));
 
         /* 0x30006106: normalize trDelta into the result buffer. */
         (void)VectorNormalize2(tr->trDelta, result);
-        distance = (long double)acceleration * deltaTime * deltaTime *
-                   (long double)0.5f;
-        result[0] = (float)((long double)tr->trBase[0] +
-                            distance * (long double)result[0]);
-        result[1] = (float)((long double)tr->trBase[1] +
-                            distance * (long double)result[1]);
-        result[2] = (float)((long double)tr->trBase[2] +
-                            distance * (long double)result[2]);
+        distance = (WIDE_FLOAT)acceleration * deltaTime * deltaTime *
+                   (WIDE_FLOAT)0.5f;
+        result[0] = (float)((WIDE_FLOAT)tr->trBase[0] +
+                            distance * (WIDE_FLOAT)result[0]);
+        result[1] = (float)((WIDE_FLOAT)tr->trBase[1] +
+                            distance * (WIDE_FLOAT)result[1]);
+        result[2] = (float)((WIDE_FLOAT)tr->trBase[2] +
+                            distance * (WIDE_FLOAT)result[2]);
         return;
     }
 
@@ -203,9 +204,9 @@ void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime,
         int32_t endTime =
             coduo_int32_from_bits((uint32_t)duration + (uint32_t)startTime);
         int32_t clampedTime = atTime;
-        long double speed;
+        WIDE_FLOAT speed;
         float deceleration;
-        long double decelDistance;
+        WIDE_FLOAT decelDistance;
 
         if (clampedTime > endTime) {
             clampedTime = endTime;
@@ -213,47 +214,47 @@ void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime,
         elapsedMs =
             coduo_int32_from_bits((uint32_t)clampedTime - (uint32_t)startTime);
         const float storedDeltaTime = (float)(
-            (long double)elapsedMs * (long double)TRAJECTORY_MSEC_TO_SEC);
-        deltaTime = (long double)storedDeltaTime;
+            (WIDE_FLOAT)elapsedMs * (WIDE_FLOAT)TRAJECTORY_MSEC_TO_SEC);
+        deltaTime = (WIDE_FLOAT)storedDeltaTime;
 
         /* 0x3000616b..0x30006197: same speed/duration magnitude as accelerate. */
         speed = sqrtl(
-            ((long double)tr->trDelta[0] *
-                 (long double)tr->trDelta[0] +
-             (long double)tr->trDelta[1] *
-                 (long double)tr->trDelta[1]) +
-            (long double)tr->trDelta[2] *
-                (long double)tr->trDelta[2]);
+            ((WIDE_FLOAT)tr->trDelta[0] *
+                 (WIDE_FLOAT)tr->trDelta[0] +
+             (WIDE_FLOAT)tr->trDelta[1] *
+                 (WIDE_FLOAT)tr->trDelta[1]) +
+            (WIDE_FLOAT)tr->trDelta[2] *
+                (WIDE_FLOAT)tr->trDelta[2]);
         deceleration = (float)(
             speed /
-            ((long double)duration *
-             (long double)TRAJECTORY_MSEC_TO_SEC));
+            ((WIDE_FLOAT)duration *
+             (WIDE_FLOAT)TRAJECTORY_MSEC_TO_SEC));
         (void)VectorNormalize2(tr->trDelta, result);
 
         /* 0x300061a2..0x300061fb: v*t plus -0.5*a*t^2 along unit trDelta.
          * 0x300061c0: the [2] linear term is rounded to a float slot before
          * decelDistance is computed; the [0]/[1] terms stay in registers. */
-        const long double linearX =
-            (long double)tr->trBase[0] +
-            deltaTime * (long double)tr->trDelta[0];
-        const long double linearY =
-            (long double)tr->trBase[1] +
-            deltaTime * (long double)tr->trDelta[1];
+        const WIDE_FLOAT linearX =
+            (WIDE_FLOAT)tr->trBase[0] +
+            deltaTime * (WIDE_FLOAT)tr->trDelta[0];
+        const WIDE_FLOAT linearY =
+            (WIDE_FLOAT)tr->trBase[1] +
+            deltaTime * (WIDE_FLOAT)tr->trDelta[1];
         const float linearZ = (float)(
-            (long double)tr->trBase[2] +
-            deltaTime * (long double)tr->trDelta[2]);
+            (WIDE_FLOAT)tr->trBase[2] +
+            deltaTime * (WIDE_FLOAT)tr->trDelta[2]);
         decelDistance =
-            (long double)deceleration * deltaTime * deltaTime *
-            (long double)-0.5f;
+            (WIDE_FLOAT)deceleration * deltaTime * deltaTime *
+            (WIDE_FLOAT)-0.5f;
         const float storedDecelDistance = (float)decelDistance;
         result[0] = (float)(linearX +
-                            decelDistance * (long double)result[0]);
+                            decelDistance * (WIDE_FLOAT)result[0]);
         result[1] = (float)(linearY +
-                            (long double)storedDecelDistance *
-                                (long double)result[1]);
-        result[2] = (float)((long double)linearZ +
-                            (long double)storedDecelDistance *
-                                (long double)result[2]);
+                            (WIDE_FLOAT)storedDecelDistance *
+                                (WIDE_FLOAT)result[1]);
+        result[2] = (float)((WIDE_FLOAT)linearZ +
+                            (WIDE_FLOAT)storedDecelDistance *
+                                (WIDE_FLOAT)result[2]);
         return;
     }
 
@@ -269,7 +270,7 @@ void BG_EvaluateTrajectory(const trajectory_t *tr, int32_t atTime,
 void BG_EvaluateTrajectoryDelta(const trajectory_t *trajectory, int32_t atTime,
                                 vec3_t result)
 {
-    long double scale;
+    WIDE_FLOAT scale;
     trType_t trType = trajectory->trType; /* 0x30006252: retained in ESI */
 
     switch (trType) {
@@ -299,52 +300,52 @@ void BG_EvaluateTrajectoryDelta(const trajectory_t *trajectory, int32_t atTime,
         /* 0x3000627a..0x3000628f: FILD/FIDIV/FMUL/FCOS/FMUL remains
          * unstored and feeds all three component multiplies through ST0. */
         scale = coduo_x87_cosl(
-            ((long double)elapsedMs /
-             (long double)trajectory->trDuration) *
-            (long double)TRAJECTORY_DELTA_FULL_CIRCLE) *
-            (long double)TRAJECTORY_DELTA_SINE_SCALE;
-        result[0] = (float)(scale * (long double)trajectory->trDelta[0]);
-        result[1] = (float)(scale * (long double)trajectory->trDelta[1]);
-        result[2] = (float)(scale * (long double)trajectory->trDelta[2]);
+            ((WIDE_FLOAT)elapsedMs /
+             (WIDE_FLOAT)trajectory->trDuration) *
+            (WIDE_FLOAT)TRAJECTORY_DELTA_FULL_CIRCLE) *
+            (WIDE_FLOAT)TRAJECTORY_DELTA_SINE_SCALE;
+        result[0] = (float)(scale * (WIDE_FLOAT)trajectory->trDelta[0]);
+        result[1] = (float)(scale * (WIDE_FLOAT)trajectory->trDelta[1]);
+        result[2] = (float)(scale * (WIDE_FLOAT)trajectory->trDelta[2]);
         return;
     }
     case TR_GRAVITY: {
         int32_t elapsedMs = coduo_int32_from_bits(
             (uint32_t)atTime - (uint32_t)trajectory->trTime);
-        long double elapsed =
-            (long double)elapsedMs *
-            (long double)TRAJECTORY_DELTA_MSEC_TO_SEC;
+        WIDE_FLOAT elapsed =
+            (WIDE_FLOAT)elapsedMs *
+            (WIDE_FLOAT)TRAJECTORY_DELTA_MSEC_TO_SEC;
         result[0] = trajectory->trDelta[0];
         result[1] = trajectory->trDelta[1];
-        result[2] = (float)((long double)trajectory->trDelta[2] -
+        result[2] = (float)((WIDE_FLOAT)trajectory->trDelta[2] -
                             elapsed *
-                                (long double)TRAJECTORY_DELTA_GRAVITY);
+                                (WIDE_FLOAT)TRAJECTORY_DELTA_GRAVITY);
         return;
     }
     case TR_GRAVITY_LOW: {
         int32_t elapsedMs = coduo_int32_from_bits(
             (uint32_t)atTime - (uint32_t)trajectory->trTime);
-        long double elapsed =
-            (long double)elapsedMs *
-            (long double)TRAJECTORY_DELTA_MSEC_TO_SEC;
+        WIDE_FLOAT elapsed =
+            (WIDE_FLOAT)elapsedMs *
+            (WIDE_FLOAT)TRAJECTORY_DELTA_MSEC_TO_SEC;
         result[0] = trajectory->trDelta[0];
         result[1] = trajectory->trDelta[1];
-        result[2] = (float)((long double)trajectory->trDelta[2] -
+        result[2] = (float)((WIDE_FLOAT)trajectory->trDelta[2] -
                             elapsed *
-                                (long double)TRAJECTORY_DELTA_LOW_GRAVITY);
+                                (WIDE_FLOAT)TRAJECTORY_DELTA_LOW_GRAVITY);
         return;
     }
     case TR_GRAVITY_FLOAT: {
         int32_t elapsedMs = coduo_int32_from_bits(
             (uint32_t)atTime - (uint32_t)trajectory->trTime);
-        long double elapsed =
-            (long double)elapsedMs *
-            (long double)TRAJECTORY_DELTA_MSEC_TO_SEC;
+        WIDE_FLOAT elapsed =
+            (WIDE_FLOAT)elapsedMs *
+            (WIDE_FLOAT)TRAJECTORY_DELTA_MSEC_TO_SEC;
         result[0] = trajectory->trDelta[0];
         result[1] = trajectory->trDelta[1];
-        result[2] = (float)((long double)trajectory->trDelta[2] -
+        result[2] = (float)((WIDE_FLOAT)trajectory->trDelta[2] -
                             elapsed *
-                                (long double)TRAJECTORY_DELTA_FLOAT_GRAVITY);
+                                (WIDE_FLOAT)TRAJECTORY_DELTA_FLOAT_GRAVITY);
         return;
     }
     case TR_ACCELERATE: {
@@ -355,12 +356,12 @@ void BG_EvaluateTrajectoryDelta(const trajectory_t *trajectory, int32_t atTime,
         if (atTime <= endTime) {
             int32_t elapsedMs = coduo_int32_from_bits(
                 (uint32_t)atTime - (uint32_t)startTime);
-            scale = (long double)elapsedMs *
-                    (long double)TRAJECTORY_DELTA_MSEC_TO_SEC;
+            scale = (WIDE_FLOAT)elapsedMs *
+                    (WIDE_FLOAT)TRAJECTORY_DELTA_MSEC_TO_SEC;
             scale *= scale;
-            result[0] = (float)(scale * (long double)trajectory->trDelta[0]);
-            result[1] = (float)(scale * (long double)trajectory->trDelta[1]);
-            result[2] = (float)(scale * (long double)trajectory->trDelta[2]);
+            result[0] = (float)(scale * (WIDE_FLOAT)trajectory->trDelta[0]);
+            result[1] = (float)(scale * (WIDE_FLOAT)trajectory->trDelta[1]);
+            result[2] = (float)(scale * (WIDE_FLOAT)trajectory->trDelta[2]);
             return;
         }
         break;
@@ -373,11 +374,11 @@ void BG_EvaluateTrajectoryDelta(const trajectory_t *trajectory, int32_t atTime,
         if (atTime <= endTime) {
             int32_t elapsedMs = coduo_int32_from_bits(
                 (uint32_t)atTime - (uint32_t)startTime);
-            scale = (long double)elapsedMs *
-                    (long double)TRAJECTORY_DELTA_MSEC_TO_SEC;
-            result[0] = (float)(scale * (long double)trajectory->trDelta[0]);
-            result[1] = (float)(scale * (long double)trajectory->trDelta[1]);
-            result[2] = (float)(scale * (long double)trajectory->trDelta[2]);
+            scale = (WIDE_FLOAT)elapsedMs *
+                    (WIDE_FLOAT)TRAJECTORY_DELTA_MSEC_TO_SEC;
+            result[0] = (float)(scale * (WIDE_FLOAT)trajectory->trDelta[0]);
+            result[1] = (float)(scale * (WIDE_FLOAT)trajectory->trDelta[1]);
+            result[2] = (float)(scale * (WIDE_FLOAT)trajectory->trDelta[2]);
             return;
         }
         break;
