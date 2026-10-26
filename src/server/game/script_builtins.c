@@ -298,7 +298,6 @@ typedef struct script_function_s {
 #define SPAWN_FIELD_VEHICLETYPE_OFFSET offsetof(gentity_t, vehicleSpawnName)
 #define SPAWN_FIELD_CAPTURING_OFFSET offsetof(gentity_t, vehiclePrimaryDisabled)
 #define SPAWN_FIELD_VEHICLE_OWNER_OFFSET offsetof(gentity_t, vehicleOwner)
-#define ENTITY_FIELD_CLIENT_OFFSET offsetof(gentity_t, client)
 #define IP_FILTER_OCTET_COUNT 4
 #define IP_FILTER_OCTET_BUFFER_SIZE 128
 #define MAX_IP_FILTERS 1024
@@ -1286,13 +1285,6 @@ static uint16_t game_compat_script_entity_classname(gentity_t *ent)
     return *game_compat_script_entity_string_slot(ent, SPAWN_FIELD_CLASSNAME_OFFSET);
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_entity_client). */
-static gclient_t *game_compat_script_entity_client(gentity_t *ent)
-{
-    return *(gclient_t **)(void *)
-        game_compat_script_spawn_entity_byte_slot(ent, ENTITY_FIELD_CLIENT_OFFSET);
-}
-
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_spawn_copy_vector_at). */
 static void game_compat_script_spawn_copy_vector_at(gentity_t *ent, size_t offset,
                                         const vec3_t value)
@@ -1720,12 +1712,11 @@ void Scr_SetEntityField(int entityNum, uint32_t fieldIndex)
 
     if ((fieldIndex & SCRIPT_ENTITY_FIELD_CLIENT_MASK) ==
         SCRIPT_ENTITY_FIELD_CLIENT_VALUE) {
-        gclient_t *client = game_compat_script_entity_client(ent);
-
-        if (client == 0) {
+        if (ent->client == 0) {
             Scr_SetEntityFieldError(ent, "field must be applied to a player");
         }
-        Scr_SetClientField(client,
+        /* Reload after the error callback if it returns. */
+        Scr_SetClientField(ent->client,
                            (int)(fieldIndex &
                                  SCRIPT_ENTITY_FIELD_CLIENT_INDEX_MASK));
         return;
@@ -1805,12 +1796,11 @@ void Scr_GetEntityField(int entityNum, uint32_t fieldIndex)
 
     if ((fieldIndex & SCRIPT_ENTITY_FIELD_CLIENT_MASK) ==
         SCRIPT_ENTITY_FIELD_CLIENT_VALUE) {
-        gclient_t *client = game_compat_script_entity_client(ent);
-
-        if (client == 0) {
+        if (ent->client == 0) {
             Scr_SetEntityFieldError(ent, "field must be applied to a player");
         }
-        Scr_GetClientField(client,
+        /* Reload after the error callback if it returns. */
+        Scr_GetClientField(ent->client,
                            (int)(fieldIndex &
                                  SCRIPT_ENTITY_FIELD_CLIENT_INDEX_MASK));
         return;
