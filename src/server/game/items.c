@@ -276,12 +276,13 @@ int BG_PlayerTouchesItem(gclient_t *client, gentity_t *itemEnt, int time)
 
     BG_EvaluateTrajectory(&itemEnt->s.pos, time, itemOrigin);
 
-    if (client->ps.psOrigin[0] - itemOrigin[0] > ITEM_TOUCH_XY_RANGE ||
-        client->ps.psOrigin[0] - itemOrigin[0] < -ITEM_TOUCH_XY_RANGE ||
-        client->ps.psOrigin[1] - itemOrigin[1] > ITEM_TOUCH_XY_RANGE ||
-        client->ps.psOrigin[1] - itemOrigin[1] < -ITEM_TOUCH_XY_RANGE ||
-        client->ps.psOrigin[2] - itemOrigin[2] > ITEM_TOUCH_Z_ABOVE ||
-        client->ps.psOrigin[2] - itemOrigin[2] < -ITEM_TOUCH_Z_BELOW) {
+    /* Compare the live coordinate differences before any float store. */
+    if ((WIDE_FLOAT)client->ps.psOrigin[0] - itemOrigin[0] > ITEM_TOUCH_XY_RANGE ||
+        (WIDE_FLOAT)client->ps.psOrigin[0] - itemOrigin[0] < -ITEM_TOUCH_XY_RANGE ||
+        (WIDE_FLOAT)client->ps.psOrigin[1] - itemOrigin[1] > ITEM_TOUCH_XY_RANGE ||
+        (WIDE_FLOAT)client->ps.psOrigin[1] - itemOrigin[1] < -ITEM_TOUCH_XY_RANGE ||
+        (WIDE_FLOAT)client->ps.psOrigin[2] - itemOrigin[2] > ITEM_TOUCH_Z_ABOVE ||
+        (WIDE_FLOAT)client->ps.psOrigin[2] - itemOrigin[2] < -ITEM_TOUCH_Z_BELOW) {
         return qfalse;
     }
 
