@@ -2,6 +2,13 @@
 
 #include <string.h>
 
+enum {
+    CODUO_CRT_CTYPE_UPPER = 1,
+    CODUO_CRT_CTYPE_LOWER = 2,
+    CODUO_CRT_CTYPE_DIGIT = 4,
+    CODUO_CRT_CTYPE_SPACE = 8
+};
+
 /* NOT_FROM_ORIGINAL_SOURCE: C-locale MSVC atoi compatibility boundary. */
 int32_t coduo_crt_atoi(const char *string)
 {
@@ -29,7 +36,7 @@ int32_t coduo_crt_atoi(const char *string)
     return result;
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: deterministic MSVC C-locale comparison. */
+/* NOT_FROM_ORIGINAL_SOURCE: deterministic MSVC C-locale comparison with a -1/0/+1 result. */
 int32_t coduo_crt_stricmp(const char *left, const char *right)
 {
     for (;;) {
@@ -39,12 +46,12 @@ int32_t coduo_crt_stricmp(const char *left, const char *right)
             (uint8_t)coduo_crt_tolower((uint8_t)*right++);
 
         if (leftCharacter != rightCharacter || leftCharacter == 0) {
-            return (int32_t)leftCharacter - (int32_t)rightCharacter;
+            return (leftCharacter > rightCharacter) - (leftCharacter < rightCharacter);
         }
     }
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: deterministic bounded MSVC comparison. */
+/* NOT_FROM_ORIGINAL_SOURCE: deterministic bounded MSVC C-locale comparison with a -1/0/+1 result. */
 int32_t coduo_crt_strnicmp(const char *left, const char *right,
                            size_t count)
 {
@@ -56,7 +63,7 @@ int32_t coduo_crt_strnicmp(const char *left, const char *right,
 
         --count;
         if (leftCharacter != rightCharacter || leftCharacter == 0) {
-            return (int32_t)leftCharacter - (int32_t)rightCharacter;
+            return (leftCharacter > rightCharacter) - (leftCharacter < rightCharacter);
         }
     }
     return 0;
@@ -80,25 +87,30 @@ char *coduo_crt_strupr(char *text)
     return text;
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: MSVC C-locale byte classification boundary. */
+/* NOT_FROM_ORIGINAL_SOURCE: MSVC C-locale byte classification with the original result bits. */
 int32_t coduo_crt_isalpha(int32_t character)
 {
-    return (character >= 'A' && character <= 'Z') ||
-           (character >= 'a' && character <= 'z');
+    if (character >= 'A' && character <= 'Z') {
+        return CODUO_CRT_CTYPE_UPPER;
+    }
+    if (character >= 'a' && character <= 'z') {
+        return CODUO_CRT_CTYPE_LOWER;
+    }
+    return 0;
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: MSVC C-locale byte classification boundary. */
+/* NOT_FROM_ORIGINAL_SOURCE: MSVC C-locale byte classification with the original result bits. */
 int32_t coduo_crt_isalnum(int32_t character)
 {
-    return coduo_crt_isalpha(character) != 0 ||
-           (character >= '0' && character <= '9');
+    return coduo_crt_isalpha(character) |
+           ((character >= '0' && character <= '9') ? CODUO_CRT_CTYPE_DIGIT : 0);
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: MSVC C-locale byte classification boundary. */
+/* NOT_FROM_ORIGINAL_SOURCE: MSVC C-locale byte classification with the original result bits. */
 int32_t coduo_crt_isspace(int32_t character)
 {
-    return character == ' ' ||
-           (character >= '\t' && character <= '\r');
+    return (character == ' ' || (character >= '\t' && character <= '\r'))
+        ? CODUO_CRT_CTYPE_SPACE : 0;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: MSVC C-locale byte-folding boundary. */
