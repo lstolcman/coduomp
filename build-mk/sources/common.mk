@@ -53,6 +53,7 @@ LAYOUT_QCOMMON_C_SOURCES := \
 	src/qcommon/vm_runtime.c
 
 LAYOUT_CRT_COMPAT_C_SOURCES := \
+	src/compat/crt/asin_compat.c \
 	src/compat/crt/atan2_compat.c \
 	src/compat/crt/atof_compat.c \
 	src/compat/crt/format_compat.c \
@@ -360,7 +361,6 @@ LAYOUT_BG_C_SOURCES := \
 	src/bg/bg_weapon_transition.c
 
 LAYOUT_LIBM_C_SOURCES := \
-	src/compat/libm/coduo_libm_asin.c \
 	src/compat/libm/coduo_libm_ftol.c \
 	src/compat/libm/coduo_libm_sincos.c \
 	src/compat/libm/coduo_libm_sqrt.c
