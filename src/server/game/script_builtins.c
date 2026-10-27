@@ -107,6 +107,7 @@ typedef struct script_function_s {
 #define SCRIPT_HALF_CIRCLE_DEGREES_FLOAT 180.0f /* original float32 0x43340000 */
 #define RELIABLE_SERVER_COMMAND 1
 #define SCRIPT_SECONDS_TO_MILLISECONDS 1000.0f
+#define SCRIPT_INTEGER_ROUNDING_BIAS 0.000000000931322574615478515625 /* 2^-30 */
 #define SCRIPT_MUSIC_PLAY_COMMAND "o %s"
 #define SCRIPT_MUSIC_STOP_COMMAND "p %i"
 #define SCRIPT_SOUNDFADE_COMMAND "q %f %i\n"
@@ -681,14 +682,15 @@ static void game_compat_script_add_means_of_death_name(int meansOfDeath)
     Scr_AddString(modNames[meansOfDeath]);
 }
 
-/* VERIFIED_DECOMPILER(0x6f0b9, 7f0b9_FUN_0007f0b9.c, VERIFY-SCRIPT-BUILTINS-PACKET-2026-06-17): DATAFLOW_VERIFIED - 0.5 bias, ROUND call semantics, integer cast, and return checked against current decompiler output. */
+/* Windows inlines this helper in audio fades, looped effects, earthquakes and
+ * shellshock durations: load float, add binary64 2^-30, then FISTP m32. */
 int Script_BiasedRoundToInt(float value)
 {
     /*
-     * 0x6f0cb..0x6f0e8: fld value; fadd 0.5f; truncating fistp (RC=0xc00).
-     * The sum is truncated straight from the x87 register -> shim.
+     * Keep the biased sum wide until conversion under the active rounding
+     * mode. The shared adapter also preserves the integer-indefinite result.
      */
-    return (int)((long double)value + (long double)0.5f);
+    return coduo_x87_fistp_i32((WIDE_FLOAT)value + SCRIPT_INTEGER_ROUNDING_BIAS);
 }
 
 /* VERIFIED_DECOMPILER(0x6f0f7, 7f0f7_FUN_0007f0f7.c, VERIFY-SCRIPT-BUILTINS-PACKET-2026-06-17): DATAFLOW_VERIFIED - binary32 load, single fsincos operation, cosine-then-sine binary32 stores, and void return checked. */
@@ -3950,9 +3952,15 @@ void script_func_randomfloatrange(void)
     float max = Scr_GetFloat(1);
 
     if (max <= min) {
-        /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-        Com_Printf("Scr_RandomFloatRange parms: %f %f ", (double)min,
-                   (double)max);
+        /* NOT_FROM_ORIGINAL_SOURCE: the original integer format reads the low
+         * and high words of the first promoted double. Supply those words
+         * explicitly so the diagnostic is independent of the host varargs ABI. */
+        double promotedMin = (double)min;
+        uint64_t minBits;
+        memcpy(&minBits, &promotedMin, sizeof(minBits));
+        Com_Printf("Scr_RandomFloatRange parms: %d %d ",
+                   coduo_int32_from_bits((uint32_t)minBits),
+                   coduo_int32_from_bits((uint32_t)(minBits >> 32)));
         Scr_Error("Scr_RandomFloatRange range must be positive float.\n");
     }
 
