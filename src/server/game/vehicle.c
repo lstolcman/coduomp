@@ -22,6 +22,7 @@
 #include "compat/crt/atof_compat.h"
 #include "compat/crt/atoi_compat.h"
 #include "compat/crt/scan_compat.h"
+#include "compat/crt/msvc_compat.h"
 #include "compat/coduo_native_x87.h"
 #include "compat/coduo_fp_conversion.h"
 #include "scr_vm.h"
@@ -89,6 +90,11 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_ENTITY_FLAG_LINKED         0x20000u
 #define VEH_ENTITY_THINK_INTERVAL_MS   50
 #define VEH_ENTITY_DEFAULT_ANIM_VALUE  127
+enum {
+    VEH_SCRIPT_CONST_TURRET_FIRE = 94,
+    VEH_SCRIPT_CONST_TURRET_ALT_FIRE = 95,
+    VEH_SCRIPT_CONST_TURRET_GUNNER_FIRE = 96
+};
 #define VEH_COLLMAP_SCRIPT_CONTENTS    0xa00000u
 #define VEH_COLLMAP_BASE_CONTENTS      0x800000u
 #define VEH_SCRIPTED_INPUT_CLAMP       30.0f
@@ -1019,12 +1025,6 @@ static void game_compat_veh_set_turret_muzzle_back_active(vehicle_state_t *vehic
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-static uint16_t game_compat_veh_script_notify_string(const char *value)
-{
-    return SL_GetString(value, 0);
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
 static float game_compat_veh_dismount_side_offset(const vehicleInfo_t *vehicleInfo)
 {
     return vehicleInfo->collisionBoundsSource[3];
@@ -1520,17 +1520,17 @@ static void game_compat_veh_update_turret_activity(vehicle_state_t *vehicleState
                                      float yawDelta,
                                      float desiredPitch,
                                      float clampedPitch,
-                                     float desiredYaw)
+                                     float desiredYaw,
+                                     float clampedYaw)
 {
-    vec3_t desiredAngles = { desiredPitch, 0.0f, 0.0f };
-    const vec3_t clampedAngles = { clampedPitch, 0.0f, 0.0f };
+    vec3_t desiredAngles = { desiredPitch, desiredYaw, 0.0f };
+    const vec3_t clampedAngles = { clampedPitch, clampedYaw, 0.0f };
 
     AnglesSubtract(desiredAngles, clampedAngles, desiredAngles);
 
-    if ((pitchDelta >= VEH_TURRET_STALL_DELTA &&
-         desiredAngles[0] == 0.0f && !isnan(desiredAngles[0])) ||
-        (yawDelta >= VEH_TURRET_STALL_DELTA &&
-         desiredYaw == 0.0f && !isnan(desiredYaw))) {
+    /* Activity requires requested movement on an axis that its clamp did not stop. */
+    if ((!(pitchDelta < VEH_TURRET_STALL_DELTA) && desiredAngles[0] == 0.0f) ||
+        (!(yawDelta < VEH_TURRET_STALL_DELTA) && desiredAngles[1] == 0.0f)) {
         game_compat_veh_set_turret_activity_state(vehicleState, slot,
                                    VEH_TURRET_STATE_ACTIVE);
     } else {
@@ -2643,7 +2643,7 @@ qboolean VEH_ParseSpecificField(void *vehicleInfoBase, const char *value,
     for (vehicle_type_t type = VEHICLE_TYPE_UNKNOWN;
          type < VEHICLE_TYPE_COUNT;
          type = (vehicle_type_t)(type + 1)) {
-        if (strcasecmp(value, vehicleTypeNames[type]) == 0) {
+        if (coduo_crt_stricmp(value, vehicleTypeNames[type]) == 0) {
             vehicleInfo->type = (int16_t)type;
             return 1;
         }
@@ -2749,7 +2749,7 @@ int VEH_FindVehicleInfoIndex(const char *name)
 {
     if (name != NULL && name[0] != '\0') {
         for (int16_t index = 0; index < g_vehicleInfoCount; index++) {
-            if (strcasecmp(name, game_compat_veh_get_vehicle_info(index)->name) == 0) {
+            if (coduo_crt_stricmp(name, game_compat_veh_get_vehicle_info(index)->name) == 0) {
                 return index;
             }
         }
@@ -2776,7 +2776,7 @@ gentity_t *VEH_FindVehicleNodeByTargetname(const char *targetname)
             continue;
         }
 
-        if (strcasecmp(SL_ConvertToString(ent->targetname), targetname) == 0) {
+        if (coduo_crt_stricmp(SL_ConvertToString(ent->targetname), targetname) == 0) {
             return ent;
         }
     }
@@ -3184,9 +3184,6 @@ static void game_compat_veh_copy_bone_matrix_origin(
 /* VERIFIED_DECOMPILER(0x86c57, 96c57_FUN_00096c57.c, VERIFY-VEHICLE-INIT-WEAPON-2026-06-17): DATAFLOW_VERIFIED; reset stores, driver weapon gate, notify timers, target trace, muzzle-back flag, and original Com_Error varargs audited. */
 void VEH_UpdateWeapon(gentity_t *ent)
 {
-    static uint16_t turretFireString;
-    static uint16_t turretAltFireString;
-
     vehicle_state_t *vehicleState = (vehicle_state_t *)ent->vehicle;
     const vehicleInfo_t *vehicleInfo =
         game_compat_veh_get_vehicle_info(vehicleState->typeIndex);
@@ -3222,11 +3219,7 @@ void VEH_UpdateWeapon(gentity_t *ent)
     if (vehicleState->primaryFireTime < 1) {
         if ((passengerClient->command.buttons &
              VEH_CLIENT_FIRE_BUTTON) != 0) {
-            if (turretFireString == 0) {
-                turretFireString =
-                    game_compat_veh_script_notify_string("turret_fire");
-            }
-            Scr_Notify(ent, turretFireString, 0);
+            Scr_Notify(ent, scr_const[VEH_SCRIPT_CONST_TURRET_FIRE], 0);
         }
     } else {
         vehicleState->primaryFireTime -= VEH_FIRE_TIME_THINK_STEP_MS;
@@ -3236,11 +3229,7 @@ void VEH_UpdateWeapon(gentity_t *ent)
     if (vehicleState->altFireTime < 1 &&
         (passengerClient->command.buttons &
          VEH_CLIENT_ALT_FIRE_BUTTON) != 0) {
-        if (turretAltFireString == 0) {
-            turretAltFireString =
-                game_compat_veh_script_notify_string("turret_alt_fire");
-        }
-        Scr_Notify(ent, turretAltFireString, 0);
+        Scr_Notify(ent, scr_const[VEH_SCRIPT_CONST_TURRET_ALT_FIRE], 0);
     }
 
     game_compat_veh_set_turret_target_active(vehicleState, 1);
@@ -3249,14 +3238,14 @@ void VEH_UpdateWeapon(gentity_t *ent)
         Com_Error(1, VEH_PLAYER_VEHICLE_NO_TAG_ERROR,
                   vehiclePrimaryFlashTagNames[0]);
     }
-    if (vehicleState->primaryTurretTagIndex < 0) {
-        Com_Error(1, VEH_PLAYER_VEHICLE_NO_BARREL_ERROR);
-    }
 
     DObjSkelMat flashMatrix;
     DObjSkelMat turretMatrix;
     G_DObjGetWorldBoneIndexMatrix(
         ent, vehicleState->primaryFlashTagIndices[0], &flashMatrix);
+    if (vehicleState->primaryTurretTagIndex < 0) {
+        Com_Error(1, VEH_PLAYER_VEHICLE_NO_BARREL_ERROR);
+    }
     G_DObjGetWorldBoneIndexMatrix(
         ent, vehicleState->primaryTurretTagIndex, &turretMatrix);
 
@@ -3313,8 +3302,6 @@ void VEH_UpdateWeapon(gentity_t *ent)
 /* VERIFIED_DECOMPILER(0x871a6, 971a6_FUN_000971a6.c, VERIFY-VEHICLE-INIT-WEAPON-2026-06-17): DATAFLOW_VERIFIED; reset stores, overheat state/flag, gunner heat decay, passenger gate, cooldown, and notify path audited. */
 void VEH_UpdateGunnerWeapon(gentity_t *ent)
 {
-    static uint16_t turretGunnerFireString;
-
     vehicle_state_t *vehicleState = (vehicle_state_t *)ent->vehicle;
     const vehicleInfo_t *vehicleInfo =
         game_compat_veh_get_vehicle_info(vehicleState->typeIndex);
@@ -3367,11 +3354,7 @@ void VEH_UpdateGunnerWeapon(gentity_t *ent)
             if (vehicleState->gunnerFireTime < 1 &&
                 (gunnerClient->command.buttons &
                  VEH_CLIENT_FIRE_BUTTON) != 0) {
-                if (turretGunnerFireString == 0) {
-                    turretGunnerFireString =
-                        game_compat_veh_script_notify_string("turret_gunner_fire");
-                }
-                Scr_Notify(ent, turretGunnerFireString, 0);
+                Scr_Notify(ent, scr_const[VEH_SCRIPT_CONST_TURRET_GUNNER_FIRE], 0);
             }
         }
     }
@@ -6488,9 +6471,9 @@ void VEH_StepSlideMove(gentity_t *ent, qboolean gravity)
 
     end[0] = vehicleState->origin[0];
     end[1] = vehicleState->origin[1];
-    /* 0x810b7: the 80-bit chain groups (oldOrigin - endpos) first, then
-     * adds the current origin. */
-    end[2] = (oldOrigin[2] - trace.endpos[2]) + vehicleState->origin[2];
+    /* Keep (oldOrigin - endpos) wide through the current-origin addition,
+     * then round at the trace endpoint store. */
+    end[2] = ((WIDE_FLOAT)oldOrigin[2] - trace.endpos[2]) + vehicleState->origin[2];
     trap_Trace(&trace, vehicleState->origin, vehicleInfo->collisionMins,
                vehicleInfo->collisionMaxs, end, ent->s.number, ent->clipmask);
 
@@ -7974,8 +7957,8 @@ void VEH_UpdateAim(gentity_t *ent)
         vehicleInfo->primaryPitchLimitNeg,
         vehicleInfo->primaryPitchLimitPos);
     if (game_compat_veh_float_is_non_zero_or_nan(ent->vehiclePrimaryYawClamp)) {
-        clampedYaw = game_compat_veh_clamp_abs(desiredYaw,
-                                  fabsf(ent->vehiclePrimaryYawClamp));
+        clampedYaw = game_compat_veh_clamp_float_symmetric(
+            desiredYaw, ent->vehiclePrimaryYawClamp, ent->vehiclePrimaryYawClamp);
     } else {
         clampedYaw = game_compat_veh_clamp_float_symmetric(
             desiredYaw,
@@ -7987,7 +7970,7 @@ void VEH_UpdateAim(gentity_t *ent)
     game_compat_veh_set_entity_primary_yaw(ent, clampedYaw);
     game_compat_veh_update_turret_activity(vehicleState, VEH_TURRET_ACTIVITY_PRIMARY,
                              angleDelta[0], angleDelta[1], desiredPitch,
-                             clampedPitch, desiredYaw);
+                             clampedPitch, desiredYaw, clampedYaw);
 
     if (angleDelta[0] < VEH_TURRET_NOTIFY_EPSILON &&
         angleDelta[1] < VEH_TURRET_NOTIFY_EPSILON) {
@@ -8061,7 +8044,7 @@ void VEH_UpdateGunnerAim(gentity_t *ent)
     game_compat_veh_set_entity_gunner_yaw_base(ent, clampedYaw - game_compat_veh_entity_primary_yaw(ent));
     game_compat_veh_update_turret_activity(vehicleState, VEH_TURRET_ACTIVITY_GUNNER,
                              angleDelta[0], angleDelta[1], desiredPitch,
-                             clampedPitch, desiredYaw);
+                             clampedPitch, desiredYaw, clampedYaw);
 }
 
 /* ------------------------------------------------------------------ */
