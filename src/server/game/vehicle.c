@@ -9186,9 +9186,9 @@ void GScr_GetVehicleNode(void)
 {
     uint16_t value = Scr_GetConstString(0);
     const char *fieldName = Scr_GetString(1);
-    int fieldIndex = (int16_t)Scr_GetOffset(
+    int32_t fieldIndex = coduo_int32_from_bits(Scr_GetOffset(
         g_scr_data.classMap[SCRIPT_OBJECT_VEHICLE_NODE].classnum,
-        fieldName);
+        fieldName));
     vehicle_path_node_t *match = NULL;
 
     if (fieldIndex < 0) {
@@ -9230,9 +9230,9 @@ void GScr_GetVehicleNodeArray(void)
 {
     uint16_t value = Scr_GetConstString(0);
     const char *fieldName = Scr_GetString(1);
-    int fieldIndex = (int16_t)Scr_GetOffset(
+    int32_t fieldIndex = coduo_int32_from_bits(Scr_GetOffset(
         g_scr_data.classMap[SCRIPT_OBJECT_VEHICLE_NODE].classnum,
-        fieldName);
+        fieldName));
 
     if (fieldIndex < 0) {
         return;
