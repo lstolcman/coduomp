@@ -4816,40 +4816,36 @@ static void game_compat_veh_build_turret_muzzle(gentity_t *ent,
                                   vehicle_state_t *vehicleState,
                                   const weaponInfo_t *weaponInfo,
                                   const char *tagName,
-                                  const DObjSkelMat *fallbackMatrix,
+                                  DObjSkelMat *tagMatrix,
                                   qboolean allowTargetCorrection,
                                   weapon_muzzle_t *muzzle)
 {
-    DObjSkelMat tagMatrix = {0};
     vec3_t forward;
     vec3_t tagAngles;
     vec3_t targetAngles;
     vec3_t deltaAngles;
 
-    /* A failed flash-tag lookup leaves its output untouched. Alternate and
-     * gunner fire retain the previously obtained barrel pose in that case. */
-    if (fallbackMatrix != NULL) {
-        tagMatrix = *fallbackMatrix;
-    }
-
-    if (G_DObjGetWorldTagMatrix(ent, tagName, &tagMatrix) == 0) {
+    /* A failed flash-tag lookup leaves the caller's matrix untouched. Primary
+     * fire retains the previous flash pose; alternate and gunner fire retain
+     * their previously obtained barrel pose. */
+    if (G_DObjGetWorldTagMatrix(ent, tagName, tagMatrix) == 0) {
         /* NOT_FROM_ORIGINAL_SOURCE: forward the completed warning as data
          * through a literal conversion. */
         G_Printf("%s", va(VEH_TURRET_NO_FLASH_WARNING, tagName,
                           SL_ConvertToString(ent->targetname)));
     }
 
-    forward[0] = tagMatrix.axis[0][0];
-    forward[1] = tagMatrix.axis[0][1];
-    forward[2] = tagMatrix.axis[0][2];
+    forward[0] = tagMatrix->axis[0][0];
+    forward[1] = tagMatrix->axis[0][1];
+    forward[2] = tagMatrix->axis[0][2];
 
     if (allowTargetCorrection) {
-        forward[0] = vehicleState->motionControl[0] - tagMatrix.origin[0];
-        forward[1] = vehicleState->motionControl[1] - tagMatrix.origin[1];
-        forward[2] = vehicleState->motionControl[2] - tagMatrix.origin[2];
+        forward[0] = vehicleState->motionControl[0] - tagMatrix->origin[0];
+        forward[1] = vehicleState->motionControl[1] - tagMatrix->origin[1];
+        forward[2] = vehicleState->motionControl[2] - tagMatrix->origin[2];
         VectorNormalize(forward);
 
-        vectoangles(tagMatrix.axis[0], tagAngles);
+        vectoangles(tagMatrix->axis[0], tagAngles);
         vectoangles(forward, targetAngles);
         AnglesSubtract(tagAngles, targetAngles, deltaAngles);
         deltaAngles[0] = game_compat_veh_clamp_abs(deltaAngles[0],
@@ -4864,25 +4860,25 @@ static void game_compat_veh_build_turret_muzzle(gentity_t *ent,
     muzzle->forward[0] = forward[0];
     muzzle->forward[1] = forward[1];
     muzzle->forward[2] = forward[2];
-    muzzle->right[0] = tagMatrix.axis[1][0];
-    muzzle->right[1] = tagMatrix.axis[1][1];
-    muzzle->right[2] = tagMatrix.axis[1][2];
-    muzzle->up[0] = tagMatrix.axis[2][0];
-    muzzle->up[1] = tagMatrix.axis[2][1];
-    muzzle->up[2] = tagMatrix.axis[2][2];
+    muzzle->right[0] = tagMatrix->axis[1][0];
+    muzzle->right[1] = tagMatrix->axis[1][1];
+    muzzle->right[2] = tagMatrix->axis[1][2];
+    muzzle->up[0] = tagMatrix->axis[2][0];
+    muzzle->up[1] = tagMatrix->axis[2][1];
+    muzzle->up[2] = tagMatrix->axis[2][2];
 
     if (game_compat_veh_turret_muzzle_back_active(vehicleState) == 0) {
-        muzzle->origin[0] = tagMatrix.origin[0];
-        muzzle->origin[1] = tagMatrix.origin[1];
-        muzzle->origin[2] = tagMatrix.origin[2];
+        muzzle->origin[0] = tagMatrix->origin[0];
+        muzzle->origin[1] = tagMatrix->origin[1];
+        muzzle->origin[2] = tagMatrix->origin[2];
     } else {
         const float back = vehicleState->viewState[0];
 
         /* origin[i] = tagMatrix[12+i] - back*forward[i]: negate the scale,
          * multiply and add while wide, with one float store per component. */
-        muzzle->origin[0] = -(WIDE_FLOAT)back * forward[0] + tagMatrix.origin[0];
-        muzzle->origin[1] = -(WIDE_FLOAT)back * forward[1] + tagMatrix.origin[1];
-        muzzle->origin[2] = -(WIDE_FLOAT)back * forward[2] + tagMatrix.origin[2];
+        muzzle->origin[0] = -(WIDE_FLOAT)back * forward[0] + tagMatrix->origin[0];
+        muzzle->origin[1] = -(WIDE_FLOAT)back * forward[1] + tagMatrix->origin[1];
+        muzzle->origin[2] = -(WIDE_FLOAT)back * forward[2] + tagMatrix->origin[2];
     }
 
     muzzle->extraVector[0] = forward[0]; /* +0x30..+0x33, size 0x04; generated 6a8b0/6aaa9 keep this as the muzzle packet's extra vector. */
@@ -4959,6 +4955,7 @@ void CMD_VEH_FireTurret(uint32_t scriptObject)
         ent, vehicleState->primaryTurretTagIndex);
 
     DObjSkelMat barrelMatrix;
+    DObjSkelMat tagMatrix = {0};
     G_DObjGetWorldBoneIndexMatrix(
         ent, vehicleState->primaryTurretTagIndex, &barrelMatrix);
 
@@ -4986,7 +4983,7 @@ void CMD_VEH_FireTurret(uint32_t scriptObject)
         game_compat_veh_build_turret_muzzle(
             ent, vehicleState, weaponInfo,
             vehiclePrimaryFlashTagNames[flashStart + flash],
-            NULL, allowTargetCorrection, &muzzle);
+            &tagMatrix, allowTargetCorrection, &muzzle);
         bulletHit = game_compat_veh_fire_turret_muzzle(ent, attacker, weaponInfo, &muzzle);
     }
 
