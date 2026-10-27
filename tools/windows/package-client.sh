@@ -36,7 +36,7 @@ case "$package_arch" in
     i686)
         architecture='Windows PE32 / Intel i686'
         build_target=client-windows-i686-package
-        audio_note='Miles is detected at runtime when the retail mss32.dll and miles/ providers are installed. Without Miles, this build uses Miniaudio.'
+        audio_note='This build defaults to Miniaudio. Miles is available in the audio backend selector when the retail mss32.dll and miles/ providers are installed.'
         objdump=${MINGW32_OBJDUMP:-i686-w64-mingw32-objdump}
         strip_tool=${MINGW32_STRIP:-i686-w64-mingw32-strip}
         ;;
