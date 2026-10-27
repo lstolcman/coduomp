@@ -49,7 +49,7 @@ float VectorDistance(const vec3_t first, const vec3_t second);
 /* The original returns a live x87 sum; callers select any float store. */
 WIDE_FLOAT VectorDistanceSquared(const vec3_t first, const vec3_t second);
 float VectorDistance2D(const vec3_t first, const vec3_t second);
-float VectorDistanceSquared2D(const vec3_t first, const vec3_t second);
+WIDE_FLOAT VectorDistanceSquared2D(const vec3_t first, const vec3_t second);
 float VectorMax(const vec3_t vector);
 float vectoyaw(const vec3_t direction);
 float vectosignedyaw(const vec2_t direction);
