@@ -9,6 +9,7 @@
 
 #include "game_functions.h"
 #include "scr_vm.h"
+#include <string.h>
 
 enum {
     SCRIPT_VM_EXPORT_GET_FUNCTION =
@@ -132,8 +133,9 @@ DEFINE_RET_1(script_variable_type_t, Scr_GetPointerType,
              SCRIPT_IMPORT_GET_POINTER_TYPE,
              variable_type_from_u32, uint32_t, index)
 /* VERIFIED_DECOMPILER(0x94c90, a4c90_Scr_GetEntityNum.c, VERIFY-SCRIPT-VM-BRIDGE-WRAPPERS-2026-06-17): DATAFLOW_VERIFIED; forwards through script VM callback slot; slot address and argument arity mechanically checked against decompiler. */
+/* Use the engine's declared return type, then widen its entity number. */
 DEFINE_RET_2(uint32_t, Scr_GetEntityNum, SCRIPT_IMPORT_GET_ENTITY_NUM,
-             u32_from_u32_intp, uint32_t, index, int *, classnum)
+             u16_from_u32_intp, uint32_t, index, int *, classnum)
 /* VERIFIED_DECOMPILER(0x94d09, a4d09_Scr_GetNumParam.c, VERIFY-SCRIPT-VM-BRIDGE-WRAPPERS-2026-06-17): DATAFLOW_VERIFIED; forwards through script VM callback slot; slot address and argument arity mechanically checked against decompiler. */
 DEFINE_RET_0(uint32_t, Scr_GetNumParam, SCRIPT_IMPORT_GET_NUM_PARAM,
              u32_from_void)
@@ -202,8 +204,9 @@ DEFINE_VOID_1(Scr_FreeGameVariable, SCRIPT_IMPORT_FREE_GAME_VARIABLE,
 DEFINE_VOID_1(Scr_ShutdownSystem, SCRIPT_IMPORT_SHUTDOWN_SYSTEM,
               void_from_u8, uint8_t, mode)
 /* VERIFIED_DECOMPILER(0x9563b, a563b_Scr_IsSystemActive.c, VERIFY-SCRIPT-VM-BRIDGE-WRAPPERS-2026-06-17): DATAFLOW_VERIFIED; narrows the incoming system argument to one byte before forwarding through script VM callback slot 39, then preserves the full qboolean return. */
+/* The engine accepts an unused qboolean; promote the game-side byte argument. */
 DEFINE_RET_1(qboolean, Scr_IsSystemActive, SCRIPT_IMPORT_IS_SYSTEM_ACTIVE,
-             bool_from_u8, uint8_t, system)
+             bool_from_bool, uint8_t, system)
 /* VERIFIED_DECOMPILER(0x956d6, a56d6_Scr_AddExecThread.c, VERIFY-SCRIPT-VM-BRIDGE-WRAPPERS-2026-06-17): DATAFLOW_VERIFIED; forwards through script VM callback slot; slot address and argument arity mechanically checked against decompiler. */
 DEFINE_VOID_2(Scr_AddExecThread, SCRIPT_IMPORT_ADD_EXEC_THREAD,
               void_from_u32_u32, uint32_t, handle, uint32_t, paramCount)
@@ -401,10 +404,10 @@ script_callback_fn_t *
 Scr_FarHook(script_callback_fn_t *engineCallbacks)
 {
     if (engineCallbacks != NULL) {
-        for (size_t index = 0; index < SCRIPT_IMPORT_CALLBACK_COUNT;
-             index++) {
-            scriptVmCallbacks[index].generic = engineCallbacks[index];
-        }
+        /* Copy the native callback cells without indexing union storage as a
+         * separate array of function pointers. Export cells are untouched. */
+        memcpy(scriptVmCallbacks, engineCallbacks,
+               SCRIPT_IMPORT_CALLBACK_COUNT * sizeof(script_vm_callback_slot_t));
     }
 
     scriptVmCallbacks[SCRIPT_VM_EXPORT_GET_FUNCTION].function_lookup =
