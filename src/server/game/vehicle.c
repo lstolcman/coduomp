@@ -4844,6 +4844,7 @@ static void game_compat_veh_build_turret_muzzle(gentity_t *ent,
                                   vehicle_state_t *vehicleState,
                                   const weaponInfo_t *weaponInfo,
                                   const char *tagName,
+                                  const DObjSkelMat *fallbackMatrix,
                                   qboolean allowTargetCorrection,
                                   weapon_muzzle_t *muzzle)
 {
@@ -4852,6 +4853,12 @@ static void game_compat_veh_build_turret_muzzle(gentity_t *ent,
     vec3_t tagAngles;
     vec3_t targetAngles;
     vec3_t deltaAngles;
+
+    /* A failed flash-tag lookup leaves its output untouched. Alternate and
+     * gunner fire retain the previously obtained barrel pose in that case. */
+    if (fallbackMatrix != NULL) {
+        tagMatrix = *fallbackMatrix;
+    }
 
     if (G_DObjGetWorldTagMatrix(ent, tagName, &tagMatrix) == 0) {
         /* NOT_FROM_ORIGINAL_SOURCE: forward the completed warning as data
@@ -5007,7 +5014,7 @@ void CMD_VEH_FireTurret(uint32_t scriptObject)
         game_compat_veh_build_turret_muzzle(
             ent, vehicleState, weaponInfo,
             vehiclePrimaryFlashTagNames[flashStart + flash],
-            allowTargetCorrection, &muzzle);
+            NULL, allowTargetCorrection, &muzzle);
         bulletHit = game_compat_veh_fire_turret_muzzle(ent, attacker, weaponInfo, &muzzle);
     }
 
@@ -5060,7 +5067,6 @@ void CMD_VEH_FireAltTurret(uint32_t scriptObject)
     DObjSkelMat barrelMatrix;
     G_DObjGetWorldBoneIndexMatrix(
         ent, vehicleState->primaryAltTurretTagIndex, &barrelMatrix);
-    (void)barrelMatrix;
 
     gentity_t *attacker = &g_entities[primaryPassenger];
     if (attacker->client != NULL &&
@@ -5076,7 +5082,7 @@ void CMD_VEH_FireAltTurret(uint32_t scriptObject)
 
         game_compat_veh_build_turret_muzzle(ent, vehicleState, weaponInfo,
                               vehicleAltFireTagNames[flash],
-                              allowTargetCorrection, &muzzle);
+                              &barrelMatrix, allowTargetCorrection, &muzzle);
         bulletHit = game_compat_veh_fire_turret_muzzle(ent, attacker, weaponInfo, &muzzle);
         if (weaponInfo->weaponType == WEAPTYPE_BULLET) {
             vehicleState->altHeat += weaponInfo->turretHeatPerShot;
@@ -5124,7 +5130,6 @@ void G_VEH_FireGunner(uint32_t scriptObject, qboolean ignoreReady)
     DObjSkelMat barrelMatrix;
     G_DObjGetWorldBoneIndexMatrix(
         ent, vehicleState->gunnerTurretTagIndex, &barrelMatrix);
-    (void)barrelMatrix;
 
     gentity_t *attacker = ignoreReady ? &g_entities[0] :
         &g_entities[
@@ -5139,7 +5144,7 @@ void G_VEH_FireGunner(uint32_t scriptObject, qboolean ignoreReady)
 
         game_compat_veh_build_turret_muzzle(ent, vehicleState, weaponInfo,
                               vehicleSecondaryFlashTagNames[flash],
-                              qfalse, &muzzle);
+                              &barrelMatrix, qfalse, &muzzle);
         bulletHit = game_compat_veh_fire_turret_muzzle(ent, attacker, weaponInfo, &muzzle);
         if (weaponInfo->weaponType == WEAPTYPE_BULLET) {
             vehicleState->gunnerHeat += weaponInfo->turretHeatPerShot;
