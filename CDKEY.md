@@ -10,14 +10,23 @@ issue report, or log. Enter it through the multiplayer UI when possible. If
 migrating an existing `codkey` file, copy the complete file without printing
 its contents.
 
-## Connecting without a key
+## Connecting to servers
 
-On `master`, clients without a locally valid key can connect to servers that
-accept unauthenticated clients. If the selected server requests CD-key
-authorization during connection setup, the client reports an invalid-key error
-and disconnects. Valid keys still use the normal proactive authorization
-exchange; the client does not wait for the server to request one. The `stock`
-branch retains its original local key requirement.
+On `master`, a server that accepts unauthenticated clients can be joined
+regardless of the local CD key: missing, invalid, valid, or reported as already
+in use. None of these key states blocks a connection to a no-auth server.
+
+Local validation checks the key's checksum; it does not establish whether the
+authorization service accepts the key or considers it in use. Locally valid
+keys still use the normal proactive authorization exchange. The client ignores
+direct authorization replies; a key-related rejection must come from the
+selected game server.
+
+If the selected server requests CD-key authorization during connection setup,
+a missing or locally invalid key causes an invalid-key error and disconnect.
+With a locally valid key, authorization proceeds normally, and the server can
+still reject it as invalid or already in use. The `stock` branch retains its
+original local key requirement.
 
 ## Default locations
 
