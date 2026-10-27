@@ -80,12 +80,14 @@ static void game_compat_g_missile_vector_copy(const float *src, float *dst)
     dst[2] = src[2];
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: local vector helper factored from recovered missile bodies. */
+/* NOT_FROM_ORIGINAL_SOURCE: local vector helper factored from recovered missile bodies.
+ * Both launchers convert each stored float through signed-qword truncation,
+ * then convert the signed low dword back to float. */
 static void game_compat_g_missile_round_vector(float *value)
 {
-    value[0] = (float)game_compat_int32_from_float_trunc(value[0]);
-    value[1] = (float)game_compat_int32_from_float_trunc(value[1]);
-    value[2] = (float)game_compat_int32_from_float_trunc(value[2]);
+    value[0] = (float)coduo_fp_to_i32_extended(value[0]);
+    value[1] = (float)coduo_fp_to_i32_extended(value[1]);
+    value[2] = (float)coduo_fp_to_i32_extended(value[2]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -620,9 +622,10 @@ void G_MissileImpact(gentity_t *ent, trace_t *trace, float *dir)
     gentity_t *inflictor;
     gentity_t *attacker;
     float distance;
+    WIDE_FLOAT liveDamage;
     volatile float damage;
     vec3_t velocity;
-    float speed;
+    WIDE_FLOAT speed;
     int hitLogged;
     int impactEvent;
     int surfaceType;
@@ -676,16 +679,19 @@ void G_MissileImpact(gentity_t *ent, trace_t *trace, float *dir)
             G_BounceMissile(ent, trace);
             return;
         }
-        distance = VectorDistance(ent->s.pos.trBase, ent->currentOrigin);
         if (weaponInfo == NULL) {
-            damage = (float)ent->damage;
+            liveDamage = ent->damage;
         } else {
-            damage = Damage_Falloff(distance, (float)ent->damage,
-                                    (float)weaponInfo->damageFalloffMinDamagePercent,
-                                    weaponInfo->damageFalloffMinRange,
-                                    weaponInfo->damageFalloffMaxRange);
+            distance = VectorDistance(ent->s.pos.trBase, ent->currentOrigin);
+            liveDamage = Damage_Falloff(distance, (float)ent->damage,
+                                       (float)weaponInfo->damageFalloffMinDamagePercent,
+                                       weaponInfo->damageFalloffMinRange,
+                                       weaponInfo->damageFalloffMaxRange);
         }
-        if (damage > 0.0f) {
+        /* Store damage for the later integer conversion, but test the live
+         * result before reloading that binary32 value. */
+        damage = (float)liveDamage;
+        if (liveDamage > 0.0f) {
             gentity_t *accuracyAttacker =
                 &g_entities[ent->passEntityNum];
 
@@ -693,14 +699,17 @@ void G_MissileImpact(gentity_t *ent, trace_t *trace, float *dir)
                 hitLogged = 1;
             }
             BG_EvaluateTrajectoryDelta(&ent->s.pos, level.time, velocity);
-            speed = (float)CoduoLibm_Sqrt((double)(velocity[0] * velocity[0] +
-                                         velocity[1] * velocity[1] +
-                                         velocity[2] * velocity[2]));
+            /* The Z/Y/X sum and square root stay wide through the zero test. */
+            volatile WIDE_FLOAT squareZ = (WIDE_FLOAT)velocity[2] * velocity[2];
+            volatile WIDE_FLOAT squareY = (WIDE_FLOAT)velocity[1] * velocity[1];
+            volatile WIDE_FLOAT squareX = (WIDE_FLOAT)velocity[0] * velocity[0];
+            speed = coduo_x87_sqrtl((squareZ + squareY) + squareX);
             if (speed == 0.0f) {
                 velocity[2] = 1.0f;
             }
+            /* Truncate the stored damage to a signed qword and consume its low dword. */
             G_Damage(other, inflictor, attacker, velocity, ent->currentOrigin,
-                     game_compat_int32_from_float_trunc(damage), 0,
+                     coduo_fp_to_i32_extended(damage), 0,
                      ent->methodOfDeath, 0);
         }
     }
@@ -759,12 +768,10 @@ void G_MissileImpact(gentity_t *ent, trace_t *trace, float *dir)
         splashOrigin[0] = trace->endpos[0];
         splashOrigin[1] = trace->endpos[1];
         splashOrigin[2] = trace->endpos[2];
-        splashEnd[0] = trace->endpos[0] +
-                       trace->normal[0] * MISSILE_IMPACT_TRACE_OFFSET;
-        splashEnd[1] = trace->endpos[1] +
-                       trace->normal[1] * MISSILE_IMPACT_TRACE_OFFSET;
-        splashEnd[2] = trace->endpos[2] +
-                       trace->normal[2] * MISSILE_IMPACT_TRACE_OFFSET;
+        /* Each normal product remains live until the endpoint float store. */
+        splashEnd[0] = (WIDE_FLOAT)trace->normal[0] * MISSILE_IMPACT_TRACE_OFFSET + splashOrigin[0];
+        splashEnd[1] = (WIDE_FLOAT)trace->normal[1] * MISSILE_IMPACT_TRACE_OFFSET + splashOrigin[1];
+        splashEnd[2] = (WIDE_FLOAT)trace->normal[2] * MISSILE_IMPACT_TRACE_OFFSET + splashOrigin[2];
 
         trap_Trace(trace, splashOrigin, vec3_origin, vec3_origin,
                    splashEnd, ent->s.number,
@@ -1250,9 +1257,9 @@ gentity_t *fire_rocket(gentity_t *self, float *start, float *dir)
     game_compat_g_missile_vector_copy(start, rocket->s.pos.trBase);
     /* 0x5fe32: fild missileSpeed feeds the multiply directly; the integer
      * is never rounded to float, only the final store rounds. */
-    rocket->s.pos.trDelta[0] = dir[0] * (long double)weaponInfo->missileSpeed;
-    rocket->s.pos.trDelta[1] = dir[1] * (long double)weaponInfo->missileSpeed;
-    rocket->s.pos.trDelta[2] = dir[2] * (long double)weaponInfo->missileSpeed;
+    rocket->s.pos.trDelta[0] = dir[0] * (WIDE_FLOAT)weaponInfo->missileSpeed;
+    rocket->s.pos.trDelta[1] = dir[1] * (WIDE_FLOAT)weaponInfo->missileSpeed;
+    rocket->s.pos.trDelta[2] = dir[2] * (WIDE_FLOAT)weaponInfo->missileSpeed;
     game_compat_g_missile_round_vector(rocket->s.pos.trDelta);
 
     game_compat_g_missile_vector_copy(start, rocket->currentOrigin);
