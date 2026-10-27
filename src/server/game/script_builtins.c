@@ -4064,16 +4064,17 @@ void script_func_atan(void)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_vector_length_squared). */
-static float game_compat_script_vector_length_squared(const vec3_t value)
+static WIDE_FLOAT game_compat_script_vector_length_squared(const vec3_t value)
 {
-    /* 3-mul/2-add dot kept 80-bit, rounded to float on return -> shim. */
-    return value[0] * value[0] + value[1] * value[1] + value[2] * value[2];
+    /* Fold Z,Y,X without narrowing; the caller owns the final float store
+     * and, for length, the intervening native square root. */
+    return ((WIDE_FLOAT)value[2] * value[2] + (WIDE_FLOAT)value[1] * value[1]) + (WIDE_FLOAT)value[0] * value[0];
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_vector_dot). */
-static float game_compat_script_vector_dot(const vec3_t a, const vec3_t b)
+static WIDE_FLOAT game_compat_script_vector_dot(const vec3_t a, const vec3_t b)
 {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    return ((WIDE_FLOAT)b[2] * a[2] + (WIDE_FLOAT)b[1] * a[1]) + (WIDE_FLOAT)b[0] * a[0];
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_fade_seconds_to_milliseconds). */
@@ -4112,20 +4113,18 @@ void script_func_distancesquared(void)
     Scr_AddFloat(VectorDistanceSquared(a, b));
 }
 
-/* VERIFIED_DECOMPILER(0x6b895, 7b895_script_func_length.c, VERIFY-SCRIPT-BUILTINS-VECTOR-AUDIO-2026-06-17): DATAFLOW_VERIFIED; vector fetch, squared-length helper, double sqrt, float cast, and return checked against current decompiler output. */
+/* Source: Windows game RVA 0x3a9d0, Linux name/structure RVA 0x6b895.
+ * Fetch one vector, accumulate its squared length, take the native square root,
+ * then publish one float result. The Windows body has no double argument store. */
 void script_func_length(void)
 {
     vec3_t value;
 
     Scr_GetVector(0, value);
-    /* 0x6b8ba..0x6b8d8: the squared-length chain stays in the x87 register and
-     * is rounded to DOUBLE at the sqrt argument store (fstp QWORD) — no
-     * intermediate float rounding, so the helper (which returns float) is not
-     * usable here. */
-    /* dot 80-bit -> double at sqrt boundary -> float -> shim. */
-    Scr_AddFloat((float)CoduoLibm_Sqrt((double)(value[0] * value[0] +
-                                      value[1] * value[1] +
-                                      value[2] * value[2])));
+    /* The Windows Z,Y,X squared sum stays live through inline FSQRT. There
+     * is no intermediate float/double store or CRT control-word adjustment. */
+    /* Round only the square-root result to the script float boundary. */
+    Scr_AddFloat((float)coduo_x87_sqrtl(game_compat_script_vector_length_squared(value)));
 }
 
 /* VERIFIED_DECOMPILER(0x6b8ec, 7b8ec_script_func_lengthsquared.c, VERIFY-SCRIPT-BUILTINS-VECTOR-AUDIO-2026-06-17): DATAFLOW_VERIFIED; vector fetch, squared-length expression, and float return checked against current decompiler output. */
@@ -4134,7 +4133,7 @@ void script_func_lengthsquared(void)
     vec3_t value;
 
     Scr_GetVector(0, value);
-    Scr_AddFloat(game_compat_script_vector_length_squared(value));
+    Scr_AddFloat((float)game_compat_script_vector_length_squared(value));
 }
 
 /* VERIFIED_DECOMPILER(0x6b935, 7b935_script_func_closer.c, VERIFY-SCRIPT-BUILTINS-VECTOR-AUDIO-2026-06-17): DATAFLOW_VERIFIED; three vector fetches, distance-squared comparison order, and integer return checked against current decompiler output. */
@@ -4162,7 +4161,7 @@ void script_func_vectordot(void)
 
     Scr_GetVector(0, a);
     Scr_GetVector(1, b);
-    Scr_AddFloat(game_compat_script_vector_dot(a, b));
+    Scr_AddFloat((float)game_compat_script_vector_dot(a, b));
 }
 
 /* VERIFIED_DECOMPILER(0x6ba27, 7ba27_script_func_vectornormalize.c, VERIFY-SCRIPT-BUILTINS-VECTOR-AUDIO-2026-06-17): DATAFLOW_VERIFIED; vector fetch, local copy, VectorNormalize call, and vector return checked against current decompiler output. */
