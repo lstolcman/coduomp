@@ -2141,8 +2141,10 @@ static gentity_t *Think_SpawnNewDoorTriggerInternal(gentity_t *ent)
     }
 
     narrowAxis = 0;
+    /* Keep widths wide until comparison so unequal dimensions do not become
+     * a float tie and select a different trigger-expansion axis. */
     for (int axis = 1; axis < 3; axis++) {
-        if (maxs[axis] - mins[axis] < maxs[narrowAxis] - mins[narrowAxis]) {
+        if ((WIDE_FLOAT)maxs[axis] - mins[axis] < (WIDE_FLOAT)maxs[narrowAxis] - mins[narrowAxis]) {
             narrowAxis = axis;
         }
     }
