@@ -165,7 +165,8 @@ void CG_MoveFlameChunk(flameChunk_t *chunk, int32_t flameTime)
             /* result = CG_pow(ramp, 1.0): base ramp is a genuine double (FSTP
              * double [ESP+0x18]; FLD double before the CALL) so it is not widened,
              * but the raw ST0 result is consumed by FSUBR/FMUL with no store, so
-             * coduomp_math_powl (long double result) is required -- a double pow would round. */
+             * coduomp_math_powl keeps the selected CRT result live; a double
+             * return would add a rounding point on the x87 route. */
             result = coduomp_math_powl(ramp, 1.0L);
             x = (1.0 - result) * bcScaled;
         } else {

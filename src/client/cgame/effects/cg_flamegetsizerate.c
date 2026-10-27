@@ -71,10 +71,10 @@ long double CG_FlameGetSizeRate(flameChunk_t *f /* ESI */)
         // The base is FLD float; FMUL float, left raw in st(1) with no store, and
         // _CIpow leaves its result raw in st(0), which FADD ST0,ST0 (30023bbd)
         // then consumes; the sum stays in st through the FADDP at 30023be7 -- the
-        // ONLY rounding on this path is the FSTP double [ESP+0xc] at 30023be9
-        // (into A). powl keeps both the base and the result 80-bit as the bytes
-        // require; a double `pow` would round each. (The powl polynomial still
-        // differs from _CIpow -- a pre-existing transcendental relaxation.)
+        // caller rounding on this path is the FSTP double [ESP+0xc] at 30023be9
+        // (into A). The shared provider receives the live base, then applies
+        // the CRT's own input stores and CPU dispatch. Its wide result retains
+        // the x87 return or promotes the already-rounded SSE2 return.
         long double cubed =
             coduomp_math_powl((long double)f->driftSpeed * CG_FLAME_INPUT_SCALE, 3.0L);
 
@@ -119,9 +119,9 @@ long double CG_FlameGetSizeRate(flameChunk_t *f /* ESI */)
     // 30023c05..30023c1e: result = pow(C, 2.0) * B + B / A.
     // pow(C,2.0): C raw in ST(1), 2.0 (0x3007bde8) in ST(0); _CIpow leaves the
     // result raw in ST(0), FMUL B and FADDP run on it 80-bit, and the RET hands
-    // it back unrounded (no store in the tail). powl keeps the base, the result
-    // and the return all 80-bit; the return type is long double so no rounding
-    // is inserted at `return`. (powl != _CIpow polynomial -- relaxation.)
+    // it back unrounded (no store in the tail). The shared provider owns the
+    // CRT's input stores and dispatch; long double keeps its selected result
+    // and the following arithmetic live through the source return boundary.
     return coduomp_math_powl(C, 2.0L) * (long double)B +
            (long double)B / (long double)A;
 }

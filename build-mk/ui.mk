@@ -30,6 +30,7 @@ SHARED_C_SOURCES := $(ROOT)/src/qcommon/com_parse.c \
 	$(ROOT)/src/compat/crt/atof_compat.c \
 	$(ROOT)/src/compat/crt/format_compat.c \
 	$(ROOT)/src/compat/crt/msvc_compat.c \
+	$(ROOT)/src/compat/crt/pow_compat.c \
 	$(ROOT)/src/compat/crt/qsort_compat.c \
 	$(ROOT)/src/compat/crt/sin_cos_compat.c \
 	$(ROOT)/src/client/common/client_common.c \

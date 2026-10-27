@@ -254,8 +254,9 @@ void CG_AddFlameChunks(flameChunk_t *ownerChunk)
                      * thr <= sepLen (or unordered); continue only when thr > sepLen.
                      * The raw CG_pow st0 result, both float multiplies, the
                      * doubling and the FCOMPP all stay in st registers with no
-                     * store, so thr is long double; powl widens the base OPERAND
-                     * and keeps the raw result 80-bit. */
+                     * store, so thr is long double. The shared provider receives
+                     * the live base and applies the CRT's own stores and dispatch;
+                     * the caller keeps its selected result and later arithmetic live. */
                     long double thr = coduomp_math_powl(((long double)ratioA + 1.0f) * 0.5f, 1.5L)
                                       * f->radius * weight;
                     thr = thr + thr;

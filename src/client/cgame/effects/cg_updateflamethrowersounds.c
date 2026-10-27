@@ -44,8 +44,8 @@
 #include <math.h>
 
 /* 0x3005bcd0 and 0x3006bb20 are the statically linked MSVC floor(double) and
- * pow(double,double) implementations. Portable recovered source crosses that
- * library boundary through the standard math interface. The arguments here make
+ * pow(double,double) implementations. Power crosses the shared CRT provider;
+ * floor retains its standard math interface here. The arguments here make
  * both calls mathematical identities, but the calls remain explicit for fidelity. */
 
 /* Small flame-sound tuning constants, dumped from .rdata at the exact addresses. */

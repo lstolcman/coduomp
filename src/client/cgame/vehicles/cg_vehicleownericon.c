@@ -129,11 +129,11 @@ void CG_VehicleOwnerIcon(centity_t *cent)
                            (long double)CG_HEADICON_FADEOUT_RATE);
         }
 
-        /* alphaScale = pow(fade, 1.5): _CIpow leaves the raw 80-bit result in
+        /* alphaScale = pow(fade, 1.5): _CIpow leaves the selected CRT result in
          * ST(0), FSTP'd to float once at 0x30021601 (the sprite arg). fade is a
-         * float loaded FLD float into ST(1); powl keeps the base and result
-         * 80-bit so the single (float) narrows once (a double pow return would
-         * round twice). Exp 1.5 is the double at 0x3007c278. */
+         * float loaded FLD float into ST(1); the provider applies the CRT's
+         * stores and dispatch, and its wide return avoids an extra binary64
+         * store on the x87 route. Exp 1.5 is the double at 0x3007c278. */
         float alphaScale = (float)coduomp_math_powl((long double)fade, 1.5L);
 
         /* Yaw spin: rotate the icon by the phase-driven angle relative to its base
