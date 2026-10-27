@@ -56,6 +56,8 @@ typedef enum vehicle_turret_activity_slot_e {
 /* Vehicle collision parameters */
 #define VEH_COLLISION_SPEED_THRESHOLD  200.0f
 #define VEH_COLLISION_MAX_SPEED        400.0f
+#define VEH_COLLISION_SPEED_RECIPROCAL 0.0025f /* binary32 0x3b23d70a */
+#define VEH_COLLISION_MOTION_EPSILON   0.01f
 #define VEH_COLLISION_KNOCKBACK_BASE   150.0f
 #define VEH_COLLISION_KNOCKBACK_MULT   1.3f
 #define VEH_COLLISION_VERTICAL_BASE    200.0f
@@ -578,9 +580,6 @@ void VEH_CalcAccel(gentity_t *ent, const int8_t input[3],
                                  vec3_t linearAccel,
                                  vec3_t angularAccel);
 void VEH_UpdateClient(gentity_t *ent);
-#if !defined(__x86_64__)
-static int game_compat_veh_round_to_int(float value);
-#endif
 qboolean VEH_PhysicsNotRequired(gentity_t *ent, qboolean checkNearbyClients);
 qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber);
 void VEH_GroundTrace(gentity_t *ent);
@@ -779,10 +778,11 @@ static void game_compat_veh_project_velocity_to_local_axis(const vehicle_state_t
                                            vec3_t localVelocity)
 {
     for (int axisIndex = 0; axisIndex < 3; axisIndex++) {
-        localVelocity[axisIndex] =
-            axis[axisIndex][0] * vehicleState->velocity[0] +
-            axis[axisIndex][1] * vehicleState->velocity[1] +
-            axis[axisIndex][2] * vehicleState->velocity[2];
+        /* Each Z/Y/X dot stays wide until its binary32 local store. */
+        localVelocity[axisIndex] = coduo_round_f32(
+            ((WIDE_FLOAT)axis[axisIndex][2] * vehicleState->velocity[2] +
+             (WIDE_FLOAT)axis[axisIndex][1] * vehicleState->velocity[1]) +
+            (WIDE_FLOAT)axis[axisIndex][0] * vehicleState->velocity[0]);
     }
 }
 
@@ -790,9 +790,9 @@ static void game_compat_veh_project_velocity_to_local_axis(const vehicle_state_t
 static void game_compat_veh_add_scaled_axis(vec3_t velocity, axis_t axis,
                               int axisIndex, float scale)
 {
-    velocity[0] += axis[axisIndex][0] * scale;
-    velocity[1] += axis[axisIndex][1] * scale;
-    velocity[2] += axis[axisIndex][2] * scale;
+    velocity[0] = coduo_round_f32(velocity[0] + (WIDE_FLOAT)axis[axisIndex][0] * scale);
+    velocity[1] = coduo_round_f32(velocity[1] + (WIDE_FLOAT)axis[axisIndex][1] * scale);
+    velocity[2] = coduo_round_f32(velocity[2] + (WIDE_FLOAT)axis[axisIndex][2] * scale);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
@@ -909,14 +909,23 @@ static float game_compat_veh_clamp_abs(float value, float maxAbs)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-/* Every inline original rounds the squared sum to DOUBLE and calls CoduoLibm_Sqrt()
- * (e.g. 0x7da9b/0x7dbad: fstp QWORD; call sqrt), never sqrtf. */
+/* Binary64 square-root boundary followed by a float result. Callers whose
+ * original FSQRT result remains live use the wide helper below instead. */
 static float game_compat_veh_length3(const vec3_t value)
 {
     return (float)CoduoLibm_Sqrt((double)(
         (long double)value[0] * (long double)value[0] +
         (long double)value[1] * (long double)value[1] +
         (long double)value[2] * (long double)value[2]));
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: X/Y/Z squared sum and native square root without
+ * an intermediate float or double store. The caller owns any result rounding. */
+static WIDE_FLOAT game_compat_veh_length3_wide(const vec3_t value)
+{
+    return coduomp_math_sqrtl(
+        ((WIDE_FLOAT)value[0] * value[0] + (WIDE_FLOAT)value[1] * value[1]) +
+        (WIDE_FLOAT)value[2] * value[2]);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: preserve the Z/Y/X fold of the inlined desired
@@ -1113,15 +1122,6 @@ static void game_compat_veh_set_wheel_surface_at(vehicle_state_t *vehicleState,
     game_compat_veh_set_float_slot_int_bits(&vehicleState->wheelMaterial[wheelIndex],
                             surfaceType);
 }
-
-/* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-#if !defined(__x86_64__)
-static int game_compat_veh_round_to_int(float value)
-{
-    /* The original converts an already-rounded binary32 value. */
-    return (int)value;
-}
-#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
 static WIDE_FLOAT game_compat_veh_non_pvs_tank_delta_scale(int delta)
@@ -6796,22 +6796,23 @@ void VEH_GroundFriction(gentity_t *ent)
     vec3_t localVelocity;
     vec3_t normalizedVelocity;
     float sideSpeed;
+    float frictionScale;
 
     AnglesToAxis(vehicleState->viewClampTargetAngles, axis);
     game_compat_veh_project_velocity_to_local_axis(vehicleState, axis, localVelocity);
 
     sideSpeed = fabsf(localVelocity[1]);
-    if (sideSpeed > VEH_GROUND_SIDE_CLAMP_SPEED) {
+    if (!(sideSpeed < VEH_GROUND_SIDE_CLAMP_SPEED)) {
         sideSpeed = VEH_GROUND_SIDE_CLAMP_SPEED;
     }
 
     VectorNormalize2(vehicleState->velocity, normalizedVelocity);
-    vehicleState->velocity[0] += -sideSpeed * VEH_GROUND_FRICTION_SCALE *
-                                 normalizedVelocity[0];
-    vehicleState->velocity[1] += -sideSpeed * VEH_GROUND_FRICTION_SCALE *
-                                 normalizedVelocity[1];
-    vehicleState->velocity[2] += -sideSpeed * VEH_GROUND_FRICTION_SCALE *
-                                 normalizedVelocity[2];
+    /* The shared coefficient rounds once; each component product remains
+     * wide through addition to velocity and its final float store. */
+    frictionScale = coduo_round_f32(-(WIDE_FLOAT)sideSpeed * VEH_GROUND_FRICTION_SCALE);
+    vehicleState->velocity[0] = coduo_round_f32(vehicleState->velocity[0] + (WIDE_FLOAT)frictionScale * normalizedVelocity[0]);
+    vehicleState->velocity[1] = coduo_round_f32(vehicleState->velocity[1] + (WIDE_FLOAT)frictionScale * normalizedVelocity[1]);
+    vehicleState->velocity[2] = coduo_round_f32(vehicleState->velocity[2] + (WIDE_FLOAT)frictionScale * normalizedVelocity[2]);
 
     game_compat_veh_project_velocity_to_local_axis(vehicleState, axis, localVelocity);
 
@@ -6827,25 +6828,28 @@ void VEH_GroundFriction(gentity_t *ent)
             game_compat_veh_add_scaled_axis(vehicleState->velocity, axis, 1,
                               VEH_GROUND_SIDE_CLAMP_SPEED);
         } else {
-            game_compat_veh_add_scaled_axis(vehicleState->velocity, axis, 1,
-                              -VEH_GROUND_SIDE_CLAMP_SPEED);
+            for (int component = 0; component < 3; component++) {
+                vehicleState->velocity[component] = coduo_round_f32(
+                    vehicleState->velocity[component] - (WIDE_FLOAT)axis[1][component] * VEH_GROUND_SIDE_CLAMP_SPEED);
+            }
         }
         game_compat_veh_add_scaled_axis(vehicleState->velocity, axis, 2, localVelocity[2]);
     }
 
     if (localVelocity[0] > VEH_GROUND_STEER_MIN_FORWARD &&
         localVelocity[1] > VEH_GROUND_STEER_MIN_SIDE) {
-        /* 0x80266: the dot product is rounded to double for CoduoLibm_Sqrt(), not to
-         * float for sqrtf(). */
+        /* The squared sum stays wide through the square-root call. With the
+         * original 53-bit control word, finite float-derived sums and roots
+         * fit the binary64 boundary here; the result then rounds to float. */
         const float speed = game_compat_veh_length3(vehicleState->velocity);
         vec3_t correction;
         float correctionLength;
 
-        /* 0x80271..0x802ad: the products are stored to float slots first and
+        /* The products are stored to float slots first and
          * the velocity is subtracted in place (two roundings per component). */
-        correction[0] = axis[0][0] * speed;
-        correction[1] = axis[0][1] * speed;
-        correction[2] = axis[0][2] * speed;
+        correction[0] = coduo_round_f32((WIDE_FLOAT)axis[0][0] * speed);
+        correction[1] = coduo_round_f32((WIDE_FLOAT)axis[0][1] * speed);
+        correction[2] = coduo_round_f32((WIDE_FLOAT)axis[0][2] * speed);
         correction[0] -= vehicleState->velocity[0];
         correction[1] -= vehicleState->velocity[1];
         correction[2] -= vehicleState->velocity[2];
@@ -6855,9 +6859,9 @@ void VEH_GroundFriction(gentity_t *ent)
             correctionLength = VEH_GROUND_STEER_MAX_STEP;
         }
 
-        vehicleState->velocity[0] += correction[0] * correctionLength;
-        vehicleState->velocity[1] += correction[1] * correctionLength;
-        vehicleState->velocity[2] += correction[2] * correctionLength;
+        vehicleState->velocity[0] = coduo_round_f32(vehicleState->velocity[0] + (WIDE_FLOAT)correction[0] * correctionLength);
+        vehicleState->velocity[1] = coduo_round_f32(vehicleState->velocity[1] + (WIDE_FLOAT)correction[1] * correctionLength);
+        vehicleState->velocity[2] = coduo_round_f32(vehicleState->velocity[2] + (WIDE_FLOAT)correction[2] * correctionLength);
 
         VectorNormalize(vehicleState->velocity);
         vehicleState->velocity[0] *= speed;
@@ -7003,17 +7007,18 @@ void VEH_PlayerCollision(gentity_t *vehicle, gentity_t *player)
     const vehicleInfo_t *vehicleInfo =
         &g_vehicleInfoTable[vehicleState->typeIndex];
     vec3_t vehicleVelocity;
-    float vehicleSpeed;
+    WIDE_FLOAT vehicleSpeed;
     vec3_t direction;
-    float speedFactor;
     float impactSpeedFactor;
     vec3_t knockback;
-    float knockbackMagnitude;
+    wide_vec3_t liveKnockback;
+    WIDE_FLOAT knockbackMagnitude;
     vec3_t totalVelocity;
-    float totalSpeed;
+    WIDE_FLOAT totalSpeed;
+    float storedKnockbackMagnitude;
+    float speedLimit;
     float damageImpulse;
-    double verticalSpeedFactor;
-    gentity_t *collisionVehicle;
+    WIDE_FLOAT verticalSpeedFactor;
 
     if ((client->ps.entityStateFlags & EF_IN_VEHICLE) != 0) {
         return;
@@ -7025,10 +7030,10 @@ void VEH_PlayerCollision(gentity_t *vehicle, gentity_t *player)
     vehicleVelocity[2] = vehicleState->velocity[2];
 
     /* Calculate vehicle speed */
-    vehicleSpeed = game_compat_veh_length3(vehicleVelocity);
+    vehicleSpeed = game_compat_veh_length3_wide(vehicleVelocity);
 
     /* Return if vehicle is nearly stationary */
-    if (vehicleSpeed < 0.01f) {
+    if (vehicleSpeed < VEH_COLLISION_MOTION_EPSILON) {
         return;
     }
 
@@ -7039,127 +7044,93 @@ void VEH_PlayerCollision(gentity_t *vehicle, gentity_t *player)
 
     /* Normalize direction */
     VectorNormalize(direction);
-    knockback[0] = direction[0] * game_compat_veh_length3(vehicleState->velocity);
-    knockback[1] = direction[1] * game_compat_veh_length3(vehicleState->velocity);
-    knockback[2] = direction[2] * game_compat_veh_length3(vehicleState->velocity);
+    vehicleSpeed = game_compat_veh_length3_wide(vehicleState->velocity);
+    liveKnockback[0] = vehicleSpeed * direction[0];
+    knockback[0] = coduo_round_f32(liveKnockback[0]);
+    knockback[1] = coduo_round_f32(vehicleSpeed * direction[1]);
+    liveKnockback[2] = vehicleSpeed * direction[2];
+    knockback[2] = coduo_round_f32(liveKnockback[2]);
 
     /* Calculate speed factor (0.0 to 1.0) */
-    knockbackMagnitude = game_compat_veh_length3(knockback);
-    if (knockbackMagnitude < VEH_COLLISION_MAX_SPEED) {
-        speedFactor = game_compat_veh_length3(knockback) /
-                      VEH_COLLISION_MAX_SPEED;
-    } else {
-        speedFactor = 1.0f;
-    }
-    impactSpeedFactor = speedFactor;
+    /* X remains live, Y reloads its float store, and Z multiplies its live
+     * value by the stored copy. The resulting length stays wide for both
+     * clamps; only the reciprocal-scaled impact factor rounds here. */
+    knockbackMagnitude = coduomp_math_sqrtl(
+        (liveKnockback[2] * knockback[2] + (WIDE_FLOAT)knockback[1] * knockback[1]) +
+        liveKnockback[0] * liveKnockback[0]);
+    impactSpeedFactor = coduo_round_f32(
+        (knockbackMagnitude < VEH_COLLISION_MAX_SPEED ? knockbackMagnitude : VEH_COLLISION_MAX_SPEED) *
+        VEH_COLLISION_SPEED_RECIPROCAL);
 
     /* Calculate damage impulse based on whether vehicle is moving toward player */
-    if (knockback[0] * vehicleState->velocity[0] +
-            knockback[1] * vehicleState->velocity[1] +
-            knockback[2] * vehicleState->velocity[2] >
-        0.01f) {
-        damageImpulse = impactSpeedFactor * VEH_COLLISION_KNOCKBACK_BASE;
+    if ((liveKnockback[0] * vehicleState->velocity[0] + (WIDE_FLOAT)knockback[2] * vehicleState->velocity[2]) +
+            (WIDE_FLOAT)knockback[1] * vehicleState->velocity[1] > VEH_COLLISION_MOTION_EPSILON) {
+        damageImpulse = coduo_round_f32((WIDE_FLOAT)impactSpeedFactor * VEH_COLLISION_KNOCKBACK_BASE);
     } else {
         damageImpulse = 0.0f;
     }
 
     /* Clamp knockback magnitude if speed is low */
-    knockbackMagnitude = game_compat_veh_length3(knockback);
     if (knockbackMagnitude < VEH_COLLISION_SPEED_THRESHOLD) {
         VectorNormalize(knockback);
-        knockback[0] *= VEH_COLLISION_SPEED_THRESHOLD;
-        knockback[1] *= VEH_COLLISION_SPEED_THRESHOLD;
-        knockback[2] *= VEH_COLLISION_SPEED_THRESHOLD;
+        liveKnockback[0] = (WIDE_FLOAT)knockback[0] * VEH_COLLISION_SPEED_THRESHOLD;
+        knockback[1] = coduo_round_f32((WIDE_FLOAT)knockback[1] * VEH_COLLISION_SPEED_THRESHOLD);
+        knockback[2] = coduo_round_f32((WIDE_FLOAT)knockback[2] * VEH_COLLISION_SPEED_THRESHOLD);
     }
 
     /* Apply 1.3x multiplier to knockback */
-    knockback[0] *= VEH_COLLISION_KNOCKBACK_MULT;
-    knockback[1] *= VEH_COLLISION_KNOCKBACK_MULT;
-    knockback[2] *= VEH_COLLISION_KNOCKBACK_MULT;
+    liveKnockback[0] *= VEH_COLLISION_KNOCKBACK_MULT;
+    liveKnockback[1] = (WIDE_FLOAT)knockback[1] * VEH_COLLISION_KNOCKBACK_MULT;
+    liveKnockback[2] = (WIDE_FLOAT)knockback[2] * VEH_COLLISION_KNOCKBACK_MULT;
 
     /* Add knockback to player velocity */
-    client->ps.velocity[0] += knockback[0];
-    client->ps.velocity[1] += knockback[1];
-    client->ps.velocity[2] += knockback[2];
+    client->ps.velocity[0] = coduo_round_f32(client->ps.velocity[0] + liveKnockback[0]);
+    client->ps.velocity[1] = coduo_round_f32(client->ps.velocity[1] + liveKnockback[1]);
+    client->ps.velocity[2] = coduo_round_f32(client->ps.velocity[2] + liveKnockback[2]);
 
     /* Cap total player velocity magnitude */
     totalVelocity[0] = client->ps.velocity[0];
     totalVelocity[1] = client->ps.velocity[1];
     totalVelocity[2] = client->ps.velocity[2];
-    totalSpeed = game_compat_veh_length3(totalVelocity);
-    knockbackMagnitude = game_compat_veh_length3(knockback);
-    if (totalSpeed > knockbackMagnitude * VEH_COLLISION_KNOCKBACK_MULT) {
+    storedKnockbackMagnitude = coduo_round_f32(coduomp_math_sqrtl(
+        (liveKnockback[2] * liveKnockback[2] + liveKnockback[1] * liveKnockback[1]) +
+        liveKnockback[0] * liveKnockback[0]));
+    speedLimit = coduo_round_f32((WIDE_FLOAT)storedKnockbackMagnitude * VEH_COLLISION_KNOCKBACK_MULT);
+    totalSpeed = coduomp_math_sqrtl(
+        ((WIDE_FLOAT)totalVelocity[2] * totalVelocity[2] + (WIDE_FLOAT)totalVelocity[1] * totalVelocity[1]) +
+        (WIDE_FLOAT)totalVelocity[0] * totalVelocity[0]);
+    if (totalSpeed > speedLimit) {
         VectorNormalize(client->ps.velocity);
-        client->ps.velocity[0] *=
-            game_compat_veh_length3(knockback) *
-            VEH_COLLISION_KNOCKBACK_MULT;
-        client->ps.velocity[1] *=
-            game_compat_veh_length3(knockback) *
-            VEH_COLLISION_KNOCKBACK_MULT;
-        client->ps.velocity[2] *=
-            game_compat_veh_length3(knockback) *
-            VEH_COLLISION_KNOCKBACK_MULT;
+        client->ps.velocity[0] *= speedLimit;
+        client->ps.velocity[1] *= speedLimit;
+        client->ps.velocity[2] *= speedLimit;
     }
 
     /* Set vertical boost based on applied knockback speed */
-    knockbackMagnitude = game_compat_veh_length3(knockback);
-    if (knockbackMagnitude < VEH_COLLISION_MAX_SPEED) {
-        verticalSpeedFactor =
-            (double)((long double)game_compat_veh_length3(knockback) /
-                     (long double)VEH_COLLISION_MAX_SPEED);
-    } else {
-        verticalSpeedFactor = 1.0;
-    }
-    client->ps.velocity[2] =
-        VEH_COLLISION_VERTICAL_BASE +
-        VEH_COLLISION_VERTICAL_SCALE * pow(verticalSpeedFactor, 2.0);
-
-    collisionVehicle = vehicle;
-    if (vehicleState->passengerEntityNums[VEH_PASSENGER_SLOT_DRIVER] !=
-        ENTITYNUM_NONE) {
-        collisionVehicle =
-            &g_entities[vehicleState->passengerEntityNums
-                             [VEH_PASSENGER_SLOT_DRIVER]];
-    }
-    if (collisionVehicle->client == NULL) {
-        collisionVehicle = vehicle;
-    }
+    verticalSpeedFactor =
+        (WIDE_FLOAT)(storedKnockbackMagnitude < VEH_COLLISION_MAX_SPEED ? storedKnockbackMagnitude : VEH_COLLISION_MAX_SPEED) *
+        VEH_COLLISION_SPEED_RECIPROCAL;
+    client->ps.velocity[2] = coduo_round_f32(
+        VEH_COLLISION_VERTICAL_BASE + VEH_COLLISION_VERTICAL_SCALE * coduomp_math_powl(verticalSpeedFactor, 2.0));
 
     /* Check if enough time has passed for collision damage */
     if (client->lastCollisionDamageTime <
         level.time - VEH_COLLISION_DAMAGE_COOLDOWN) {
         vec3_t soundOrigin;
 
-        VectorNormalize(knockback);
-
         /* Apply damage */
-#if   defined(__x86_64__)
-        VEH_PlayerDamage(
-            player, vehicle,
-            CODUO_X87_TRUNCATE_I32((long double)damageImpulse));
-#else
-        VEH_PlayerDamage(player, vehicle,
-                         game_compat_veh_round_to_int(damageImpulse));
-#endif
+        VEH_PlayerDamage(player, vehicle, coduo_fp_to_i32_extended(damageImpulse));
 
-        /* The original Linux body at VEH_PlayerCollision+0x52d tests bit 1
-         * (PMF_PRONE), not the crouch bit, before playing hitPersonSound with
-         * a speed-scaled vertical offset and looped-FX server flag. */
+        /* PMF_PRONE suppresses hitPersonSound. Other stances use the
+         * speed-scaled vertical offset and looped-FX server flag. */
         if ((player->client->ps.playerStateFlags & PMF_PRONE) == 0) {
             gentity_t *soundEnt;
-            vec3_t soundOffset;
-
-            /* 0x82703..0x82757: the offset vector is built in its own float
-             * slots (so the z term rounds once there) and then added to the
-             * origin per component. */
-            soundOffset[0] = 0.0f;
-            soundOffset[1] = 0.0f;
-            soundOffset[2] = 0.0f;
-            soundOffset[2] +=
-                (1.0f - impactSpeedFactor) * VEH_COLLISION_SOUND_Z_SCALE;
-            soundOrigin[0] = player->currentOrigin[0] + soundOffset[0];
-            soundOrigin[1] = player->currentOrigin[1] + soundOffset[1];
-            soundOrigin[2] = player->currentOrigin[2] + soundOffset[2];
+            /* X/Y are bit-preserving copies. The Z offset stays wide
+             * through origin addition and rounds only at the endpoint. */
+            soundOrigin[0] = player->currentOrigin[0];
+            soundOrigin[1] = player->currentOrigin[1];
+            soundOrigin[2] = coduo_round_f32(
+                ((WIDE_FLOAT)1.0 - impactSpeedFactor) * VEH_COLLISION_SOUND_Z_SCALE + player->currentOrigin[2]);
 
             soundEnt =
                 G_PlaySoundAliasAtPoint(soundOrigin,
