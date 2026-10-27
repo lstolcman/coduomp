@@ -590,6 +590,11 @@ void G_CheckForCursorHints(gentity_t *ent)
         break;
     }
 
+    /* Exhausting rejected candidates leaves the already-published hint alone. */
+    if (index >= candidateCount) {
+        return;
+    }
+
     client->ps.serverCursorHint = hint;
     client->ps.serverCursorHintVal = hintData;
     client->ps.serverCursorHintString = hintString;
