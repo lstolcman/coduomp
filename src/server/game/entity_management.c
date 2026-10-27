@@ -17,6 +17,7 @@
 #include "level_locals.h"
 #include "scr_vm.h"
 #include "compat/coduo_native_x87.h"
+#include "compat/crt/floor_compat.h"
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -364,7 +365,8 @@ void G_SetSoundBlendAndPitch(gentity_t *ent, int soundAlias0,
                              int soundAlias1, float volume, float pitch)
 {
     double pitchProduct;
-    double encodedPitch;
+    WIDE_FLOAT encodedPitch;
+    float clampedVolume;
 
     if (soundAlias0 == 0 && soundAlias1 == 0) {
         trap_UnlinkEntity(ent);
@@ -374,22 +376,14 @@ void G_SetSoundBlendAndPitch(gentity_t *ent, int soundAlias0,
     ent->s.tempEffectId = (uint8_t)soundAlias0;
     ent->s.hintStringIndex = (uint8_t)soundAlias1;
 
-    /* 0x5a753: pitch*100.0f is a single float mul stored to double (exact, 48
-     * bits); floor()+sign-flip and the final (float) cast are native.  The two
-     * (encodedPitch - x) subtracts stay 80-bit and round to double -> shim.
-     * PITCH_MAX loads as 0.99f-widened-to-double (0x3FEFAE1480000000), which
-     * (long double)0.99f reproduces exactly. */
-    pitchProduct = (double)((long double)pitch *
-                            (long double)SOUND_BLEND_PITCH_SCALE);
-    encodedPitch = -floor(pitchProduct);
-    if (volume < SOUND_BLEND_PITCH_MAX) {
-        encodedPitch = (double)((long double)encodedPitch -
-                                (long double)volume);
-    } else {
-        encodedPitch = (double)((long double)encodedPitch -
-                                (long double)SOUND_BLEND_PITCH_MAX);
-    }
-    game_compat_g_set_sound_blend_pitch_payload(ent, (float)encodedPitch);
+    /* The volume clamp selects the binary32 0.99 constant for unordered input.
+     * Pitch scaling has one binary64 store at the floor argument boundary.
+     * Negation and subtraction remain wide until the binary32 payload store;
+     * there is no intervening binary64 store of the subtraction result. */
+    clampedVolume = volume < SOUND_BLEND_PITCH_MAX ? volume : SOUND_BLEND_PITCH_MAX;
+    pitchProduct = (double)((WIDE_FLOAT)pitch * SOUND_BLEND_PITCH_SCALE);
+    encodedPitch = -(WIDE_FLOAT)coduomp_crt_floor(pitchProduct);
+    game_compat_g_set_sound_blend_pitch_payload(ent, (float)(encodedPitch - clampedVolume));
 
     trap_LinkEntity(ent);
 }
