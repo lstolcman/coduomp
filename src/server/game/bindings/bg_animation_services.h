@@ -224,22 +224,22 @@ static inline void bg_compat_get_animation_index_error(void)
     G_Error("\x15" "BG_GetAnimationForIndex: index out of bounds");
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: retain the module-specific fatal edge used by
- * BG_AnimUpdatePlayerStateConditions. */
+/* NOT_FROM_ORIGINAL_SOURCE: retain the common diagnostic entry used by
+ * BG_AnimUpdatePlayerStateConditions before forwarding through G_Error. */
 static inline void bg_compat_player_state_vehicle_type_error(
     int32_t vehicleType)
 {
-    G_Error(
+    Com_Error(ERR_DROP,
         "\x15" "BG_AnimUpdatePlayerStateConditions: Vehicle type unknown: %i",
         vehicleType);
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: retain the same platform split for the entity
- * condition updater's distinct diagnostic text. */
+/* NOT_FROM_ORIGINAL_SOURCE: retain the common diagnostic entry for the entity
+ * condition updater's distinct message. */
 static inline void bg_compat_player_entity_vehicle_type_error(
     int32_t vehicleType)
 {
-    G_Error("\x15" "BG_AnimPlayerConditions: Vehicle type unknown: %i",
+    Com_Error(ERR_DROP, "\x15" "BG_AnimPlayerConditions: Vehicle type unknown: %i",
             vehicleType);
 }
 

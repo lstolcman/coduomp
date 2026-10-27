@@ -24,7 +24,8 @@ enum {
  * Supporting Mac cgame/game retain both names, equal per-pair sizes, and the
  * same call graph. Linux spills each updated angle to binary32 before calling
  * AngleMod; Windows carries the add/subtract directly into its inline BAMS
- * conversion. BG_SwingAngles therefore has whole-function platform bodies.
+ * conversion. The shared body retains those live operations and the original
+ * float stores before comparisons.
  */
 
 /* NOT_FROM_ORIGINAL_SOURCE: source-level expression of the repeated inline
@@ -72,9 +73,11 @@ void BG_SwingAngles(float target, float deadband, float maxDeviation,
         step = 0.5f;
     }
 
+    /* Frame time rounds to float before the two multiplies; their product
+     * rounds only after both operations, before the delta comparison. */
     if (delta >= 0.0f) {
-        float increment =
-            (float)bg_compat_animation_frame_time() * step * stepScale;
+        const WIDE_FLOAT frameTime = coduo_round_f32(bg_compat_animation_frame_time());
+        float increment = coduo_round_f32(frameTime * step * stepScale);
         if (increment >= delta) {
             increment = delta;
             *active = qfalse;
@@ -83,8 +86,8 @@ void BG_SwingAngles(float target, float deadband, float maxDeviation,
         }
         *angle = bg_compat_quantize_angle_add(*angle, increment);
     } else if (delta < 0.0f) {
-        float increment =
-            -((float)bg_compat_animation_frame_time() * step * stepScale);
+        const WIDE_FLOAT frameTime = coduo_round_f32(bg_compat_animation_frame_time());
+        float increment = coduo_round_f32(-(frameTime * step * stepScale));
         if (increment <= delta) {
             increment = delta;
             *active = qfalse;

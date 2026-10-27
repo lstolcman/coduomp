@@ -11,7 +11,7 @@
  * absolute globals and their module-owned fatal-error edge are normalized:
  *
  *   BG_AnimUpdatePlayerStateConditions  0x300035f0 / 0x200035d0
- *   BG_AnimPlayerConditions             0x30004860 / 0x20004840
+ *   BG_AnimPlayerConditions             0x30004860 / 0x20004860
  *
  * Linux retains the corresponding bodies at RVA 0x0001c973 and 0x0001e194.
  * Supporting Mac cgame/game preserve the canonical names, equal sizes, and
