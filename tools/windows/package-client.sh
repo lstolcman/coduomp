@@ -36,7 +36,7 @@ case "$package_arch" in
     i686)
         architecture='Windows PE32 / Intel i686'
         build_target=client-windows-i686-package
-        audio_note='Copy mss32.dll from a legally owned retail installation beside CoDUOMP.exe.'
+        audio_note='Miles is detected at runtime when the retail mss32.dll and miles/ providers are installed. Without Miles, this build uses Miniaudio.'
         objdump=${MINGW32_OBJDUMP:-i686-w64-mingw32-objdump}
         strip_tool=${MINGW32_STRIP:-i686-w64-mingw32-strip}
         ;;

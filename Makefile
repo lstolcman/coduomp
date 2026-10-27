@@ -17,7 +17,6 @@ MINGW64_CC ?= x86_64-w64-mingw32-gcc
 MINGW64_CXX ?= x86_64-w64-mingw32-g++
 MINGW64_DEP_PREFIX ?=
 WINDOWS_DEP_PREFIX ?=
-MSS32_DLL ?=
 AUTH ?= 0
 
 MAKE_JOBS := $(if $(JOBS),-j $(JOBS),)
@@ -269,7 +268,6 @@ client-windows-i686:
 		MINGW32_CC="$(MINGW32_CC)" MINGW32_CXX="$(MINGW32_CXX)" \
 		MINGW32_BUILD_DIR="$(abspath $(BUILD_DIR)/client/windows-i686)" \
 		MINGW32_OUTPUT="$(abspath $(BUILD_DIR)/client/windows-i686/CoDUOMP.exe)" \
-		MSS32_DLL="$(MSS32_DLL)" \
 		MINGW32_DEP_PREFIX="$(MINGW32_DEP_PREFIX)"
 	$(MAKE) -f build-mk/client-targets.mk client-win32-abi-link \
 		CLIENT_WIN32_CC="$(MINGW32_CC)" \
@@ -406,5 +404,5 @@ help:
 	  '  CLIENT_TEST_WORK_DIR=path CLIENT_TEST_HOME_PATH=path' \
 	  '  MACOS_BUNDLE_VERSION=X.Y.Z MACOS_BUNDLE_BUILD=N' \
 	  '  MACOS_SIGN_IDENTITY=- (ad-hoc default) or Developer ID name' \
-	  '  MSS32_DLL=/path/to/mss32.dll MINGW32_DEP_PREFIX=/path MINGW64_DEP_PREFIX=/path' \
+	  '  MINGW32_DEP_PREFIX=/path MINGW64_DEP_PREFIX=/path' \
 	  '  WINDOWS_DEP_PREFIX=/path'

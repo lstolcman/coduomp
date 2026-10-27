@@ -116,7 +116,6 @@ if(CODUOMP_BUILD_CLIENT)
 		${CODUOMP_CURL_LIBRARIES}
 		${CODUOMP_MINIZIP_LIBRARIES}
 		${CODUOMP_ZLIB_LIBRARIES}
-		${CODUOMP_AUDIO_LIBRARIES}
 		${CODUOMP_CLIENT_SYSTEM_LIBS})
 
 	# The retail executable reserves 8 MiB of stack with a 4 KiB initial commit;

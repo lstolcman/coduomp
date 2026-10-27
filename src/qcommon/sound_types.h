@@ -11,9 +11,13 @@
  * backend selector. */
 #define AUDIO_BACKEND_MINIAUDIO_NAME "Miniaudio"
 #define AUDIO_BACKEND_OPENAL_NAME "OpenAL"
+#define AUDIO_BACKEND_MILES_NAME "Miles"
 #define AUDIO_BACKEND_MILES_PROVIDER_NAME "Miles Fast 2D Positional Audio"
+#define AUDIO_BACKEND_MILES_AVAILABLE_CVAR "com_milesAvailable"
 
-#if defined(AUDIO_BACKEND_MILES)
+/* NOT_FROM_ORIGINAL_SOURCE: both Windows x86 backends are compiled in; only
+ * the initial preference depends on the compiler. */
+#if defined(_WIN32) && defined(__MINGW32__) && UINTPTR_MAX == UINT32_MAX
 #define AUDIO_BACKEND_DEFAULT_NAME AUDIO_BACKEND_MILES_PROVIDER_NAME
 #else
 #define AUDIO_BACKEND_DEFAULT_NAME AUDIO_BACKEND_MINIAUDIO_NAME

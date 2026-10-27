@@ -110,19 +110,18 @@ cmake --preset msvc
 cmake --build --preset msvc --parallel 2
 ```
 
-The CMake build defaults to Miniaudio on both x86 and x64 and does not need
-`MSS32_DLL`. To select Miles for an x86 build:
+The CMake build defaults to Miniaudio on both x86 and x64. Every Windows x86
+build also includes optional Miles support; no audio build flags or retail
+DLL are needed to compile it. At startup, the executable checks for the retail
+`mss32.dll` beside itself. If the DLL loads with the required exports, `Miles`
+appears alongside `Miniaudio` in the audio backend selector. Keep the retail
+`miles/` provider directory there too when using Miles. If Miles cannot load
+or initialize, the client falls back to Miniaudio. The existing
+`mss_3d_provider` setting and retail provider names remain supported.
 
-```sh
-cmake --preset msvc -DCODUOMP_AUDIO_BACKEND=miles -DMSS32_DLL=C:/Games/CoDUO/mss32.dll
-cmake --build --preset msvc --parallel 2
-```
-
-Miles generates its import library from the supplied retail `mss32.dll`;
-keep that DLL beside the executable when running it. Set
-`-DCODUOMP_AUDIO_BACKEND=miniaudio` to switch an existing build back.
-Miles is available only on x86. The MinGW Makefile build continues to default
-to Miles on x86 and Miniaudio on x64.
+MinGW x86 builds prefer Miles automatically when available. All x64 builds
+use Miniaudio because the retail Miles DLL is 32-bit. These build settings
+are shared by `stock` and `master`.
 
 Explicitly select **64-bit x64** with:
 
@@ -421,14 +420,13 @@ to `0`.
 The recovered executable, cgame, UI, and listen-server game module can also be
 cross-compiled for 32-bit or 64-bit Windows with MinGW-w64. These are MinGW
 targets, not builds performed with a native Windows compiler. The i686
-executable uses the original Miles engine and therefore requires the user to
-provide `mss32.dll` from a legally owned retail installation. The build reads
-its export table to generate a MinGW import library; packages do not copy or
-redistribute the DLL.
+executable automatically detects the retail `mss32.dll` at runtime and falls
+back to Miniaudio when Miles is unavailable. Keep `mss32.dll` and its `miles/`
+providers beside the executable to use Miles. Packages do not redistribute
+these retail files, and compilation does not require them.
 
 ```sh
 make client-windows-i686 \
-  MSS32_DLL="/path/to/retail/mss32.dll" \
   MINGW32_DEP_PREFIX="/path/to/i686-mingw-prefix"
 ```
 
@@ -437,7 +435,6 @@ multiplayer modules under `uo/`, run:
 
 ```sh
 make client-windows-i686-package \
-  MSS32_DLL="/path/to/retail/mss32.dll" \
   MINGW32_DEP_PREFIX="/path/to/i686-mingw-prefix"
 ```
 
