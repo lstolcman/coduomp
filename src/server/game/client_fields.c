@@ -11,6 +11,7 @@
 #include "game_globals.h"
 #include "game_functions.h"
 #include "scr_vm.h"
+#include "compat/coduo_fp_conversion.h"
 
 /* Private descriptor used only by the client script-field table below. */
 typedef struct client_field_s client_field_t;
@@ -372,9 +373,10 @@ void ClientScr_SetArchiveTime(gclient_t *client, gclient_t *self,
     (void)self;
     (void)field;
 
-    /* 0x44024..0x44041: the product feeds truncating fistp directly. */
+    /* Keep the millisecond product wide through the signed-qword conversion,
+     * then store its low dword, including the original invalid-result bits. */
     client->archiveTime =
-        game_compat_int32_from_long_double_trunc(
+        coduo_fp_to_i32_extended(
             (long double)Scr_GetFloat(0) *
             (long double)CLIENT_FIELD_ARCHIVE_MILLISECONDS);
 }
