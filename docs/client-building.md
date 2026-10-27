@@ -110,8 +110,9 @@ cmake --preset msvc
 cmake --build --preset msvc --parallel 2
 ```
 
-Every Windows build defaults to Miniaudio, regardless of compiler or architecture. Every Windows x86
-build also includes optional Miles support; no audio build flags or retail
+Every Windows build defaults to Miniaudio, regardless of compiler or
+architecture. Every Windows x86 build also includes optional Miles support;
+no audio build flags or retail
 DLL are needed to compile it. At startup, the executable checks for the retail
 `mss32.dll` beside itself. If the DLL loads with the required exports, `Miles`
 appears alongside `Miniaudio` in the audio backend selector. Keep the retail
@@ -119,8 +120,8 @@ appears alongside `Miniaudio` in the audio backend selector. Keep the retail
 or initialize, the client falls back to Miniaudio. The existing
 `mss_3d_provider` setting and retail provider names remain supported.
 
-All x64 builds use Miniaudio because the retail Miles DLL is 32-bit. These build settings
-are shared by `stock` and `master`.
+All x64 builds use Miniaudio because the retail Miles DLL is 32-bit.
+These build settings are shared by `stock` and `master`.
 
 Explicitly select **64-bit x64** with:
 
