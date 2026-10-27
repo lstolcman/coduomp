@@ -15,6 +15,7 @@
 
 #include "recovered_game.h"
 #include "compat/crt/atof_compat.h"
+#include "compat/crt/asin_compat.h"
 #include "compat/crt/atoi_compat.h"
 #include "compat/crt/scan_compat.h"
 #include "compat/coduo_ctype_compat.h"
@@ -102,8 +103,9 @@ typedef struct script_function_s {
 #define STATUS_ICON_CONFIGSTRING_COUNT CS_STATUS_ICONS_COUNT
 #define HEAD_ICON_CONFIGSTRING_BASE CS_HEAD_ICONS
 #define HEAD_ICON_CONFIGSTRING_COUNT CS_HEAD_ICONS_COUNT
-#define SCRIPT_PI 3.141592653589793 /* original double64 0x400921fb54442d18 */
-#define SCRIPT_HALF_CIRCLE_DEGREES 180.0 /* original double64 0x4066800000000000 */
+#define SCRIPT_PI 3.141592653589793f /* original float32 0x40490fdb */
+#define SCRIPT_RECIPROCAL_HALF_CIRCLE 0.0055555556900799274444580078125f /* float32 0x3bb60b61 */
+#define SCRIPT_RECIPROCAL_PI 0.3183098733425140380859375f /* float32 0x3ea2f983 */
 #define SCRIPT_HALF_CIRCLE_DEGREES_FLOAT 180.0f /* original float32 0x43340000 */
 #define RELIABLE_SERVER_COMMAND 1
 #define SCRIPT_SECONDS_TO_MILLISECONDS 1000.0f
@@ -694,10 +696,10 @@ int Script_BiasedRoundToInt(float value)
 }
 
 /* VERIFIED_DECOMPILER(0x6f0f7, 7f0f7_FUN_0007f0f7.c, VERIFY-SCRIPT-BUILTINS-PACKET-2026-06-17): DATAFLOW_VERIFIED - binary32 load, single fsincos operation, cosine-then-sine binary32 stores, and void return checked. */
-/* Stock 0x6f0f7 is `fld DWORD; fsincos; fstp(cos); fstp(sin)`.  Native x87
+/* Windows 0x3a77f is `fld DWORD; fsincos; fstp(cos); fstp(sin)`. Native x87
  * targets use that exact sequence; only non-x87 targets use the permitted libm
- * fallback.  script_func_sin/cos call the stock libm boundary directly; only
- * tan routes through this helper. */
+ * fallback. The sine/cosine builtins use live FSIN/FCOS operands; only tangent
+ * routes through this float-input helper. */
 void Script_SinCos(float radians, float *sine, float *cosine)
 {
 #if defined(__i386__) || defined(__x86_64__)
@@ -3970,29 +3972,27 @@ void script_func_randomfloatrange(void)
 /* VERIFIED_DECOMPILER(0x6b551, 7b551_script_func_sin.c, VERIFY-SCRIPT-BUILTINS-RANDOM-TRIG-2026-06-17): DATAFLOW_VERIFIED; degree-to-radian conversion, sin call, float cast, and return checked against current decompiler output. */
 void script_func_sin(void)
 {
-    /* 0x6b56f..0x6b57f: fmul QWORD pi, fdiv QWORD 180.0 (double consts), rounded
-     * to double at the libm CoduoLibm_Sin() call boundary -> shim. */
-    double radians = (double)Scr_GetFloat(0) * SCRIPT_PI /
-                     SCRIPT_HALF_CIRCLE_DEGREES;
-    Scr_AddFloat((float)CoduoLibm_Sin(radians));
+    /* Two float-constant multiplies stay live through FSIN; only its result
+     * rounds to float. This instruction does not use CRT range reduction. */
+    WIDE_FLOAT radians = (WIDE_FLOAT)Scr_GetFloat(0) * SCRIPT_PI;
+    radians *= SCRIPT_RECIPROCAL_HALF_CIRCLE;
+    Scr_AddFloat((float)coduo_x87_sinl(radians));
 }
 
 /* VERIFIED_DECOMPILER(0x6b59b, 7b59b_script_func_cos.c, VERIFY-SCRIPT-BUILTINS-RANDOM-TRIG-2026-06-17): DATAFLOW_VERIFIED; degree-to-radian conversion, cos call, float cast, and return checked against current decompiler output. */
 void script_func_cos(void)
 {
-    /* 0x6b5b9..0x6b5c9: fmul QWORD pi, fdiv QWORD 180.0 (see script_func_sin). */
-    double radians = (double)Scr_GetFloat(0) * SCRIPT_PI /
-                     SCRIPT_HALF_CIRCLE_DEGREES;
-    Scr_AddFloat((float)CoduoLibm_Cos(radians));
+    /* Same live float-constant products as sine, followed by FCOS. */
+    WIDE_FLOAT radians = (WIDE_FLOAT)Scr_GetFloat(0) * SCRIPT_PI;
+    radians *= SCRIPT_RECIPROCAL_HALF_CIRCLE;
+    Scr_AddFloat((float)coduo_x87_cosl(radians));
 }
 
 /* VERIFIED_DECOMPILER(0x6b5e5, 7b5e5_script_func_tan.c, VERIFY-SCRIPT-BUILTINS-RANDOM-TRIG-2026-06-17): DATAFLOW_VERIFIED; SinCos helper call, divide-by-zero error fallthrough, and sine/cosine return checked against current decompiler output. */
 void script_func_tan(void)
 {
-    /* 0x6b603..0x6b613: fmul QWORD pi, fdiv QWORD 180.0, then ONE direct
-     * rounding to a float slot (fstp DWORD) — no intermediate double rounding. */
-    float radians = (float)((double)Scr_GetFloat(0) * SCRIPT_PI /
-                            SCRIPT_HALF_CIRCLE_DEGREES);
+    /* The same two products round once to float before FSINCOS. */
+    float radians = (float)(((WIDE_FLOAT)Scr_GetFloat(0) * SCRIPT_PI) * SCRIPT_RECIPROCAL_HALF_CIRCLE);
     float sine;
     float cosine;
 
@@ -4021,15 +4021,15 @@ void script_func_asin(void)
     float value = Scr_GetFloat(0);
 
     game_compat_script_trig_check_unit_range(value);
-    /* 0x6b6cf..0x6b6ea: asin result rounded to a float slot, then reloaded,
-     * fmul DWORD 180.0f, fdiv QWORD pi, rounded to float again — not a
-     * precombined 180/pi float factor. */
+    /* Retain the live CRT result through two float-constant multiplies, then
+     * round once to the script float result. */
     {
-        float degrees = (float)CoduoLibm_Asin((double)value);
+        WIDE_FLOAT degrees = coduomp_crt_asinl((double)value);
 
-        /* degrees * 180.0f(DWORD) / PI(QWORD) kept 80-bit, one store -> shim. */
-        degrees = degrees * SCRIPT_HALF_CIRCLE_DEGREES_FLOAT / SCRIPT_PI;
-        Scr_AddFloat(degrees);
+        /* Keep the original products separate and in their original order. */
+        degrees *= SCRIPT_HALF_CIRCLE_DEGREES_FLOAT;
+        degrees *= SCRIPT_RECIPROCAL_PI;
+        Scr_AddFloat((float)degrees);
     }
 }
 
@@ -4039,28 +4039,28 @@ void script_func_acos(void)
     float value = Scr_GetFloat(0);
 
     game_compat_script_trig_check_unit_range(value);
-    /* 0x6b76b..0x6b781: same shape as script_func_asin — float store, fmul
-     * DWORD 180.0f, fdiv QWORD pi, float store. */
+    /* The CRT result stays wide through the same degree conversion as asin. */
     {
-        float degrees = (float)CoduoLibm_Acos((double)value);
+        WIDE_FLOAT degrees = coduomp_crt_acosl((double)value);
 
-        /* degrees * 180.0f(DWORD) / PI(QWORD) kept 80-bit, one store -> shim. */
-        degrees = degrees * SCRIPT_HALF_CIRCLE_DEGREES_FLOAT / SCRIPT_PI;
-        Scr_AddFloat(degrees);
+        /* Keep the original products separate and in their original order. */
+        degrees *= SCRIPT_HALF_CIRCLE_DEGREES_FLOAT;
+        degrees *= SCRIPT_RECIPROCAL_PI;
+        Scr_AddFloat((float)degrees);
     }
 }
 
 /* VERIFIED_DECOMPILER(0x6b795, 7b795_script_func_atan.c, VERIFY-SCRIPT-BUILTINS-RANDOM-TRIG-2026-06-17): DATAFLOW_VERIFIED; atan call, float degree conversion, and return checked against current decompiler output. */
 void script_func_atan(void)
 {
-    /* 0x6b7b3..0x6b7d1: argument passed straight to atan (no float local),
-     * result rounded to a float slot, fmul DWORD 180.0f, fdiv QWORD pi,
-     * rounded to float again. */
-    float degrees = (float)atan((double)Scr_GetFloat(0));
+    /* Inline FLD1/FPATAN leaves a live result without a CRT control-word change
+     * or intermediate float/double store. */
+    WIDE_FLOAT degrees = coduo_x87_atan2l((WIDE_FLOAT)Scr_GetFloat(0), 1.0L);
 
-    /* degrees * 180.0f(DWORD) / PI(QWORD) kept 80-bit, one store -> shim. */
-    degrees = degrees * SCRIPT_HALF_CIRCLE_DEGREES_FLOAT / SCRIPT_PI;
-    Scr_AddFloat(degrees);
+    /* Two float-constant products, then the single script-result store. */
+    degrees *= SCRIPT_HALF_CIRCLE_DEGREES_FLOAT;
+    degrees *= SCRIPT_RECIPROCAL_PI;
+    Scr_AddFloat((float)degrees);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_vector_length_squared). */
@@ -4085,11 +4085,9 @@ static int game_compat_script_fade_seconds_to_milliseconds(float seconds)
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_soundfade_seconds_to_milliseconds). */
 static int game_compat_script_soundfade_seconds_to_milliseconds(float seconds)
 {
-    /* 0x6bd0a..0x6bd24: fmul DWORD 1000.0f then truncating fistp (RC=0xc00)
-     * straight from the x87 register — plain truncation -> shim. */
-    return game_compat_int32_from_long_double_trunc(
-        (long double)seconds *
-        (long double)SCRIPT_SECONDS_TO_MILLISECONDS);
+    /* The live product reaches _ftol2; the caller consumes its low dword,
+     * including for results beyond the signed 32-bit range. */
+    return coduo_fp_to_i32_extended((WIDE_FLOAT)seconds * SCRIPT_SECONDS_TO_MILLISECONDS);
 }
 
 /* VERIFIED_DECOMPILER(0x6b7e5, 7b7e5_script_func_distance.c, VERIFY-SCRIPT-BUILTINS-VECTOR-AUDIO-2026-06-17): DATAFLOW_VERIFIED; vector fetch order, VectorDistance call, and float return checked against current decompiler output. */

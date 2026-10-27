@@ -22,8 +22,10 @@
  * and is preserved deliberately — it is not algebraically interchangeable with
  * 1-x*x in floating point.
  *
- * The control-word helper preserves the precision-control field, so both run at
- * the ambient 64-bit precision (see docs/x87-transcendental-reconstruction-scope.md).
+ * The control-word helper preserves the precision-control field. The Windows
+ * engine initializes it to 53-bit precision; the live result still occupies
+ * an x87 register until a caller stores it. Compilers with binary64 long
+ * double and non-x87 targets retain their native precision limitations.
  *
  * |x| is classified from the exponent field alone, exactly as the stock code
  * does: the classify helper returns high & 0x7ff00000 for finite inputs, which
@@ -37,9 +39,11 @@
  *   NaN       -> quieted
  *
  * Native x87 builds execute FPATAN directly. Other supported
- * targets use the shared native wide-math adapters at the same double boundary.
+ * targets use the shared native wide-math adapters. Wide entry points retain
+ * the result; the double-return APIs perform the explicit binary64 narrowing.
  */
 #include "coduo_libm.h"
+#include "compat/crt/asin_compat.h"
 
 #include <math.h>
 #include <string.h>
@@ -82,12 +86,12 @@ static double AsinIndefiniteNaN(void)
 /* TBYTE 0x200b018a: pi/2 as an 80-bit constant, significand
  * 0xC90FDAA22168C235 with exponent 0x3FFF. Built from those bytes rather than
  * from a decimal literal so the value is exact. */
-static long double AsinHalfPi(void)
+static WIDE_FLOAT AsinHalfPi(void)
 {
     const unsigned char raw[10] = {
         0x35, 0xc2, 0x68, 0x21, 0xa2, 0xda, 0x0f, 0xc9, 0xff, 0x3f
     };
-    long double value = 0.0L;
+    WIDE_FLOAT value = 0.0L;
 
     memcpy(&value, raw, sizeof(raw));
     return value;
@@ -112,26 +116,27 @@ static void AsinRestoreControlWord(unsigned short saved)
 }
 
 /* (1+x)*(1-x) then FSQRT, matching the stock instruction order. */
-static long double AsinRoot(long double x)
+static WIDE_FLOAT AsinRoot(WIDE_FLOAT x)
 {
-    long double t = (1.0L + x) * (1.0L - x);
+    WIDE_FLOAT t = (1.0L + x) * (1.0L - x);
 
     __asm__ __volatile__("fsqrt" : "=t"(t) : "0"(t));
     return t;
 }
 
-double CoduoLibm_Asin(double value)
+/* NOT_FROM_ORIGINAL_SOURCE: wide carrier for the original live CRT result. */
+WIDE_FLOAT coduomp_crt_asinl(double value)
 {
     const uint32_t high = AsinHighDword(value);
     const uint32_t low = AsinLowDword(value);
     const uint32_t exponent = high & ASIN_HIGH_EXPONENT_MASK;
     const uint32_t mantissa = high & ASIN_HIGH_MANTISSA_MASK;
     unsigned short saved;
-    long double result;
+    WIDE_FLOAT result;
 
     if (exponent == ASIN_HIGH_EXPONENT_MASK) {
         if (mantissa != 0u || low != 0u) {
-            return (double)((long double)value + 1.0L); /* quiet the NaN */
+            return (WIDE_FLOAT)value + 1.0L; /* quiet the NaN */
         }
         return AsinIndefiniteNaN(); /* +-inf is a domain error */
     }
@@ -141,38 +146,41 @@ double CoduoLibm_Asin(double value)
             return AsinIndefiniteNaN(); /* |x| > 1 */
         }
         /* |x| == 1: +-pi/2, the sign taken from x (FCHS at 0x2008a786). */
+        saved = AsinEnterControlWord();
         result = AsinHalfPi();
         if ((high & ASIN_HIGH_SIGN_MASK) != 0u) {
             result = -result;
         }
-        return (double)result;
+        AsinRestoreControlWord(saved);
+        return result;
     }
 
     saved = AsinEnterControlWord();
     {
-        const long double x = (long double)value;
-        const long double root = AsinRoot(x);
+        const WIDE_FLOAT x = (WIDE_FLOAT)value;
+        const WIDE_FLOAT root = AsinRoot(x);
 
         /* No FXCH: st(0)=root, st(1)=x -> atan(x/root). */
         __asm__ __volatile__("fpatan" : "=t"(result) : "0"(root), "u"(x)
                              : "st(1)");
     }
     AsinRestoreControlWord(saved);
-    return (double)result;
+    return result;
 }
 
-double CoduoLibm_Acos(double value)
+/* NOT_FROM_ORIGINAL_SOURCE: wide carrier for the original live CRT result. */
+WIDE_FLOAT coduomp_crt_acosl(double value)
 {
     const uint32_t high = AsinHighDword(value);
     const uint32_t low = AsinLowDword(value);
     const uint32_t exponent = high & ASIN_HIGH_EXPONENT_MASK;
     const uint32_t mantissa = high & ASIN_HIGH_MANTISSA_MASK;
     unsigned short saved;
-    long double result;
+    WIDE_FLOAT result;
 
     if (exponent == ASIN_HIGH_EXPONENT_MASK) {
         if (mantissa != 0u || low != 0u) {
-            return (double)((long double)value + 1.0L); /* quiet the NaN */
+            return (WIDE_FLOAT)value + 1.0L; /* quiet the NaN */
         }
         return AsinIndefiniteNaN(); /* +-inf is a domain error */
     }
@@ -182,38 +190,53 @@ double CoduoLibm_Acos(double value)
             return AsinIndefiniteNaN(); /* |x| > 1 */
         }
         /* |x| == 1: FLDZ for +1 (0x2008a166), FLDPI for -1 (0x2008a162). */
+        saved = AsinEnterControlWord();
         if ((high & ASIN_HIGH_SIGN_MASK) != 0u) {
             __asm__ __volatile__("fldpi" : "=t"(result));
-            return (double)result;
+        } else {
+            result = 0.0L;
         }
-        return 0.0;
+        AsinRestoreControlWord(saved);
+        return result;
     }
 
     saved = AsinEnterControlWord();
     {
-        const long double x = (long double)value;
-        const long double root = AsinRoot(x);
+        const WIDE_FLOAT x = (WIDE_FLOAT)value;
+        const WIDE_FLOAT root = AsinRoot(x);
 
         /* FXCH first: st(0)=x, st(1)=root -> atan(root/x). */
         __asm__ __volatile__("fpatan" : "=t"(result) : "0"(x), "u"(root)
                              : "st(1)");
     }
     AsinRestoreControlWord(saved);
-    return (double)result;
+    return result;
 }
 
 #else
 
 /* NOT_FROM_ORIGINAL_SOURCE: native arithmetic adapter for this CRT boundary. */
-double CoduoLibm_Asin(double value)
+WIDE_FLOAT coduomp_crt_asinl(double value)
 {
-    return (double)coduomp_math_asinl((long double)value);
+    return coduomp_math_asinl((WIDE_FLOAT)value);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: native arithmetic adapter for this CRT boundary. */
-double CoduoLibm_Acos(double value)
+WIDE_FLOAT coduomp_crt_acosl(double value)
 {
-    return (double)coduomp_math_acosl((long double)value);
+    return coduomp_math_acosl((WIDE_FLOAT)value);
 }
 
 #endif
+
+/* NOT_FROM_ORIGINAL_SOURCE: explicit binary64 return boundary. */
+double CoduoLibm_Asin(double value)
+{
+    return (double)coduomp_crt_asinl(value);
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: explicit binary64 return boundary. */
+double CoduoLibm_Acos(double value)
+{
+    return (double)coduomp_crt_acosl(value);
+}
