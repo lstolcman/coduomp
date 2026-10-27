@@ -10,6 +10,7 @@
 #include "filesystem/filesystem.h"
 #include "filesystem/server_namespace.h"
 #include "qcommon/hunk.h"
+#include "qcommon/sound_types.h"
 #include "networking/net_address.h"
 #include "networking/net_channel.h"
 #include "scripting/script_runtime.h"
@@ -448,6 +449,9 @@ parsing_complete:
         selectedCpuMHz, selectedSystemMB, selectedVideoMB);
     Cbuf_AddText("exec configure_mp.cfg");
     Cbuf_Execute();
+    /* NOT_FROM_ORIGINAL_SOURCE: retail recommended settings select Miles.
+     * Apply this executable's audio default when resetting those settings. */
+    (void)Cvar_Set2("mss_3d_provider", AUDIO_BACKEND_DEFAULT_NAME, qtrue);
 
     for (int32_t cvarIndex = 0; cvarIndex < cvarCount; ++cvarIndex) {
         (void)Cvar_Set2(cvarNames[cvarIndex],
@@ -534,8 +538,12 @@ void Com_Init(char *commandLine)
 #endif
     Cbuf_AddText("exec uoconfig_mp.cfg\n");
     Cbuf_AddText("exec autoexec_mp.cfg\n");
-    if (Com_SafeMode() != qfalse)
+    if (Com_SafeMode() != qfalse) {
         Cbuf_AddText("exec safemode_mp.cfg\n");
+        /* NOT_FROM_ORIGINAL_SOURCE: safe-mode retail settings also select
+         * Miles; retain the executable's default in that reset path. */
+        Cbuf_AddText("set mss_3d_provider \"" AUDIO_BACKEND_DEFAULT_NAME "\"\n");
+    }
 #if defined(_WIN32)
     if (regenerateImproperQuitConfig != qfalse)
         coduomp_sys_queue_improper_quit_language();
