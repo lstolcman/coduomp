@@ -2062,42 +2062,44 @@ gentity_t *G_TempEntity(const float *origin, int event)
 /* VERIFIED_DECOMPILER(0x5a378, 6a378_TeleportPlayer.c, VERIFY-P1-ENTITYMGMT-2026-06-17): DATAFLOW_VERIFIED - temp entities, unlink, origin snap, binary OR launch guard, teleport bit toggle, view angle/entity-state update, and relink guard checked against current decompiler output. */
 void TeleportPlayer(gentity_t *ent, const float *origin, const float *angles)
 {
-    gclient_t *client = ent->client;
-    int wasLinked = ent->linkedState;
+    int wasLinked;
     gentity_t *temp;
 
-    if (client->sessionState == 0) {
-        temp = G_TempEntity(client->ps.psOrigin, TELEPORT_ENTER_EVENT);
+    if (ent->client->sessionState == 0) {
+        temp = G_TempEntity(ent->client->ps.psOrigin, TELEPORT_ENTER_EVENT);
         temp->s.clientNum = ent->s.clientNum;
 
         temp = G_TempEntity(origin, TELEPORT_EXIT_EVENT);
         temp->s.clientNum = ent->s.clientNum;
     }
 
+    /* Capture linkage after event publication; later client accesses follow calls. */
+    wasLinked = ent->linkedState;
     trap_UnlinkEntity(ent);
 
-    client->ps.psOrigin[0] = origin[0];
-    client->ps.psOrigin[1] = origin[1];
-    client->ps.psOrigin[2] = origin[2] + CLIENT_ORIGIN_Z_SNAP_OFFSET;
+    ent->client->ps.psOrigin[0] = origin[0];
+    ent->client->ps.psOrigin[1] = origin[1];
+    ent->client->ps.psOrigin[2] = origin[2];
+    ent->client->ps.psOrigin[2] += CLIENT_ORIGIN_Z_SNAP_OFFSET;
 
     /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
     uint32_t noLaunchFlags = TELEPORT_NO_LAUNCH_FLAGS;
-    if ((client->ps.entityStateFlags | noLaunchFlags) == 0) {
-        AngleVectors(angles, client->ps.velocity, NULL, NULL);
-        client->ps.velocity[0] *= TELEPORT_LAUNCH_SPEED;
-        client->ps.velocity[1] *= TELEPORT_LAUNCH_SPEED;
-        client->ps.velocity[2] *= TELEPORT_LAUNCH_SPEED;
-        client->ps.pmTime = TELEPORT_PM_TIME;
-        client->ps.playerStateFlags |= TELEPORT_KNOCKBACK_FLAG;
+    if ((ent->client->ps.entityStateFlags | noLaunchFlags) == 0) {
+        AngleVectors(angles, ent->client->ps.velocity, NULL, NULL);
+        ent->client->ps.velocity[0] *= TELEPORT_LAUNCH_SPEED;
+        ent->client->ps.velocity[1] *= TELEPORT_LAUNCH_SPEED;
+        ent->client->ps.velocity[2] *= TELEPORT_LAUNCH_SPEED;
+        ent->client->ps.pmTime = TELEPORT_PM_TIME;
+        ent->client->ps.playerStateFlags |= TELEPORT_KNOCKBACK_FLAG;
     }
 
-    client->ps.entityStateFlags ^= CLIENT_TELEPORT_BIT;
+    ent->client->ps.entityStateFlags ^= CLIENT_TELEPORT_BIT;
     SetClientViewAngle(ent, angles);
-    BG_PlayerStateToEntityState(&client->ps, &ent->s, qtrue);
+    BG_PlayerStateToEntityState(&ent->client->ps, &ent->s, qtrue);
 
-    ent->currentOrigin[0] = client->ps.psOrigin[0];
-    ent->currentOrigin[1] = client->ps.psOrigin[1];
-    ent->currentOrigin[2] = client->ps.psOrigin[2];
+    ent->currentOrigin[0] = ent->client->ps.psOrigin[0];
+    ent->currentOrigin[1] = ent->client->ps.psOrigin[1];
+    ent->currentOrigin[2] = ent->client->ps.psOrigin[2];
 
     if (wasLinked != 0) {
         trap_LinkEntity(ent);

@@ -236,17 +236,14 @@ float VectorDistance2D(const vec3_t first, const vec3_t second)
     return (float)sqrt(squaredDistance);
 }
 
-#if defined(__i386__) && defined(__GNUC__) && !defined(__clang__)
 /* Preserve the original live-ST0 return for the two-lane body. */
-__attribute__((optimize("-fexcess-precision=fast")))
-#endif
-float VectorDistanceSquared2D(const vec3_t first, const vec3_t second)
+WIDE_FLOAT VectorDistanceSquared2D(const vec3_t first, const vec3_t second)
 {
     volatile float differenceX = first[0] - second[0];
     volatile float differenceY = first[1] - second[1];
 
-    return (float)((long double)differenceX * (long double)differenceX +
-                   (long double)differenceY * (long double)differenceY);
+    return (WIDE_FLOAT)differenceX * differenceX +
+           (WIDE_FLOAT)differenceY * differenceY;
 }
 
 /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */

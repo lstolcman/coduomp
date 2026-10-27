@@ -1,7 +1,11 @@
 #include "bg_pmove.h"
 
+#include "compat/coduo_x87_eval.h"
+
 #include <math.h>
 #include <stdint.h>
+
+#define PM_FOOTSTEP_LADDER_TRACE_DISTANCE 31.0f
 
 /*
  * This complete footstep-event cluster is shared by the cgame and game
@@ -15,7 +19,7 @@
  *
  * The Linux game module retains the same decisions at RVAs 0x00060ffa and
  * 0x00061335.  Its unoptimized body spills more temporaries, but does not
- * define a different result.  The explicit x87 path preserves the original
+ * define a different result.  The shared arithmetic preserves the original
  * load/multiply/subtract/store chain using native wide intermediates.
  */
 
@@ -49,12 +53,14 @@ void PM_FootstepEvent(int32_t oldBobCycle, int32_t newBobCycle,
                     maxs[2] = 8.0f;
                 }
 
-                end[0] = pm->ps->psOrigin[0] -
-                         pm->ps->ladderNormal[0] * 31.0f;
-                end[1] = pm->ps->psOrigin[1] -
-                         pm->ps->ladderNormal[1] * 31.0f;
-                end[2] = pm->ps->psOrigin[2] -
-                         pm->ps->ladderNormal[2] * 31.0f;
+                /* Keep each product wide through the subtraction; the trace
+                 * endpoint stores are the first float rounding points. */
+                end[0] = (float)((WIDE_FLOAT)pm->ps->psOrigin[0] -
+                                 (WIDE_FLOAT)pm->ps->ladderNormal[0] * PM_FOOTSTEP_LADDER_TRACE_DISTANCE);
+                end[1] = (float)((WIDE_FLOAT)pm->ps->psOrigin[1] -
+                                 (WIDE_FLOAT)pm->ps->ladderNormal[1] * PM_FOOTSTEP_LADDER_TRACE_DISTANCE);
+                end[2] = (float)((WIDE_FLOAT)pm->ps->psOrigin[2] -
+                                 (WIDE_FLOAT)pm->ps->ladderNormal[2] * PM_FOOTSTEP_LADDER_TRACE_DISTANCE);
 
                 PM_trace(&trace, pm->ps->psOrigin, mins, maxs, end,
                          pm->ps->psClientNum,

@@ -2,6 +2,7 @@
 
 #include "compat/coduo_native_x87.h"
 #include "compat/crt/atan2_compat.h"
+#include "compat/crt/sin_cos_compat.h"
 
 #include <math.h>
 
@@ -69,7 +70,7 @@ long double QuatEigenTrace(const vec4_t quaternion)
  */
 float AngleEigenTrace(float degrees)
 {
-    const double sine = (double)coduo_x87_sinl(
+    const double sine = (double)coduomp_crt_sinl(
         (long double)degrees * 0.01745329238474369f);
 
     return (float)(sine * sine);

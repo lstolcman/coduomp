@@ -12,9 +12,9 @@
 #include "g_public.h"
 #include "game_globals.h"
 #include "game_functions.h"
-#include "compat/libm/coduo_libm.h"
+#include "compat/coduo_native_x87.h"
 
-#define MARK_DIR_NORMAL_MIN_LENGTH 1.0f
+#define MARK_DIR_NORMAL_MIN_LENGTH 1.0
 #define MARK_DIR_DEFAULT_DOT 0.3f
 #define MARK_DIR_STEEP_NORMAL_Z 0.8f
 #define MARK_DIR_STEEP_DOT 0.7f
@@ -30,12 +30,12 @@ void BG_GetMarkDir(const float *dir, const float *normal, float *out)
     float minDot = MARK_DIR_DEFAULT_DOT;
     vec3_t safeNormal;
     vec3_t markDir;
-    float normalLength;
+    WIDE_FLOAT normalLength;
 
-    normalLength = (float)CoduoLibm_Sqrt((double)(
-        (long double)normal[0] * (long double)normal[0] +
-        (long double)normal[1] * (long double)normal[1] +
-        (long double)normal[2] * (long double)normal[2]));
+    /* The square root remains wide through the unit-length comparison. */
+    normalLength = coduo_x87_sqrtl(
+        ((WIDE_FLOAT)normal[0] * normal[0] + (WIDE_FLOAT)normal[1] * normal[1]) +
+        (WIDE_FLOAT)normal[2] * normal[2]);
     if (normalLength < MARK_DIR_NORMAL_MIN_LENGTH) {
         safeNormal[0] = 0.0f;
         safeNormal[1] = 0.0f;
@@ -55,20 +55,22 @@ void BG_GetMarkDir(const float *dir, const float *normal, float *out)
         minDot = MARK_DIR_STEEP_DOT;
     }
 
-    while ((long double)markDir[0] * (long double)safeNormal[0] +
-               (long double)markDir[1] * (long double)safeNormal[1] +
-               (long double)markDir[2] * (long double)safeNormal[2] <
-           (long double)minDot) {
-        markDir[0] = (float)((long double)markDir[0] +
-                             (long double)safeNormal[0] *
-                                 MARK_DIR_NORMAL_BLEND);
-        markDir[1] = (float)((long double)markDir[1] +
-                             (long double)safeNormal[1] *
-                                 MARK_DIR_NORMAL_BLEND);
-        markDir[2] = (float)((long double)markDir[2] +
-                             (long double)safeNormal[2] *
-                                 MARK_DIR_NORMAL_BLEND);
-        VectorNormalize(markDir);
+    /* Dot products fold Z/Y/X. Half-normal components round to float once,
+     * after the first dot test, and remain fixed throughout the blend loop. */
+    if (((WIDE_FLOAT)markDir[2] * safeNormal[2] + (WIDE_FLOAT)markDir[1] * safeNormal[1]) +
+        (WIDE_FLOAT)markDir[0] * safeNormal[0] < minDot) {
+        volatile vec3_t halfNormal;
+        halfNormal[0] = (float)((WIDE_FLOAT)safeNormal[0] * MARK_DIR_NORMAL_BLEND);
+        halfNormal[1] = (float)((WIDE_FLOAT)safeNormal[1] * MARK_DIR_NORMAL_BLEND);
+        halfNormal[2] = (float)((WIDE_FLOAT)safeNormal[2] * MARK_DIR_NORMAL_BLEND);
+
+        do {
+            markDir[0] = (float)((WIDE_FLOAT)halfNormal[0] + markDir[0]);
+            markDir[1] = (float)((WIDE_FLOAT)halfNormal[1] + markDir[1]);
+            markDir[2] = (float)((WIDE_FLOAT)halfNormal[2] + markDir[2]);
+            VectorNormalize(markDir);
+        } while (((WIDE_FLOAT)markDir[2] * safeNormal[2] + (WIDE_FLOAT)markDir[1] * safeNormal[1]) +
+                 (WIDE_FLOAT)markDir[0] * safeNormal[0] < minDot);
     }
 
     out[0] = markDir[0];
