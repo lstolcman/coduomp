@@ -1,5 +1,6 @@
 #include "q_math.h"
 
+#include "compat/crt/asin_compat.h"
 #include "compat/coduo_int32_bits.h"
 #include "compat/coduo_x87_eval.h"
 
@@ -37,7 +38,7 @@ const vec3_t vec3_origin = {0.0f, 0.0f, 0.0f};
 float Q_acos(float value)
 {
     const float pi = 3.1415927410125732f;
-    const float angle = (float)acos((double)value);
+    const float angle = (float)coduomp_crt_acosl((double)value);
 
     if (angle > pi || angle < -pi) {
         return pi;

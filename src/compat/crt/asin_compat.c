@@ -42,13 +42,35 @@
  * targets use the shared native wide-math adapters. Wide entry points retain
  * the result; the double-return APIs perform the explicit binary64 narrowing.
  */
-#include "coduo_libm.h"
+#include "compat/libm/coduo_libm.h"
 #include "compat/crt/asin_compat.h"
 
+#include <errno.h>
 #include <math.h>
 #include <string.h>
 
-#include "coduo_wide_math.h"
+#include "compat/libm/coduo_wide_math.h"
+
+/* NOT_FROM_ORIGINAL_SOURCE: the domain return materializes binary64, keeps
+ * a quieted NaN payload or uses negative indefinite, and reports EDOM. */
+static WIDE_FLOAT coduomp_crt_inverse_trig_domain(double value)
+{
+    const uint64_t exponentMask = UINT64_C(0x7ff0000000000000);
+    const uint64_t fractionMask = UINT64_C(0x000fffffffffffff);
+    const uint64_t indefiniteBits = UINT64_C(0xfff8000000000000);
+    uint64_t bits;
+    WIDE_FLOAT result;
+
+    memcpy(&bits, &value, sizeof(bits));
+    if ((bits & exponentMask) == exponentMask && (bits & fractionMask) != 0) {
+        result = (WIDE_FLOAT)value + 1.0L;
+    } else {
+        memcpy(&value, &indefiniteBits, sizeof(value));
+        result = (WIDE_FLOAT)value;
+    }
+    errno = EDOM;
+    return result;
+}
 
 #if (defined(__i386__) || defined(__x86_64__)) && (defined(__GNUC__) || defined(__clang__)) && LDBL_MANT_DIG == 64
 
@@ -71,16 +93,6 @@ static uint32_t AsinLowDword(double value)
 
     memcpy(&bits, &value, sizeof(bits));
     return (uint32_t)bits;
-}
-
-/* TBYTE 0x200b0180: the x87 indefinite QNaN loaded on a domain error. */
-static double AsinIndefiniteNaN(void)
-{
-    const uint64_t bits = UINT64_C(0xfff8000000000000);
-    double result;
-
-    memcpy(&result, &bits, sizeof(result));
-    return result;
 }
 
 /* TBYTE 0x200b018a: pi/2 as an 80-bit constant, significand
@@ -136,14 +148,14 @@ WIDE_FLOAT coduomp_crt_asinl(double value)
 
     if (exponent == ASIN_HIGH_EXPONENT_MASK) {
         if (mantissa != 0u || low != 0u) {
-            return (WIDE_FLOAT)value + 1.0L; /* quiet the NaN */
+            return coduomp_crt_inverse_trig_domain(value); /* quiet the NaN */
         }
-        return AsinIndefiniteNaN(); /* +-inf is a domain error */
+        return coduomp_crt_inverse_trig_domain(value); /* +-inf is a domain error */
     }
 
     if (exponent >= ASIN_EXPONENT_OF_ONE) {
         if (exponent != ASIN_EXPONENT_OF_ONE || mantissa != 0u || low != 0u) {
-            return AsinIndefiniteNaN(); /* |x| > 1 */
+            return coduomp_crt_inverse_trig_domain(value); /* |x| > 1 */
         }
         /* |x| == 1: +-pi/2, the sign taken from x (FCHS at 0x2008a786). */
         saved = AsinEnterControlWord();
@@ -180,14 +192,14 @@ WIDE_FLOAT coduomp_crt_acosl(double value)
 
     if (exponent == ASIN_HIGH_EXPONENT_MASK) {
         if (mantissa != 0u || low != 0u) {
-            return (WIDE_FLOAT)value + 1.0L; /* quiet the NaN */
+            return coduomp_crt_inverse_trig_domain(value); /* quiet the NaN */
         }
-        return AsinIndefiniteNaN(); /* +-inf is a domain error */
+        return coduomp_crt_inverse_trig_domain(value); /* +-inf is a domain error */
     }
 
     if (exponent >= ASIN_EXPONENT_OF_ONE) {
         if (exponent != ASIN_EXPONENT_OF_ONE || mantissa != 0u || low != 0u) {
-            return AsinIndefiniteNaN(); /* |x| > 1 */
+            return coduomp_crt_inverse_trig_domain(value); /* |x| > 1 */
         }
         /* |x| == 1: FLDZ for +1 (0x2008a166), FLDPI for -1 (0x2008a162). */
         saved = AsinEnterControlWord();
@@ -218,12 +230,18 @@ WIDE_FLOAT coduomp_crt_acosl(double value)
 /* NOT_FROM_ORIGINAL_SOURCE: native arithmetic adapter for this CRT boundary. */
 WIDE_FLOAT coduomp_crt_asinl(double value)
 {
+    if (!(value >= -1.0 && value <= 1.0)) {
+        return coduomp_crt_inverse_trig_domain(value);
+    }
     return coduomp_math_asinl((WIDE_FLOAT)value);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: native arithmetic adapter for this CRT boundary. */
 WIDE_FLOAT coduomp_crt_acosl(double value)
 {
+    if (!(value >= -1.0 && value <= 1.0)) {
+        return coduomp_crt_inverse_trig_domain(value);
+    }
     return coduomp_math_acosl((WIDE_FLOAT)value);
 }
 
