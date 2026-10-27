@@ -3914,10 +3914,9 @@ qboolean Scr_Vehicle_PushAway(gentity_t *player, gentity_t *vehicle)
     /* 0x8d427/0x8d43c: the origin delta is stored to direction[2] first,
      * then the mins delta is added in a second rounded store. */
     direction[2] = player->currentOrigin[2] - vehicle->currentOrigin[2];
-    /* origin delta above is a single sub (native); the second store adds the
-     * mins delta: (mins_p - mins_v) + direction[2] is sub+add kept 80-bit until
-     * the store -> shim. */
-    direction[2] = (player->mins[2] - vehicle->mins[2]) + direction[2];
+    /* Retain the mins subtraction through the addition to the already-rounded
+     * origin delta, then store the adjusted direction as float. */
+    direction[2] = ((WIDE_FLOAT)player->mins[2] - vehicle->mins[2]) + direction[2];
     VectorNormalize(direction);
 
     pushedOrigin[0] = player->currentOrigin[0];
@@ -3926,24 +3925,21 @@ qboolean Scr_Vehicle_PushAway(gentity_t *player, gentity_t *vehicle)
 
     /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
     for (;;) {
-        /* Stock 0x8d493..0x8d4b1: VectorDistance is called first, then
-         * RADIUS+collisionMaxs[0]+PAD is summed on the x87 stack and compared
-         * with a FULL-WIDTH fucompp -- the 80-bit sum is NOT spilled to a float.
-         * The recon's inline form makes our -mfpmath=387 build evaluate the sum
-         * first and spill it (fstp DWORD) -> a 32-bit compare that deviates; so
-         * bind the distance to a float first (matches stock: no spill), and
-         * emulate the compare at 80-bit width. */
+        /* Round the distance to float, but retain the collision-limit sum
+         * through comparison. The radius and clearance combine exactly
+         * before adding the collision bound. */
         {
             const float pushDistance =
                 VectorDistance(pushedOrigin, vehicle->currentOrigin);
-            if (!(VEH_PUSH_AWAY_PLAYER_RADIUS +
-                      vehicleInfo->collisionMaxs[0] + kVehSafetyBuffer >
+            if (!((WIDE_FLOAT)vehicleInfo->collisionMaxs[0] +
+                      (VEH_PUSH_AWAY_PLAYER_RADIUS + kVehSafetyBuffer) >
                   pushDistance)) {
                 return qfalse;
             }
         }
 
-        /* pushedOrigin += direction*STEP: mul then add-into, 80-bit, one store */
+        /* Scaling the normalized float direction by this power-of-two step
+         * is exact; each subsequent position addition rounds to float. */
         pushedOrigin[0] += direction[0] * VEH_PUSH_AWAY_STEP;
         pushedOrigin[1] += direction[1] * VEH_PUSH_AWAY_STEP;
         pushedOrigin[2] += direction[2] * VEH_PUSH_AWAY_STEP;
