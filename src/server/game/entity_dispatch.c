@@ -2381,10 +2381,9 @@ void SP_func_door(gentity_t *ent)
     int locked;
     int health;
     float lip = DOOR_DEFAULT_LIP;
-    vec3_t size;
+    vec3_t absDirection;
+    wide_vec3_t size;
     float moveDistance;
-    vec3_t pos1;
-    vec3_t pos2;
     vec3_t temp;
 
     DoorSetSounds(ent, 0);
@@ -2408,39 +2407,25 @@ void SP_func_door(gentity_t *ent)
     G_SpawnFloat("lip", "8", &lip);
     G_SpawnInt("dmg", DOOR_DMG_DEFAULT, &ent->damage);
 
-    pos1[0] = ent->currentOrigin[0];
-    pos1[1] = ent->currentOrigin[1];
-    pos1[2] = ent->currentOrigin[2];
-    game_compat_door_copy_vector_to_ent(ent->moverPos1, pos1);
+    game_compat_door_copy_vector_to_ent(ent->moverPos1, ent->currentOrigin);
 
     trap_SetBrushModel(ent);
     G_SetMovedir(ent->currentAngles,
                  ent->moverDir);
 
-    size[0] = ent->maxs[0] - ent->mins[0];
-    size[1] = ent->maxs[1] - ent->mins[1];
-    size[2] = ent->maxs[2] - ent->mins[2];
-    /* Stock 0x640e9..0x64102: fabsf(moverDir[i]) and size[i] are pre-stored to
-     * floats (native), then the dot minus lip is kept 80-bit until the store ->
-     * shim ((m0+m1)+m2) - lip. */
-    moveDistance =
-        fabsf(ent->moverDir[0]) * size[0] +
-        fabsf(ent->moverDir[1]) * size[1] +
-        fabsf(ent->moverDir[2]) * size[2] -
-        lip;
+    absDirection[0] = fabsf(ent->moverDir[0]);
+    absDirection[1] = fabsf(ent->moverDir[1]);
+    absDirection[2] = fabsf(ent->moverDir[2]);
+    size[0] = (WIDE_FLOAT)ent->maxs[0] - ent->mins[0];
+    size[1] = (WIDE_FLOAT)ent->maxs[1] - ent->mins[1];
+    size[2] = (WIDE_FLOAT)ent->maxs[2] - ent->mins[2];
+    /* Keep box dimensions and the Z+Y+X dot product wide through lip
+     * subtraction, then round the distance to float before endpoint math. */
+    moveDistance = coduo_round_f32(
+        ((absDirection[2] * size[2] + absDirection[1] * size[1]) + absDirection[0] * size[0]) - lip);
 
-    /* pos2[i] = pos1[i] + moverDir[i]*moveDistance: mul then add, 80-bit, one
-     * store per component -> shim. */
-    pos2[0] = pos1[0] +
-              ent->moverDir[0] *
-                  moveDistance;
-    pos2[1] = pos1[1] +
-              ent->moverDir[1] *
-                  moveDistance;
-    pos2[2] = pos1[2] +
-              ent->moverDir[2] *
-                  moveDistance;
-    game_compat_door_copy_vector_to_ent(ent->moverPos2, pos2);
+    /* Each endpoint uses a live multiply-add and one float result store. */
+    _VectorMA(ent->moverPos1, moveDistance, ent->moverDir, ent->moverPos2);
 
     if ((ent->spawnflags & DOOR_SPAWNFLAG_START_OPEN) != 0) {
         game_compat_door_copy_vector_from_ent(ent->moverPos2, temp);
