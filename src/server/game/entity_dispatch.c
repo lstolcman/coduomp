@@ -451,7 +451,7 @@ void MatchTeam(gentity_t *ent, int moverState, int time);
 #define FUNC_PENDULUM_DEFAULT_PHASE "0"
 #define FUNC_PENDULUM_MIN_LENGTH 8.0f
 #define FUNC_PENDULUM_GRAVITY_SCALE 3.0f
-#define FUNC_PENDULUM_FREQ_SCALE 0.15915494309189535 /* original double 0x3fc45f306dc9c883 */
+#define FUNC_PENDULUM_FREQ_SCALE 0.15915494f /* Original binary32 reciprocal of 2*pi. */
 #define FUNC_DOOR_ROTATING_SPAWNFLAG_START_OPEN 0x01u
 #define FUNC_DOOR_ROTATING_SPAWNFLAG_TOGGLE 0x02u
 #define FUNC_DOOR_ROTATING_SPAWNFLAG_Z_AXIS 0x04u
@@ -2490,8 +2490,8 @@ void Static_Pain(gentity_t *ent, gentity_t *attacker, int damage,
                  const float *point, int mod, const float *dir,
                  int hitLocation)
 {
-    float painDelay;
-    float nextPainTime;
+    float levelTimeFloat;
+    WIDE_FLOAT nextPainTime;
 
     (void)attacker;
     (void)damage;
@@ -2500,23 +2500,14 @@ void Static_Pain(gentity_t *ent, gentity_t *attacker, int damage,
     (void)dir;
     (void)hitLocation;
 
-    painDelay = ent->concussiveFxEndTime;
-    /* 0x6436a/0x64399..0x643a9: stock rounds itemWait+painDelay to a float,
-     * then keeps the +rand+500 sum in the 80-bit register straight into the
-     * comparison (rand result enters via fild, exact -- no (float) cast). */
-    nextPainTime = ent->itemWait + painDelay;
+    /* Round the current time to float before drawing the random delay. */
+    levelTimeFloat = coduo_round_f32((WIDE_FLOAT)level.time);
 
-    /* Stock 0x6434f..0x643a9: (float)level.time is materialised first (fild;
-     * fstp DWORD -> a rounded float), then the sum nextPainTime + rand%1000 +
-     * 500 is kept 80-bit (rand via fild, exact; 500 a DWORD float const) and
-     * compared FULL-WIDTH (fucompp). The (float) cast must go through a float
-     * VARIABLE -- an in-expression (float)level.time is elided by
-     * -fexcess-precision=fast (fild direct, no round) and would deviate. */
-    {
-        const float levelTimeFloat = (float)level.time;
-        if (nextPainTime + coduo_server_randrange(0, STATIC_PAIN_RANDOM_MS) +
-                STATIC_PAIN_BASE_DELAY_MS <
-            levelTimeFloat) {
+    /* Add random delay, configured delay, previous time and base delay in
+     * that order, retaining the live sum through the strict comparison. */
+    nextPainTime = (WIDE_FLOAT)coduo_server_randrange(0, STATIC_PAIN_RANDOM_MS) +
+                   ent->concussiveFxEndTime + ent->itemWait + STATIC_PAIN_BASE_DELAY_MS;
+    if (nextPainTime < levelTimeFloat) {
         ent->itemWait = (float)level.time;
 
         if ((ent->spawnflags & STATIC_PAIN_DAMAGE_POINT_FLAG) != 0) {
@@ -2527,7 +2518,6 @@ void Static_Pain(gentity_t *ent, gentity_t *attacker, int damage,
             game_compat_g_copy_vector3(ent->damagePoint, ent->currentOrigin);
             game_compat_g_copy_vector3(savedOrigin, ent->currentOrigin);
         }
-    }
     }
 }
 
@@ -2677,16 +2667,11 @@ void SP_func_bobbing(gentity_t *ent)
     InitMover(ent);
     game_compat_g_copy_vector3(ent->currentOrigin, ent->s.pos.trBase);
 
-    /* Stock 0x6496b/0x6498b: speed*1000 (80-bit, 1000 a DWORD float) and
-     * trDuration(fild)*phase (80-bit) each feed fistp DIRECTLY (no float spill)
-     * -> truncate the 80-bit product; the #else long double casts force the
-     * 80-bit product so the ref build fistp's directly too. */
-    ent->s.pos.trDuration =
-        game_compat_int32_from_long_double_trunc(
-            (long double)(*game_compat_g_binary_mover_speed(ent)) *
-            (long double)1000.0f);
-    ent->s.pos.trTime = game_compat_int32_from_long_double_trunc(
-        (long double)ent->s.pos.trDuration * (long double)phase);
+    /* Both live products use the low dword of the original CRT's signed-qword
+     * conversion, including its invalid-result behavior. */
+    ent->s.pos.trDuration = coduo_fp_to_i32_extended(
+        (WIDE_FLOAT)*game_compat_g_binary_mover_speed(ent) * 1000.0f);
+    ent->s.pos.trTime = coduo_fp_to_i32_extended((WIDE_FLOAT)ent->s.pos.trDuration * phase);
     ent->s.pos.trType = TR_SINE;
 
     if ((ent->spawnflags & FUNC_BOBBING_SPAWNFLAG_X_AXIS) != 0) {
@@ -2708,9 +2693,8 @@ void SP_func_pendulum(gentity_t *ent)
     float speed;
     float phase;
     float length;
-    float gravityFrequency;
-    long double gravityRatio;
-    float frequency;
+    WIDE_FLOAT gravityRatio;
+    WIDE_FLOAT frequency;
     int duration;
 
     G_SpawnFloat("speed", FUNC_PENDULUM_DEFAULT_SPEED, &speed);
@@ -2724,59 +2708,21 @@ void SP_func_pendulum(gentity_t *ent)
         length = FUNC_PENDULUM_MIN_LENGTH;
     }
 
-    /* Stock 0x64a95..0x64adc: value / (length*3.0) computed 80-bit and stored to
-     * a QWORD for CoduoLibm_Sqrt (0x64aa5) -> gravityFrequency float; frequency =
-     * gravityFrequency(float) * FREQ_SCALE(QWORD double) kept 80-bit -> float;
-     * duration = 1000.0/frequency, fistp DIRECTLY on the 80-bit quotient. */
-#if   defined(__i386__) || defined(__x86_64__)
-    gravityRatio =
-        (long double)g_gravity.value /
-        ((long double)length * (long double)FUNC_PENDULUM_GRAVITY_SCALE);
-    gravityFrequency = (float)CoduoLibm_Sqrt((double)gravityRatio);
-    frequency = (float)((long double)gravityFrequency *
-                        (long double)FUNC_PENDULUM_FREQ_SCALE);
-    {
-        static const float numerator = 1000.0f;
-        coduo_x87_truncation_control_t durationControl;
-        duration = CODUO_X87_TRUNCATE_I32_FIRST(
-            &durationControl,
-            (long double)numerator / (long double)frequency);
-    }
-#else
-    gravityRatio =
-        (long double)g_gravity.value /
-        ((long double)length * (long double)FUNC_PENDULUM_GRAVITY_SCALE);
-    gravityFrequency = (float)CoduoLibm_Sqrt((double)gravityRatio);
-    frequency = (float)((long double)gravityFrequency *
-                        (long double)FUNC_PENDULUM_FREQ_SCALE);
-    duration = game_compat_int32_from_long_double_trunc(
-        (long double)1000.0f / (long double)frequency);
-#endif
+    /* Keep the ratio, native square root, binary32-constant scaling and
+     * quotient wide through the original CRT integer conversion. */
+    gravityRatio = (WIDE_FLOAT)g_gravity.value / ((WIDE_FLOAT)length * FUNC_PENDULUM_GRAVITY_SCALE);
+    frequency = coduo_x87_sqrtl(gravityRatio) * FUNC_PENDULUM_FREQ_SCALE;
+    duration = coduo_fp_to_i32_extended((WIDE_FLOAT)1000.0f / frequency);
 
     ent->s.pos.trDuration = duration;
     InitMover(ent);
     game_compat_g_copy_vector3(ent->currentOrigin, ent->s.pos.trBase);
     game_compat_g_copy_vector3(ent->currentAngles, ent->s.apos.trBase);
 
-    /* 0x64b65..0x64b7a: duration enters through bare fild and the product
-     * feeds truncating fistp directly. */
-#if   defined(__i386__) || defined(__x86_64__)
-    {
-        static const float numerator = 1000.0f;
-        coduo_x87_truncation_control_t durationControl;
-        ent->s.apos.trDuration = CODUO_X87_TRUNCATE_I32_FIRST(
-            &durationControl,
-            (long double)numerator / (long double)frequency);
-        ent->s.apos.trTime = CODUO_X87_TRUNCATE_I32_NEXT(
-            &durationControl,
-            (long double)ent->s.apos.trDuration * (long double)phase);
-    }
-#else
-    ent->s.apos.trDuration = game_compat_int32_from_long_double_trunc(
-        (long double)1000.0f / (long double)frequency);
-    ent->s.apos.trTime = game_compat_int32_from_long_double_trunc(
-        (long double)ent->s.apos.trDuration * (long double)phase);
-#endif
+    /* Retain the integer duration across mover initialization; its product
+     * with phase uses the same CRT conversion without an intermediate store. */
+    ent->s.apos.trDuration = duration;
+    ent->s.apos.trTime = coduo_fp_to_i32_extended((WIDE_FLOAT)duration * phase);
     ent->s.apos.trType = TR_SINE;
     ent->s.apos.trDelta[2] = speed;
 }
