@@ -62,6 +62,7 @@ void G_GeneralLink(gentity_t *ent);
 #define LINKTO_DEFAULT_TAG ""
 #define TRIGGER_MULTIPLE_CLASSNAME "trigger_multiple"
 #define DOBJ_ATTACH_SLOT_COUNT 6
+#define DOBJ_ATTACH_SHIFT_COUNT_MASK 31U
 #define DOBJ_MODEL_COUNT_MAX (DOBJ_ATTACH_SLOT_COUNT + 1)
 #define PICK_TARGET_MAX_ENTITIES 32
 #define VTOS_RING_COUNT 8
@@ -1169,7 +1170,9 @@ void ScrCmd_GetAttachIgnoreCollision(uint32_t scriptObject)
         Scr_ParamError(0, "bad index");
     }
 
-    Scr_AddBool((game_compat_g_attach_ignore_collision_value(ent) >> index) & 1);
+    /* The original 32-bit shift masks its count even if the parameter-error
+     * callback returns. Keep that continuation defined on every host. */
+    Scr_AddBool((game_compat_g_attach_ignore_collision_value(ent) >> (index & DOBJ_ATTACH_SHIFT_COUNT_MASK)) & 1);
 }
 
 /* VERIFIED_DECOMPILER(0x67fe7, 77fe7_script_method_scriptbuiltin_linkto.c, VERIFY-DOBJLINK-ATTACHLINK-2026-06-17): DATAFLOW_VERIFIED - entity parameter type checks, linkTo-enabled flag gate, parent/tag/default args, optional origin/angles offset vectors, link call selection, and failure-reporting error paths checked against current decompiler output. */
