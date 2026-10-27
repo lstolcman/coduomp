@@ -3693,9 +3693,14 @@ void GScr_LocalToWorldCoords(uint32_t scriptObject)
 
     Scr_GetVector(0, local);
     AnglesToAxis(ent->currentAngles, axis);
-    /* C99 multidimensional-array qualifier bridge; the transform is
-     * read-only. */
-    MatrixTransformVector(local, (const vec_t (*)[3])axis, world);
+    /* This inlined transform folds Z, X, Y and rounds each dot to float
+     * before adding the entity origin. The standalone transform has a
+     * different addition order. */
+    for (int lane = 0; lane < 3; lane++) {
+        world[lane] = coduo_round_f32(((WIDE_FLOAT)local[2] * axis[2][lane] +
+                                      (WIDE_FLOAT)local[0] * axis[0][lane]) +
+                                     (WIDE_FLOAT)local[1] * axis[1][lane]);
+    }
     world[0] += ent->currentOrigin[0];
     world[1] += ent->currentOrigin[1];
     world[2] += ent->currentOrigin[2];
@@ -3784,15 +3789,14 @@ void GScr_PlaceSpawnPoint(uint32_t scriptObject)
     game_compat_script_copy_vector(start, trace.endpos);
     trap_TraceCapsule(&trace, start, playerMins, playerMaxs, start,
                       ent->s.number, SPAWNPOINT_TRACE_MASK);
-    if (trace.startsolid) {
-        /* 0x6e0a2..0x6e0e4: each coordinate uses x87 fistp with RC=0xc00.
-         * The defined helper also preserves INT32_MIN for NaN/out-of-range
-         * input instead of relying on an undefined host-language cast. */
+    if (trace.allsolid) {
+        /* The warning tests the all-solid result and consumes the low dword
+         * of each original CRT conversion, including its out-of-range result. */
         Com_Printf(
             SPAWNPOINT_SOLID_WARNING, ent->s.number,
-            game_compat_int32_from_float_trunc(ent->currentOrigin[0]),
-            game_compat_int32_from_float_trunc(ent->currentOrigin[1]),
-            game_compat_int32_from_float_trunc(ent->currentOrigin[2]));
+            coduo_fp_to_i32_extended(ent->currentOrigin[0]),
+            coduo_fp_to_i32_extended(ent->currentOrigin[1]),
+            coduo_fp_to_i32_extended(ent->currentOrigin[2]));
     }
 
     G_SetOrigin(ent, trace.endpos);
