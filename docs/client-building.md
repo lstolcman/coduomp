@@ -112,11 +112,12 @@ cmake --build --preset msvc --parallel 2
 
 The CMake build defaults to Miniaudio on both x86 and x64. Every Windows x86
 build also includes optional Miles support; no audio build flags or retail
-DLL are needed to compile it. To use Miles, keep the retail `mss32.dll` and
-`miles/` provider directory beside the executable and select `Miles` through
-`mss_3d_provider`, then run `snd_restart`. Existing Miles provider names are
-also accepted. If Miles cannot load or initialize, the client falls back to
-Miniaudio. Select `Miniaudio` with the same cvar to switch back.
+DLL are needed to compile it. At startup, the executable checks for the retail
+`mss32.dll` beside itself. If the DLL loads with the required exports, `Miles`
+appears alongside `Miniaudio` in the audio backend selector. Keep the retail
+`miles/` provider directory there too when using Miles. If Miles cannot load
+or initialize, the client falls back to Miniaudio. The existing
+`mss_3d_provider` setting and retail provider names remain supported.
 
 MinGW x86 builds prefer Miles automatically when available. All x64 builds
 use Miniaudio because the retail Miles DLL is 32-bit. These build settings

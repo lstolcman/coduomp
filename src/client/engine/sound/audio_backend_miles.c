@@ -2,18 +2,33 @@
 
 #if defined(CODUOMP_HAS_MILES)
 #include "client/engine/platform/dynamic_library_boundary.h"
+#include <string.h>
+#include <windows.h>
 
 static void *miles_library;
 static coduomp_miles_api_t miles_api;
 
 /* NOT_FROM_ORIGINAL_SOURCE: replace mandatory PE imports with an all-or-nothing
- * runtime load. Failed loads publish no pointers and release the library. */
+ * runtime load beside the executable. Failed loads publish no pointers and
+ * release the library. */
 const coduomp_miles_api_t *coduomp_miles_load(void)
 {
     if (miles_library != NULL)
         return &miles_api;
 
-    void *const library = coduomp_library_open("mss32.dll");
+    static const char libraryName[] = "mss32.dll";
+    char libraryPath[MAX_PATH];
+    const DWORD pathLength = GetModuleFileNameA(NULL, libraryPath, sizeof(libraryPath));
+    if (pathLength == 0 || pathLength >= sizeof(libraryPath))
+        return NULL;
+    char *filename = strrchr(libraryPath, '\\');
+    if (filename == NULL)
+        return NULL;
+    ++filename;
+    if ((size_t)(filename - libraryPath) + sizeof(libraryName) > sizeof(libraryPath))
+        return NULL;
+    memcpy(filename, libraryName, sizeof(libraryName));
+    void *const library = coduomp_library_open(libraryPath);
     if (library == NULL)
         return NULL;
 

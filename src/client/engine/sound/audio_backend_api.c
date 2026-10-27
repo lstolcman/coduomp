@@ -57,6 +57,16 @@ qboolean audio_select_backend(
     const char *preferredName, const char **selectedName)
 {
     const audio_backend_api_t *selected = NULL;
+    /* NOT_FROM_ORIGINAL_SOURCE: publish runtime availability before the UI
+     * parses its backend selector, even when Miniaudio is the preference. */
+    const char *milesAvailable = "0";
+#if defined(CODUOMP_HAS_MILES)
+    const coduomp_miles_api_t *const miles = coduomp_miles_load();
+    if (miles != NULL)
+        milesAvailable = "1";
+#endif
+    (void)Cvar_Get(AUDIO_BACKEND_MILES_AVAILABLE_CVAR, "0", CVAR_ROM);
+    (void)Cvar_Set2(AUDIO_BACKEND_MILES_AVAILABLE_CVAR, milesAvailable, qtrue);
     if (preferredName == NULL || preferredName[0] == '\0')
         preferredName = AUDIO_BACKEND_DEFAULT_NAME;
 #if defined(CODUOMP_HAS_MILES)
@@ -79,7 +89,7 @@ qboolean audio_select_backend(
     if (selected == NULL &&
         !audio_backend_name_matches(preferredName, AUDIO_BACKEND_MINIAUDIO_NAME, NULL) &&
         !audio_backend_name_matches(preferredName, AUDIO_BACKEND_OPENAL_NAME, "OpenAL Fast 2D Positional Audio")) {
-        active_miles_api = coduomp_miles_load();
+        active_miles_api = miles;
         if (active_miles_api != NULL) {
             active_audio_backend = NULL;
             if (selectedName != NULL) {

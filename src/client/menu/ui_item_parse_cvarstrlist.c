@@ -16,33 +16,30 @@ void Com_Printf(const char *format, ...);
 #if defined(__APPLE__) || defined(__linux__) || defined(_WIN32)
 /* NOT_FROM_ORIGINAL_SOURCE: retail menu data hard-codes the Windows Miles
  * provider list. Replace it with the complete backends this client can use. */
-static void audio_ui_append_backend(
-    multiDef_t *multi, const char *name)
+static void coduomp_audio_ui_append_backend(multiDef_t *multi, const char *name, const char *value)
 {
     if (multi->count >= MAX_MULTI_CVARS)
         return;
     multi->cvarList[multi->count] = String_Alloc(name);
-    multi->cvarStr[multi->count] = String_Alloc(name);
+    multi->cvarStr[multi->count] = String_Alloc(value);
     ++multi->count;
 }
 
-static void audio_ui_replace_backends(
+/* NOT_FROM_ORIGINAL_SOURCE: the engine probes Miles before UI initialization;
+ * include it only when that executable can load the installed DLL. */
+static void coduomp_audio_ui_replace_backends(
     itemDef_t *item, multiDef_t *multi)
 {
     if (item->cvar == NULL ||
         strcmp(item->cvar, "ui_mss_3d_provider") != 0)
         return;
     multi->count = 0;
-#if defined(_WIN32) && !defined(_WIN64)
-    audio_ui_append_backend(
-        multi, AUDIO_BACKEND_MILES_PROVIDER_NAME);
-#else
-    audio_ui_append_backend(
-        multi, AUDIO_BACKEND_MINIAUDIO_NAME);
-#if defined(__APPLE__) || defined(__linux__)
-    audio_ui_append_backend(
-        multi, AUDIO_BACKEND_OPENAL_NAME);
-#endif
+    coduomp_audio_ui_append_backend(multi, AUDIO_BACKEND_MINIAUDIO_NAME, AUDIO_BACKEND_MINIAUDIO_NAME);
+#if defined(_WIN32) && UINTPTR_MAX == UINT32_MAX
+    if (DC->getCVarValue(AUDIO_BACKEND_MILES_AVAILABLE_CVAR) != 0.0f)
+        coduomp_audio_ui_append_backend(multi, AUDIO_BACKEND_MILES_NAME, AUDIO_BACKEND_MILES_PROVIDER_NAME);
+#elif defined(__APPLE__) || defined(__linux__)
+    coduomp_audio_ui_append_backend(multi, AUDIO_BACKEND_OPENAL_NAME, AUDIO_BACKEND_OPENAL_NAME);
 #endif
 }
 #endif
@@ -69,7 +66,7 @@ qboolean ItemParse_cvarStrList(itemDef_t *item, int handle)
         /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
         if (token.string[0] == '}') {
 #if defined(__APPLE__) || defined(__linux__) || defined(_WIN32)
-            audio_ui_replace_backends(item, multi);
+            coduomp_audio_ui_replace_backends(item, multi);
 #endif
             return qtrue;
         }
