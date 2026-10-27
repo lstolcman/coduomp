@@ -22,9 +22,7 @@ include(ExternalProject)
 
 # SDL2 and zlib declare old CMake compatibility ranges; CMake 4 refuses to
 # configure a project that asks for less than 3.5 unless the floor is raised.
-if(CMAKE_VERSION VERSION_GREATER_EQUAL 4.0)
-	set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
-endif()
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 # Downloaded third-party projects are not part of this project's test matrix,
 # and their CMake files predate current policies; keep the configure output
@@ -32,9 +30,9 @@ endif()
 set(BUILD_TESTING OFF CACHE BOOL "Build third-party tests" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build third-party shared libraries" FORCE)
 set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1)
-# CMake older than 4.4 (including the version shipped with Visual Studio)
-# controls deprecation messages through this variable.
-set(CMAKE_WARN_DEPRECATED OFF)
+# Scope deprecation suppression to this include and its third-party
+# subdirectories so the project's own diagnostics remain visible.
+cmake_diagnostic(SET CMD_DEPRECATED IGNORE)
 
 # coduomp_bundled_fetch(<name> <url> <sha256>)
 #

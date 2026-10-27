@@ -98,7 +98,7 @@ MSVC remains supported, but its `long double` is binary64 on both x86 and x64.
 We accept the resulting narrowing; MSVC builds do not promise extended-precision
 fidelity, even with `/arch:IA32` or optimization disabled.
 
-Use Visual Studio 2022 17.9 or newer with the C++ desktop workload and CMake 3.24 or newer.
+Use Visual Studio 2022 17.9 or newer with the C++ desktop workload and CMake 4.4 or newer.
 The CMake build reads the Makefile source manifests and builds the executable
 and all three modules. The POSIX dedicated server remains a Makefile target.
 The checked-in CMake presets generate Visual Studio/MSBuild projects. Select
