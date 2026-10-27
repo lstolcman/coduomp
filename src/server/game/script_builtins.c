@@ -1502,21 +1502,25 @@ void G_DuplicateEntityFields(gentity_t *dest, gentity_t *source)
 
         switch (field->type) {
         case SCRIPT_SPAWN_FIELD_INT:
-        case SCRIPT_SPAWN_FIELD_FLOAT:
-            *(uint32_t *)(void *)destBase = *(uint32_t *)(void *)sourceBase;
+        case SCRIPT_SPAWN_FIELD_FLOAT: {
+            /* Copy the stored word without accessing a float through an integer lvalue. */
+            uint32_t word;
+            memcpy(&word, sourceBase, sizeof(word));
+            memcpy(destBase, &word, sizeof(word));
             break;
+        }
         case SCRIPT_SPAWN_FIELD_STRING:
             Scr_SetString((uint16_t *)(void *)destBase,
                           *(uint16_t *)(void *)sourceBase);
             break;
         case SCRIPT_SPAWN_FIELD_VECTOR:
             {
-                uint32_t *destWords = (uint32_t *)(void *)destBase;
-                const uint32_t *sourceWords = (const uint32_t *)(const void *)sourceBase;
-
-                destWords[0] = sourceWords[0];
-                destWords[1] = sourceWords[1];
-                destWords[2] = sourceWords[2];
+                /* Retain the original load/store order for each vector word. */
+                for (int lane = 0; lane < 3; lane++) {
+                    uint32_t word;
+                    memcpy(&word, sourceBase + lane * sizeof(word), sizeof(word));
+                    memcpy(destBase + lane * sizeof(word), &word, sizeof(word));
+                }
             }
             break;
         case SCRIPT_SPAWN_FIELD_MODEL:
