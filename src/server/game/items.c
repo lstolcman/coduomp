@@ -405,21 +405,20 @@ void DroppedItemClearOwner(gentity_t *ent)
 void RespawnItem(gentity_t *ent)
 {
     if ((uint16_t)ent->teamName != 0) {
-        gentity_t *master = ent->teamMaster;
         int teamCount = 0;
         int selected;
 
-        if (master == 0) {
+        if (ent->teamMaster == 0) {
             G_Error("RespawnItem: bad teammaster");
         }
 
-        for (gentity_t *candidate = master; candidate != 0;
+        ent = ent->teamMaster;
+        for (gentity_t *candidate = ent; candidate != 0;
              candidate = candidate->teamChain) {
             teamCount++;
         }
 
         selected = coduo_server_randrange(0, teamCount);
-        ent = master;
         for (int index = 0; index < selected; index++) {
             ent = ent->teamChain;
         }
@@ -530,11 +529,11 @@ void RegisterItem(int itemIndex, int updateConfigString)
         } while (weapon != itemIndex);
     } else {
         const char *worldModel = game_compat_item_def_for_index(itemIndex)->worldModel;
-        const char *iconModel = game_compat_item_def_for_index(itemIndex)->iconModel;
 
         if (worldModel != 0) {
             G_ModelIndex(worldModel);
         }
+        const char *iconModel = game_compat_item_def_for_index(itemIndex)->iconModel;
         if (iconModel != 0) {
             G_ModelIndex(iconModel);
         }
@@ -1167,14 +1166,14 @@ static int game_compat_pickup_weapon_drop_replacement(gentity_t *itemEnt, gentit
 
             if (weaponSlot >= WEAPSLOT_PRIMARY_LIMIT) {
                 trap_SendServerCommand((uint32_t)(int)(player - g_entities), 0,
-                                       "f \"GAME_CANT_GET_PRIMARY_WEAP_MESSAGE\"");
+                                       va("f \"GAME_CANT_GET_PRIMARY_WEAP_MESSAGE\""));
                 return 0;
             }
         }
     }
 
     if (*dropped == 0) {
-        if (BG_GetEmptySlotForWeapon(&client->ps, weapon) == 0) {
+        if (BG_GetEmptySlotForWeapon(&player->client->ps, weapon) == 0) {
             return 0;
         }
     } else {
@@ -1219,7 +1218,8 @@ static int game_compat_pickup_weapon_grant_new_weapon(gentity_t *itemEnt, gentit
         }
     }
 
-    BG_GivePlayerWeapon(&client->ps, weapon);
+    /* Drop placement and linking may publish updated player state. */
+    BG_GivePlayerWeapon(&player->client->ps, weapon);
     if (traceMode == 0) {
         trap_SendServerCommand((uint32_t)(int)(player - g_entities), 1, va("a %i", weapon));
     }
