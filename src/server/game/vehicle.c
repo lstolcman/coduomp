@@ -1120,15 +1120,15 @@ static int game_compat_veh_round_to_int(float value)
 #endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-static float game_compat_veh_non_pvs_tank_delta_scale(int delta)
+static WIDE_FLOAT game_compat_veh_non_pvs_tank_delta_scale(int delta)
 {
     if (delta > VEH_NONPVS_TANK_ENCODE_MAX) {
-        /* single float/float divide: x87 forms the 80-bit quotient and rounds
-         * once at the float return store, where SSE divides in 32 bits -> shim */
-        return VEH_NONPVS_TANK_ORIGIN_LIMIT_POS / (float)delta;
+        /* Keep the integer conversion and quotient wide. The caller retains
+         * X's quotient and explicitly stores only Y's quotient as a float. */
+        return (WIDE_FLOAT)VEH_NONPVS_TANK_ORIGIN_LIMIT_POS / delta;
     }
     if (delta < VEH_NONPVS_TANK_ENCODE_MIN) {
-        return VEH_NONPVS_TANK_ORIGIN_LIMIT_NEG / (float)delta;
+        return (WIDE_FLOAT)VEH_NONPVS_TANK_ORIGIN_LIMIT_NEG / delta;
     }
 
     return 1.0f;
@@ -1150,13 +1150,7 @@ static int game_compat_veh_clamp_non_pvs_tank_delta(int delta)
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
 static uint32_t game_compat_veh_pack_non_pvs_tank_coord(int value)
 {
-    int biased = value + 2;
-
-    if (biased < 0) {
-        biased = value + 5;
-    }
-
-    return (uint32_t)(((biased >> 2) + (int)VEH_NONPVS_TANK_COORD_BIAS) &
+    return (uint32_t)((((value + 2) / 4) + (int)VEH_NONPVS_TANK_COORD_BIAS) &
                       (int)VEH_NONPVS_TANK_COORD_MASK);
 }
 
@@ -2482,17 +2476,14 @@ int G_GetNonPVSTankInfo(gentity_t *viewer, const float *origin,
         gentity_t *tank = &g_entities[entNum];
         vehicle_state_t *vehicleState;
         int driverEntNum;
-        float xScale;
+        WIDE_FLOAT xScale;
         float yScale;
-        float diffX;
+        WIDE_FLOAT diffX;
         float diffY;
         int tankIndex;
         int deltaX;
         int deltaY;
         uint32_t yaw;
-#if defined(__x86_64__)
-        coduo_x87_truncation_control_t conversionControl;
-#endif
 
         if (tank->linked == 0) {
             continue;
@@ -2516,62 +2507,34 @@ int G_GetNonPVSTankInfo(gentity_t *viewer, const float *origin,
         }
 
         tankIndex = G_GetTankIndex(tank->s.number);
-        /* 0x8c0a6..0x8c0f9: the origin deltas are stored to float slots, but
-         * the +0.5f sums feed fistp directly with no float store. */
-        diffX = tank->currentOrigin[0] - origin[0];
-        diffY = tank->currentOrigin[1] - origin[1];
-#if   defined(__x86_64__)
-        deltaX = CODUO_X87_TRUNCATE_I32_FIRST(
-            &conversionControl,
-            (long double)diffX + (long double)half);
-        deltaY = CODUO_X87_TRUNCATE_I32_NEXT(
-            &conversionControl,
-            (long double)diffY + (long double)half);
-#else
-        deltaX = (int)(diffX + half);
-        deltaY = (int)(diffY + half);
-#endif
+        /* Keep X's subtraction live; Y is stored to float before either
+         * half-offset conversion. Both sums go directly to the Windows
+         * signed-qword conversion, whose low dword supplies the result. */
+        diffX = (WIDE_FLOAT)tank->currentOrigin[0] - origin[0];
+        diffY = coduo_round_f32((WIDE_FLOAT)tank->currentOrigin[1] - origin[1]);
+        deltaX = coduo_fp_to_i32_extended(diffX + half);
+        deltaY = coduo_fp_to_i32_extended((WIDE_FLOAT)diffY + half);
 
         xScale = game_compat_veh_non_pvs_tank_delta_scale(deltaX);
-        yScale = game_compat_veh_non_pvs_tank_delta_scale(deltaY);
+        yScale = coduo_round_f32(game_compat_veh_non_pvs_tank_delta_scale(deltaY));
         if (xScale < 1.0f || yScale < 1.0f) {
-            /* 0x8c19b/0x8c1bb: fild * scale feeds fistp directly. */
+            /* The integer-times-scale product feeds the conversion directly. */
             if (xScale < yScale) {
-#if   defined(__x86_64__)
-                deltaY = CODUO_X87_TRUNCATE_I32_NEXT(
-                    &conversionControl,
-                    (long double)deltaY * (long double)xScale);
-#else
-                deltaY = (int)(deltaY * xScale);
-#endif
+                deltaY = coduo_fp_to_i32_extended((WIDE_FLOAT)deltaY * xScale);
             } else if (yScale < xScale) {
-#if   defined(__x86_64__)
-                deltaX = CODUO_X87_TRUNCATE_I32_NEXT(
-                    &conversionControl,
-                    (long double)deltaX * (long double)yScale);
-#else
-                deltaX = (int)(deltaX * yScale);
-#endif
+                deltaX = coduo_fp_to_i32_extended((WIDE_FLOAT)deltaX * yScale);
             }
         }
 
         deltaX = game_compat_veh_clamp_non_pvs_tank_delta(deltaX);
         deltaY = game_compat_veh_clamp_non_pvs_tank_delta(deltaY);
-        /* 0x8c289: the yaw product feeds fistp directly (no float store). */
-#if   defined(__x86_64__)
-        yaw = (uint32_t)CODUO_X87_TRUNCATE_I32_NEXT(
-            &conversionControl,
-            (long double)tank->currentAngles[1] *
-            (long double)yawScale);
-#else
-        yaw = (uint32_t)(int)(tank->currentAngles[1] *
-                              yawScale);
-#endif
+        /* The yaw product also stays wide through the integer conversion. */
+        yaw = (uint32_t)coduo_fp_to_i32_extended((WIDE_FLOAT)tank->currentAngles[1] * yawScale);
 
-        return (yaw << 24) |
+        return coduo_int32_from_bits((yaw << 24) |
                (game_compat_veh_pack_non_pvs_tank_coord(deltaY) << 15) |
                (game_compat_veh_pack_non_pvs_tank_coord(deltaX) << 6) |
-               ((uint32_t)tankIndex & VEH_NONPVS_TANK_INDEX_MASK);
+               ((uint32_t)tankIndex & VEH_NONPVS_TANK_INDEX_MASK));
     }
 
     return 0;
