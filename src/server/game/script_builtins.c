@@ -3358,9 +3358,11 @@ void script_func_isplayernumber(void)
 static void game_compat_script_set_winner_value(int winner)
 {
     char config[MAX_STRING_CHARS];
-    const char *winnerValue = va(SCRIPT_WINNER_FORMAT, winner);
+    const char *winnerValue;
 
+    /* Read the game-state snapshot before advancing the temporary formatter. */
     trap_GetConfigstring(SCRIPT_GAMESTATE_CONFIGSTRING, config, sizeof(config));
+    winnerValue = va(SCRIPT_WINNER_FORMAT, winner);
     if (Q_stricmp(Info_ValueForKey(config, SCRIPT_WINNER_KEY), winnerValue) != 0) {
         Info_SetValueForKey(config, SCRIPT_WINNER_KEY, winnerValue);
         trap_SetConfigstring(SCRIPT_GAMESTATE_CONFIGSTRING, config);
