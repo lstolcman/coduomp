@@ -753,7 +753,6 @@ static void audio_warn_wav_repair(const char *path, const char *field,
                path, field, oldValue, newValue);
 }
 
-#if !defined(AUDIO_BACKEND_MILES)
 /* NOT_FROM_ORIGINAL_SOURCE: a bounded top-level chunk found in a loaded WAV. */
 typedef struct audio_wav_chunk_s {
     uint8_t *data;
@@ -1095,9 +1094,7 @@ static qboolean audio_parse_loaded_wav(
     publicInfo->initialData = dataChunk.data;
     return qtrue;
 }
-#endif
 
-#if defined(AUDIO_BACKEND_MILES)
 /* NOT_FROM_ORIGINAL_SOURCE: the Miles backend parses the original WAV buffer,
  * matching stock. Bound only the payload range returned to the engine before
  * its allocation and copy; do not reinterpret or repair Miles metadata. */
@@ -1129,7 +1126,6 @@ static qboolean audio_bound_miles_wav_payload(
     }
     return qtrue;
 }
-#endif
 
 /* NOT_FROM_ORIGINAL_SOURCE: validate the loaded audio data and playback state before crossing the Miles boundary. */
 static uint32_t audio_read_eal_u32(const uint8_t *bytes)
@@ -1397,11 +1393,11 @@ void MSS_InitFailed(void)
     cvar_t *const lightVisCompile =
         Cvar_Get("r_vc_compile", "0", CVAR_NONE);
     if (lightVisCompile->integer != MSS_LIGHT_VIS_COMPILE_AND_QUIT_MODE) {
-#if defined(AUDIO_BACKEND_MILES)
-        Com_Printf("Miles sound system initialization failed\n");
-#else
-        Com_Printf("Audio system initialization failed\n");
-#endif
+        if (coduomp_audio_uses_miles()) {
+            Com_Printf("Miles sound system initialization failed\n");
+        } else {
+            Com_Printf("Audio system initialization failed\n");
+        }
     }
 }
 
@@ -1454,30 +1450,47 @@ static void audio_clear_runtime_state(void)
     memset(&mss_rawSampleState, 0, sizeof(mss_rawSampleState));
 }
 
+/* NOT_FROM_ORIGINAL_SOURCE: an optional Miles installation may load without
+ * usable output devices or providers. Retry the built-in backend after the
+ * original failure path has released any successfully initialized Miles state. */
+static qboolean coduomp_audio_retry_miniaudio(void)
+{
+    if (!coduomp_audio_uses_miles())
+        return qfalse;
+    const char *selectedName;
+    if (!audio_select_backend(AUDIO_BACKEND_MINIAUDIO_NAME, &selectedName))
+        return qfalse;
+    (void)Cvar_Set2("mss_3d_provider", selectedName, qtrue);
+    Com_Printf("Miles initialization failed; trying Miniaudio\n");
+    return qtrue;
+}
+
 /* Source: CoDUOMP.exe 0x004551c0..0x00455594.
  * Name and source-level loop structure: exact same-module Mac symbol
  * MSS_Init. Windows additionally selects the "miles" redistribution folder
  * and registers the statically linked audio_shutdown atexit thunk. */
 void MSS_Init(void)
 {
-#if defined(AUDIO_BACKEND_MILES)
-    Com_Printf("\n------- Miles sound system initialization -------\n");
-#else
-    Com_Printf("\n------- Audio system initialization -------\n");
+    /* NOT_FROM_ORIGINAL_SOURCE: select an available runtime backend before
+     * making any middleware calls. The original Miles call order below is
+     * retained whenever that backend is selected. */
     mss_3d_provider = Cvar_Get(
         "mss_3d_provider", AUDIO_BACKEND_DEFAULT_NAME,
         CVAR_ARCHIVE | CVAR_LATCH);
     const char *selectedBackendName = NULL;
-    if (!audio_select_backend(
-            mss_3d_provider->string, &selectedBackendName)) {
+    if (!audio_select_backend(mss_3d_provider->string, &selectedBackendName)) {
         MSS_InitFailed();
         return;
     }
-    if (coduo_crt_stricmp(
-            mss_3d_provider->string, selectedBackendName) != 0) {
+    if (coduo_crt_stricmp(mss_3d_provider->string, selectedBackendName) != 0)
         (void)Cvar_Set2("mss_3d_provider", selectedBackendName, qtrue);
-    }
-#endif
+
+    qboolean registerShutdown = qtrue;
+initialize_backend:
+    if (coduomp_audio_uses_miles())
+        Com_Printf("\n------- Miles sound system initialization -------\n");
+    else
+        Com_Printf("\n------- Audio system initialization -------\n");
 
     mss_q3fs = Cvar_Get("mss_q3fs", "1", CVAR_LATCH);
     if (mss_q3fs->integer != 0) {
@@ -1485,11 +1498,15 @@ void MSS_Init(void)
             MSS_FileOpenCallback, MSS_FileCloseCallback,
             MSS_FileSeekCallback, MSS_FileReadCallback);
     }
-#if defined(AUDIO_BACKEND_MILES)
-    audio_set_redist_directory("miles");
-#endif
-    (void)atexit(audio_shutdown_at_exit);
+    if (coduomp_audio_uses_miles())
+        audio_set_redist_directory("miles");
+    if (registerShutdown) {
+        (void)atexit(audio_shutdown_at_exit);
+        registerShutdown = qfalse;
+    }
     if (audio_startup() == AUDIO_STARTUP_FAILED) {
+        if (coduomp_audio_retry_miniaudio())
+            goto initialize_backend;
         MSS_InitFailed();
         return;
     }
@@ -1499,11 +1516,6 @@ void MSS_Init(void)
     mss_khz = Cvar_Get("mss_khz", "44", CVAR_ARCHIVE | CVAR_LATCH);
     mss_bits = Cvar_Get("mss_bits", "16", CVAR_ARCHIVE | CVAR_LATCH);
     mss_stereo = Cvar_Get("mss_stereo", "1", CVAR_ARCHIVE | CVAR_LATCH);
-#if defined(AUDIO_BACKEND_MILES)
-    mss_3d_provider = Cvar_Get(
-        "mss_3d_provider", AUDIO_BACKEND_DEFAULT_NAME,
-        CVAR_ARCHIVE | CVAR_LATCH);
-#endif
     mss_volume = Cvar_Get("mss_volume", "0.8", CVAR_ARCHIVE);
     mss_roomtype = Cvar_Get("mss_roomtype", "0", CVAR_CHEAT);
     mss_wetlevel = Cvar_Get("mss_wetlevel", "0", CVAR_CHEAT);
@@ -1512,6 +1524,8 @@ void MSS_Init(void)
         !MSS_Init3DProvider(mss_3d_provider->string, qtrue)) {
         audio_shutdown();
         audio_clear_runtime_state();
+        if (coduomp_audio_retry_miniaudio())
+            goto initialize_backend;
         MSS_InitFailed();
         return;
     }
@@ -1532,11 +1546,11 @@ void MSS_Init(void)
     mss_anyMasters = qfalse;
     mss_effectVolume = Com_ClampFloat(
         MSS_SILENT_VOLUME, MSS_FULL_VOLUME, mss_volume->value);
-#if defined(AUDIO_BACKEND_MILES)
-    Com_Printf("------- Miles successfully initialized -------\n");
-#else
-    Com_Printf("------- Audio system successfully initialized -------\n");
-#endif
+    if (coduomp_audio_uses_miles()) {
+        Com_Printf("------- Miles successfully initialized -------\n");
+    } else {
+        Com_Printf("------- Audio system successfully initialized -------\n");
+    }
 }
 
 /* Source: CoDUOMP.exe 0x004555a0..0x004556bf.
@@ -2768,11 +2782,10 @@ qboolean MSS_Init2D(void)
 qboolean MSS_Init3DProvider(const char *preferredProviderName,
                             qboolean listProviders)
 {
-    /* NOT_FROM_ORIGINAL_SOURCE: on native builds this is the enumerated
-     * platform adapter. Existing configs naming the retail Miles provider
-     * reach this fallback and are migrated by the original Cvar_Set2 path. */
-    static const char fallbackProviderName[] =
-        AUDIO_BACKEND_DEFAULT_NAME;
+    /* NOT_FROM_ORIGINAL_SOURCE: use the selected backend's provider namespace.
+     * The compiler default can differ from the adapter chosen at runtime;
+     * the original Cvar_Set2 path still publishes a working fallback. */
+    const char *const fallbackProviderName = coduomp_audio_fallback_provider();
     audio_provider_enumerator_t enumerator = 0;
     audio_provider_t requestedProvider = 0;
     audio_provider_t fallbackProvider = 0;
@@ -2780,11 +2793,11 @@ qboolean MSS_Init3DProvider(const char *preferredProviderName,
     const char *enumeratedName;
 
     if (listProviders) {
-#if defined(AUDIO_BACKEND_MILES)
-        Com_Printf("available 3D providers:\n");
-#else
-        Com_Printf("available audio backends:\n");
-#endif
+        if (coduomp_audio_uses_miles()) {
+            Com_Printf("available 3D providers:\n");
+        } else {
+            Com_Printf("available audio backends:\n");
+        }
     }
 
     while (audio_enumerate_3D_providers(
@@ -2800,20 +2813,20 @@ qboolean MSS_Init3DProvider(const char *preferredProviderName,
     mss_3dProvider = 0;
     if (requestedProvider != 0) {
         if (audio_open_3D_provider(requestedProvider) == 0) {
-#if defined(AUDIO_BACKEND_MILES)
-            Com_Printf("using 3D provider '%s'\n", preferredProviderName);
-#else
-            Com_Printf("using audio backend '%s'\n", preferredProviderName);
-#endif
+            if (coduomp_audio_uses_miles()) {
+                Com_Printf("using 3D provider '%s'\n", preferredProviderName);
+            } else {
+                Com_Printf("using audio backend '%s'\n", preferredProviderName);
+            }
             mss_3dProvider = requestedProvider;
         } else {
-#if defined(AUDIO_BACKEND_MILES)
-            Com_Printf("couldn't open 3D provider '%s': %s\n",
-                       preferredProviderName, audio_last_error());
-#else
-            Com_Printf("couldn't open audio backend '%s': %s\n",
-                       preferredProviderName, audio_last_error());
-#endif
+            if (coduomp_audio_uses_miles()) {
+                Com_Printf("couldn't open 3D provider '%s': %s\n",
+                           preferredProviderName, audio_last_error());
+            } else {
+                Com_Printf("couldn't open audio backend '%s': %s\n",
+                           preferredProviderName, audio_last_error());
+            }
         }
     }
 
@@ -2824,33 +2837,33 @@ qboolean MSS_Init3DProvider(const char *preferredProviderName,
         if (preferredProviderName[0] != '\0' &&
             coduo_crt_stricmp(preferredProviderName,
                                 fallbackProviderName) != 0) {
-#if !defined(AUDIO_BACKEND_MILES)
-            Com_Printf(
-                "trying to use '%s' instead of '%s'\n",
-                fallbackProviderName, preferredProviderName);
-#else
-            Com_Printf(
-                "trying to use 'Miles Fast 2D Positional Audio' instead of '%s'\n",
-                preferredProviderName);
-#endif
+            if (!coduomp_audio_uses_miles()) {
+                Com_Printf(
+                    "trying to use '%s' instead of '%s'\n",
+                    fallbackProviderName, preferredProviderName);
+            } else {
+                Com_Printf(
+                    "trying to use 'Miles Fast 2D Positional Audio' instead of '%s'\n",
+                    preferredProviderName);
+            }
         }
 
         if (audio_open_3D_provider(fallbackProvider) != 0) {
-#if defined(AUDIO_BACKEND_MILES)
-            Com_Printf("couldn't open 3D provider '%s': %s\n",
-                       fallbackProviderName, audio_last_error());
-#else
-            Com_Printf("couldn't open audio backend '%s': %s\n",
-                       fallbackProviderName, audio_last_error());
-#endif
+            if (coduomp_audio_uses_miles()) {
+                Com_Printf("couldn't open 3D provider '%s': %s\n",
+                           fallbackProviderName, audio_last_error());
+            } else {
+                Com_Printf("couldn't open audio backend '%s': %s\n",
+                           fallbackProviderName, audio_last_error());
+            }
             return qfalse;
         }
 
-#if defined(AUDIO_BACKEND_MILES)
-        Com_Printf("using 3D provider '%s'\n", fallbackProviderName);
-#else
-        Com_Printf("using audio backend '%s'\n", fallbackProviderName);
-#endif
+        if (coduomp_audio_uses_miles()) {
+            Com_Printf("using 3D provider '%s'\n", fallbackProviderName);
+        } else {
+            Com_Printf("using audio backend '%s'\n", fallbackProviderName);
+        }
         /* 0x00450d13 publishes the working handle before Cvar_Set2. */
         mss_3dProvider = fallbackProvider;
         (void)Cvar_Set2("mss_3d_provider", fallbackProviderName, qtrue);
@@ -3445,21 +3458,21 @@ snd_alias_sound_file_t *MSS_LoadSoundFile(const char *filename)
     }
 
     audio_sound_info_t sourceInfo;
-#if defined(AUDIO_BACKEND_MILES)
-    if (audio_WAV_info(fileData, &sourceInfo) == AUDIO_WAV_INFO_INVALID)
-        goto invalid_sound_file;
-    /* NOT_FROM_ORIGINAL_SOURCE: validate the loaded audio data and playback state before crossing the Miles boundary. */
-    if (audio_bound_miles_wav_payload(
-            fileData, fileLength, path, &sourceInfo.publicInfo) == qfalse) {
-        goto invalid_sound_file;
+    if (coduomp_audio_uses_miles()) {
+        if (audio_WAV_info(fileData, &sourceInfo) == AUDIO_WAV_INFO_INVALID)
+            goto invalid_sound_file;
+        /* NOT_FROM_ORIGINAL_SOURCE: validate the loaded audio data and playback state before crossing the Miles boundary. */
+        if (audio_bound_miles_wav_payload(
+                fileData, fileLength, path, &sourceInfo.publicInfo) == qfalse) {
+            goto invalid_sound_file;
+        }
+    } else {
+        /* NOT_FROM_ORIGINAL_SOURCE: validate the loaded audio data and playback state before crossing the Miles boundary. */
+        if (audio_parse_loaded_wav(
+                fileData, fileLength, path, &sourceInfo) == qfalse) {
+            goto invalid_sound_file;
+        }
     }
-#else
-    /* NOT_FROM_ORIGINAL_SOURCE: validate the loaded audio data and playback state before crossing the Miles boundary. */
-    if (audio_parse_loaded_wav(
-            fileData, fileLength, path, &sourceInfo) == qfalse) {
-        goto invalid_sound_file;
-    }
-#endif
 
     snd_alias_sound_file_t *soundFile;
     snd_alias_sound_file_t *const publicInfo = &sourceInfo.publicInfo;
@@ -3540,12 +3553,10 @@ invalid_sound_file:
  * no-op for hunk allocations, so MSVC reduces this body to RET. */
 void MSS_UnloadSoundFile(snd_alias_sound_file_t *soundFile)
 {
-#if !defined(AUDIO_BACKEND_MILES)
     /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): native backends may
      * retain voice or cache state for a loaded alias. Detach it before a map
      * hunk clear makes the payload address reusable. */
     audio_forget_loaded_sound(soundFile);
-#endif
     MSS_Free(soundFile);
 }
 
@@ -3590,11 +3601,9 @@ int32_t MSS_StartAlias2DSample(int32_t *outChannelIndex,
         0);
     audio_set_sample_address(sample, soundFile->data, soundFile->dataLength);
     audio_set_sample_adpcm_block_size(sample, soundFile->blockSize);
-#if !defined(AUDIO_BACKEND_MILES)
     /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): supply immutable loaded
      * alias metadata before the native backend applies per-play parameters. */
     audio_bind_loaded_sample(sample, soundFile);
-#endif
 
     const float scaledPlaybackRate = (float)(
         (long double)soundFile->sampleRate *

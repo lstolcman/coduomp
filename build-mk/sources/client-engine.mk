@@ -154,6 +154,7 @@ CLIENT_ENGINE_C_SOURCES := \
 	src/client/engine/server/sv_operator_commands.c \
 	src/client/engine/server/sv_world.c \
 	src/client/engine/sound/audio_backend_api.c \
+	src/client/engine/sound/audio_backend_miles.c \
 	src/client/engine/sound/audio_backend_miniaudio.c \
 	src/client/engine/sound/audio_backend_openal.c \
 	src/client/engine/sound/sound_system.c \
