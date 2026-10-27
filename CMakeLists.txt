@@ -5,7 +5,7 @@
 # cmake --preset msvc
 # cmake --build --preset msvc
 # The msvc preset selects x86; msvc-x64 explicitly selects the 64-bit port.
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 4.4)
 
 # Keep generated sources, downloads, and outputs below the root workbench.
 cmake_path(IS_PREFIX CMAKE_SOURCE_DIR "${CMAKE_BINARY_DIR}" NORMALIZE _in_source)
