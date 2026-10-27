@@ -5319,12 +5319,10 @@ void script_vehicle_owner_enable(gentity_t *ent)
          * Owner-icon entities reuse entity-state time for the rounded absolute
          * expiry time.
          */
-        /* 0x91991..0x919bc: level.time feeds the sum via fild with no
-         * float store, and the sum feeds fistp directly. */
-        ent->s.time =
-            (int)((long double)ent->ownerIconDelaySeconds *
-                      (long double)VEH_OWNER_ICON_TIME_SCALE +
-                  (long double)level.time);
+        /* Keep the scaled delay and integer clock wide until the truncating
+         * signed-qword conversion; the timestamp consumes its low dword. */
+        ent->s.time = coduo_fp_to_i32_extended(
+            (WIDE_FLOAT)ent->ownerIconDelaySeconds * VEH_OWNER_ICON_TIME_SCALE + (WIDE_FLOAT)level.time);
         /*
          * Owner-icon entities write enemyScanRadius as a float at gentity_t+0x0d8,
          * reusing the player client-info lean-fraction word.
@@ -5333,7 +5331,7 @@ void script_vehicle_owner_enable(gentity_t *ent)
         trap_LinkEntity(ent);
     }
 
-    ent->nextthink = level.time + VEH_OWNER_ICON_DELAY_MS;
+    ent->nextthink = coduo_int32_from_bits((uint32_t)level.time + VEH_OWNER_ICON_DELAY_MS);
 }
 
 /* ------------------------------------------------------------------ */
@@ -5345,7 +5343,7 @@ void SP_script_vehicle_owner_icon(gentity_t *ent)
 {
     ent->s.eType = ET_VEHICLE_OWNER_ICON;
     ent->think = script_vehicle_owner_enable;
-    ent->nextthink = level.time + VEH_OWNER_ICON_DELAY_MS;
+    ent->nextthink = coduo_int32_from_bits((uint32_t)level.time + VEH_OWNER_ICON_DELAY_MS);
 }
 
 /* ------------------------------------------------------------------ */
