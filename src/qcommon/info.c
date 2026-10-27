@@ -24,10 +24,10 @@ enum {
  * Complete shared info-string subsystem. Direct objdump comparison proves an
  * instruction-identical Windows CoDUOMP/cgame/UI/game cluster for
  * Info_NextPair, Info_Validate, and both Info_SetValueForKey variants. The
- * parsing and storage graphs of the remaining shared functions also agree,
- * but the Windows game module routes their fatal errors directly through
- * G_Error while the other authoritative bodies call Com_Error. The
- * component-owned INFO_ERROR binding preserves that original dependency edge.
+ * parsing and storage graphs of the remaining shared functions also agree.
+ * Fatal errors call Com_Error in every Windows body; the game compiler removes
+ * its unused error-code argument. The shared INFO_ERROR binding preserves
+ * that original dependency edge.
  * Linux Q_strncpyz is exactly strncpy(size - 1) followed by the final NUL store
  * written here; its helper call is code-generation structure, not different
  * behavior. The supporting Mac client symbols confirm the Info_* and

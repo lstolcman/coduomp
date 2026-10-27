@@ -25,8 +25,8 @@ void Com_Printf(const char *format, ...);
  * Complete common Com text-parser subsystem. The four Windows i386 bodies
  * have matching function boundaries and operation graphs throughout the
  * cluster; absolute data/call operands are image-local. The Windows game DLL
- * alone binds parser diagnostics to G_Error/G_Printf rather than
- * Com_Error/Com_Printf. The Linux engine and game module retain the same state
+ * calls Com_Error/Com_Printf too; its compiler removes the unused error-code
+ * argument. The Linux engine and game module retain the same state
  * transitions, token grammar, punctuation order, unchecked malformed-input
  * behavior, and public API. The Mac client traceback symbols independently
  * retain Com_Parse, Com_ParseExt, Com_ParseOnLine, and Com_ParseCSV in cgame,

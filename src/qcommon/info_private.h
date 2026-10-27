@@ -10,7 +10,7 @@
 void Com_Error(int32_t level, const char *format, ...);
 void Com_Printf(const char *format, ...);
 
-/* Component-owned error routing for the original game-module variation. */
+/* Shared error routing through the original Com_Error interface. */
 #include "info_error_binding.h"
 
 #endif
