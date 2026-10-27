@@ -1505,6 +1505,10 @@ initialize_backend:
         registerShutdown = qfalse;
     }
     if (audio_startup() == AUDIO_STARTUP_FAILED) {
+        /* NOT_FROM_ORIGINAL_SOURCE: release a failed optional startup before
+         * switching the dispatch used by the shutdown/atexit path. */
+        if (coduomp_audio_uses_miles())
+            audio_shutdown();
         if (coduomp_audio_retry_miniaudio())
             goto initialize_backend;
         MSS_InitFailed();
