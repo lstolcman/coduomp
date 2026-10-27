@@ -1898,28 +1898,22 @@ void SP_misc_spawner(gentity_t *ent)
 /*  0x5d320  miscGunnerEnemyScan                                      */
 /* ------------------------------------------------------------------ */
 
-/* VERIFIED_DECOMPILER(0x5d320, 6d320_miscGunnerEnemyScan.c, VERIFY-P1-ENTITYMGMT-2026-06-17): DATAFLOW_VERIFIED - client entity scan bounds, linked/health/radius guards, angle calculation side effect, attacker assignment, and fallthrough checked against current decompiler output. */
+/* Windows 0x2f9b0..0x2fa7e: scan client entities in order, accepting a linked
+ * candidate with nonnegative health and a distance not above the float radius.
+ * Publish the first eligible attacker; no angle conversion follows selection. */
 void miscGunnerEnemyScan(gentity_t *ent)
 {
     gentity_t *candidate = g_entities;
     gentity_t *end = &g_entities[level.maxclients];
 
     while (candidate < end) {
-        /* 0x5d39b..0x5d3b0 compares the float distance with an exact fild of
-         * enemyScanRadius and rejects only an ordered distance above it;
-         * unordered distances therefore remain eligible. */
+        /* The integer radius rounds to float before comparison. Reject only
+         * ordered distances above it; unordered distances remain eligible. */
         if (candidate->linked != 0 &&
             candidate->health >= 0 &&
-            !((long double)VectorDistance(ent->currentOrigin,
-                                          candidate->currentOrigin) >
-              (long double)ent->enemyScanRadius)) {
-            vec3_t delta;
-            vec3_t angles;
-
-            delta[0] = candidate->currentOrigin[0] - ent->currentOrigin[0];
-            delta[1] = candidate->currentOrigin[1] - ent->currentOrigin[1];
-            delta[2] = candidate->currentOrigin[2] - ent->currentOrigin[2];
-            vectoangles(delta, angles);
+            !((WIDE_FLOAT)VectorDistance(ent->currentOrigin,
+                                         candidate->currentOrigin) >
+              coduo_round_f32(ent->enemyScanRadius))) {
             ent->attacker = candidate;
             return;
         }
