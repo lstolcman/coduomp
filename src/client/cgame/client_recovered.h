@@ -5362,7 +5362,8 @@ void VectorNormalizeFast(vec3_t v);
  * provisional (matching the sqrt_f pattern) so flame/physics callers name their
  * pow call instead of a bare FUN_ address. Argument order proven from the two
  * CG_AddFlameChunks (0x300272b0) call sites, which load base then push the exponent
- * constant last (ST0). Portable recovered callers use standard pow directly.
+ * constant last (ST0). Recovered callers use the shared CRT power provider,
+ * which preserves the selected binary64 or native x87 arithmetic route.
  */
 
 /*

@@ -1,4 +1,5 @@
 #include "q_math.h"
+#include "compat/crt/pow_compat.h"
 
 
 #include <math.h>
@@ -33,8 +34,7 @@ float RoundFloat(float value, int32_t decimals)
     double whole;
     double fraction;
 
-    scaled = (double)((long double)pow(10.0, exponent) *
-                      (long double)value);
+    scaled = (double)(coduomp_math_powl(10.0, exponent) * (long double)value);
     fraction = modf(scaled, &whole);
 
     if (fraction >= 0.5) {
@@ -43,6 +43,5 @@ float RoundFloat(float value, int32_t decimals)
         whole -= 1.0;
     }
 
-    return (float)((long double)pow(0.1, exponent) *
-                   (long double)whole);
+    return (float)(coduomp_math_powl(0.1, exponent) * (long double)whole);
 }

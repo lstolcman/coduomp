@@ -154,8 +154,9 @@ widen an expression computed entirely from narrower operands; existing casts
 and explicit arithmetic boundaries determine which operations are extended.
 
 The shared C math layer (`src/compat/libm/coduo_wide_math.h`) reconstructs
-arithmetic cores from the original x87 instructions. Water log/exp and flame
-power callers use it on every compiler. C expresses the arithmetic, domain
+arithmetic cores from the original x87 instructions and the shared CRT power
+provider. Water log/exp and flame power callers use it on every compiler.
+C expresses the arithmetic, domain
 checks, exponent splitting, and power sign handling; the portability header
 contains only hardware instruction and control-word adapters. The clang-cl
 SDK header maps extended math names to these shared functions and handles
@@ -164,14 +165,33 @@ SDK ABI differences. No math dependency or software emulation is added.
 Native x87 is selected by capability: GCC/Clang x86 with an 80-bit carrier,
 and MSVC x86 with its binary64 carrier. MSVC x86 still introduces binary64
 stores at the instruction adapters; native instructions alone do not establish
-extended-precision parity. MSVC x64 and non-x86 targets use platform math.
-Unsupported domains also use platform math. The power core preserves the
-original binary64 base store and CRT control-word adjustment; water log/exp
-keep the caller's control word. Existing `CoduoLibm` double boundaries remain
-unchanged. These cores do not reproduce the complete original CRT's exception
-handling or optional SSE2 power dispatch. Runtime parity remains unverified.
+extended-precision parity. Water log/exp keep the caller's control word;
+their unsupported domains and targets without native x87 use platform math.
+Existing `CoduoLibm` double boundaries remain unchanged. These cores do not
+reproduce the complete original CRT's exception handling.
 Windows APIs and dependencies keep their normal Microsoft ABI; the SDK is
 not a general 80-bit long-double runtime.
+
+Power uses `src/compat/crt/pow_compat.c`, including in `RoundFloat` and vehicle
+calculations. On hosts with a native x87 core, SSE2-capable CPUs select the
+table algorithm except for AuthenticAMD effective family 15. Selection also
+requires all MXCSR and x87 exceptions to be masked. The supported x86 operating
+systems provide SSE state management. The table route stores both inputs and
+the result as binary64, preserves each arithmetic rounding boundary, and uses
+MXCSR on Intel. The x87 route stores the base but keeps the exponent and normal
+result live, preserving precision control while temporarily selecting nearest
+rounding and masking exceptions. Its subnormal result conversion truncates
+significand bits; it is separate from the hardware arithmetic core.
+
+ARM64 and MSVC x64 select the same binary64 table algorithm using native
+arithmetic, with no host `pow` dependency or software x87 emulation. ARM64's
+surrounding wide expressions still have native binary64 precision/range;
+MSVC x86's x87 adapters still narrow through their binary64 C carriers.
+Default power domain and overflow/pole errors preserve `EDOM` and `ERANGE`,
+respectively; underflow leaves `errno` unchanged. Custom `matherr` handlers,
+OS exception dispatch, and complete floating-point status parity are not
+implemented. This does not close the separate `modf` provider used by
+`RoundFloat`, or engine power calls that still use host math.
 
 Recovered CRT atan2 callers use a separate shared entry from inline `FPATAN`
 callers. On native x87 it preserves the CRT's temporary precision setting,

@@ -1,12 +1,13 @@
 /* NOT_FROM_ORIGINAL_SOURCE: shared native arithmetic cores for extended
  * source expressions. These adapters preserve the documented operation and
- * rounding boundaries, not the CRT's dispatch, errno or exception machinery.
- * Unsupported domains use platform math; there is no software x87 backend. */
+ * rounding boundaries. Power uses the shared CRT dispatch and table provider;
+ * other unsupported domains use platform math. There is no software x87 backend. */
 #ifndef CODUO_WIDE_MATH_H
 #define CODUO_WIDE_MATH_H
 
 #include <math.h>
 #include "compat/coduo_x87_math_ops.h"
+#include "compat/crt/pow_compat.h"
 
 #if CODUO_X87_MATH_AVAILABLE
 
@@ -96,45 +97,6 @@ static CODUO_MATH_INLINE long double coduomp_math_expl(long double value)
     }
     return (long double)exp((double)value);
 }
-
-/* NOT_FROM_ORIGINAL_SOURCE: the CRT's native power path stores/reloads the
- * base as binary64, retains the exponent in x87, then uses FYL2X and the
- * exponent core. Its control helper preserves PC, selects round-to-nearest
- * and masks exceptions. Negative integer powers use the same core and an
- * odd/even test on exponent/2. Other domains use the platform CRT. The
- * optional original SSE2 dispatch and its exception dispatcher are omitted. */
-static CODUO_MATH_INLINE long double coduomp_math_powl(long double base, long double exponent)
-{
-    volatile double storedBase = (double)base;
-    base = storedBase;
-    if (base != 0.0L && coduomp_math_finitel(base) && coduomp_math_finitel(exponent)) {
-        const unsigned short savedControl = coduomp_x87_control();
-        int negativeResult = 0;
-        coduomp_x87_set_control((unsigned short)((savedControl & CODUOMP_X87_PRECISION_MASK) | CODUOMP_X87_NEAREST_MASKED));
-        if (base < 0.0L) {
-            if (coduomp_x87_round(exponent) != exponent) {
-                coduomp_x87_set_control(savedControl);
-                return (long double)pow((double)base, (double)exponent);
-            }
-            const long double half = exponent * 0.5L;
-            negativeResult = coduomp_x87_round(half) != half;
-            base = -base;
-        }
-        const long double logarithm = coduomp_x87_log2_product(exponent, base);
-        if (coduomp_math_finitel(logarithm)) {
-            long double result = coduomp_math_exp2l_finite(logarithm);
-            if (negativeResult)
-                result = -result;
-            coduomp_x87_set_control(savedControl);
-            return result;
-        }
-        coduomp_x87_set_control(savedControl);
-        if (negativeResult)
-            base = -base;
-    }
-    return (long double)pow((double)base, (double)exponent);
-}
-
 #else
 
 /* NOT_FROM_ORIGINAL_SOURCE: platform fallbacks when native x87 is unavailable.
@@ -152,12 +114,5 @@ CODUOMP_PLATFORM_UNARY(sqrt)
 CODUOMP_PLATFORM_UNARY(log)
 CODUOMP_PLATFORM_UNARY(exp)
 #undef CODUOMP_PLATFORM_UNARY
-
-/* NOT_FROM_ORIGINAL_SOURCE: native platform power without x87 emulation. */
-static CODUO_MATH_INLINE long double coduomp_math_powl(long double base, long double exponent)
-{
-    return (long double)pow((double)base, (double)exponent);
-}
-
 #endif
 #endif
