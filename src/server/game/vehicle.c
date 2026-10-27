@@ -23,6 +23,7 @@
 #include "compat/crt/atoi_compat.h"
 #include "compat/crt/scan_compat.h"
 #include "compat/crt/msvc_compat.h"
+#include "compat/crt/sin_cos_compat.h"
 #include "compat/coduo_native_x87.h"
 #include "compat/coduo_fp_conversion.h"
 #include "scr_vm.h"
@@ -3568,7 +3569,7 @@ WIDE_FLOAT Scr_Vehicle_DamageScale(gentity_t *vehicle, gentity_t *attacker,
     vehicle_state_t *vehicleState = (vehicle_state_t *)vehicle->vehicle;
     const vehicleInfo_t *vehicleInfo = game_compat_veh_get_vehicle_info(vehicleState->typeIndex);
     const float damageDirectionCosine =
-        (float)CoduoLibm_Cos(VEH_DAMAGE_SCALE_ANGLE_RADIANS);
+        (float)coduomp_crt_cosl(VEH_DAMAGE_SCALE_ANGLE_RADIANS);
     axis_t axis;
     vec3_t delta = {
         point[0] - vehicleState->origin[0],
@@ -5866,13 +5867,14 @@ void VEH_UpdateClient(gentity_t *ent)
                      * feeds fistp WORD directly. */
                     /* Windows rounds time to float before both phases. The
                      * sine/cosine scale is bounded by 127, so signed-word and
-                     * wider truncation agree on the input byte. */
+                     * wider truncation agree on the input byte. Retain the
+                     * CRT results through scaling and integer conversion. */
                     WIDE_FLOAT stressTime = level.time;
                     stressTime = coduo_round_f32(stressTime);
-                    const double forwardPhase = (double)(stressTime * forwardTimeScale);
-                    const double rightPhase = (double)(stressTime * rightTimeScale);
-                    input[0] = (int8_t)coduo_fp_to_i32_extended((WIDE_FLOAT)CoduoLibm_Sin(forwardPhase) * inputScale);
-                    input[1] = (int8_t)coduo_fp_to_i32_extended((WIDE_FLOAT)CoduoLibm_Cos(rightPhase) * inputScale);
+                    const WIDE_FLOAT forwardPhase = stressTime * forwardTimeScale;
+                    const WIDE_FLOAT rightPhase = stressTime * rightTimeScale;
+                    input[0] = (int8_t)coduo_fp_to_i32_extended(coduomp_crt_sinl(forwardPhase) * inputScale);
+                    input[1] = (int8_t)coduo_fp_to_i32_extended(coduomp_crt_cosl(rightPhase) * inputScale);
                 }
             }
         } else {

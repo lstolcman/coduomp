@@ -18,6 +18,7 @@
 #include "compat/coduo_native_x87.h"
 #include "compat/coduo_fp_conversion.h"
 #include "compat/coduo_x87_eval.h"
+#include "compat/crt/sin_cos_compat.h"
 
 #define MAX_BULLET_RECURSION 13
 #define WEAPON_PROJECTILE_SPREAD_DISTANCE 16.0f
@@ -644,7 +645,7 @@ void CalcMuzzlePoint(gentity_t *ent, float *muzzlePoint)
             if (amplitude > bg_bobMax.value) {
                 amplitude = bg_bobMax.value;
             }
-            float sine = (float)coduo_x87_sinl((long double)bobCycle);
+            float sine = (float)coduomp_crt_sinl((WIDE_FLOAT)bobCycle);
             float bob = sine * amplitude;
 
             AngleVectors(client->ps.viewAngles, NULL, right, NULL);
