@@ -724,8 +724,10 @@ void CL_ParseGamestate(msg_t *message)
                                              clc.demoFile);
     }
 
-    /* NOT_FROM_ORIGINAL_SOURCE: an accepted gamestate does not require a new
-     * key authorization request. Only needcdkey during connection setup does. */
+    if (net_lanauthorize->integer != 0 ||
+        Sys_IsLANAddress(clc.serverAddress) == qfalse) {
+        CL_RequestAuthorization();
+    }
     CL_InitDownloads();
     Cvar_Set("cl_paused", "0");
 }

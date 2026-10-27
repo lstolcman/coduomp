@@ -1306,9 +1306,10 @@ void CL_RequestAuthorization(void)
     static const char authorizeHost[] =
         "coduoauthorize.activision.com";
 
-    /* NOT_FROM_ORIGINAL_SOURCE: only the selected server's needcdkey handler
-     * calls this function and reports unusable keys before requesting
-     * authorization. Do not submit an unusable key to the authorizer. */
+    /* NOT_FROM_ORIGINAL_SOURCE: proactive requests during challenge resend and
+     * gamestate loading are optional when the key is unusable. The selected
+     * server's needcdkey response is responsible for rejecting that connection.
+     * Valid keys retain the original proactive authorization exchange. */
     if (CL_CDKeyValidate(
             &cl_cdkey[CL_PRIMARY_CDKEY_OFFSET],
             &cl_cdkeyChecksums[CL_PRIMARY_CDKEY_CHECKSUM_OFFSET]) == qfalse) {
@@ -1398,8 +1399,11 @@ void CL_CheckForResend(void)
 
     switch (cls.state) {
     case CA_CONNECTING: {
-        /* NOT_FROM_ORIGINAL_SOURCE: send only the challenge request until the
-         * selected server explicitly requires authorization with needcdkey. */
+        if (net_lanauthorize->integer != 0 ||
+            Sys_IsLANAddress(clc.serverAddress) == qfalse) {
+            CL_RequestAuthorization();
+        }
+
         char challengePacket[CL_CONNECT_PACKET_CAPACITY];
         strcpy(challengePacket, "getchallenge");
         int32_t challengeLength =
