@@ -10,6 +10,7 @@
  */
 
 #include "compat/coduo_posix.h"
+#include "compat/coduo_fp_conversion.h"
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -1008,10 +1009,12 @@ const char *vtos(const float *value)
     char *buffer = s_vtosBuffers[s_vtosIndex];
 
     s_vtosIndex = (s_vtosIndex + 1) & (VTOS_RING_COUNT - 1);
+    /* Each stored float is converted through a signed 64-bit result; the
+     * formatter consumes its low 32 bits, including invalid-result bits. */
     Com_sprintf(buffer, VTOS_BUFFER_SIZE, "(%i %i %i)",
-                (int)game_compat_int32_from_float_trunc(value[0]),
-                (int)game_compat_int32_from_float_trunc(value[1]),
-                (int)game_compat_int32_from_float_trunc(value[2]));
+                (int)coduo_fp_to_i32_extended(value[0]),
+                (int)coduo_fp_to_i32_extended(value[1]),
+                (int)coduo_fp_to_i32_extended(value[2]));
     return buffer;
 }
 
