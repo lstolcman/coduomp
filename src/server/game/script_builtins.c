@@ -15,6 +15,7 @@
 
 #include "recovered_game.h"
 #include "compat/crt/atof_compat.h"
+#include "compat/crt/asin_compat.h"
 #include "compat/crt/atoi_compat.h"
 #include "compat/crt/scan_compat.h"
 #include "compat/coduo_ctype_compat.h"
@@ -26,6 +27,7 @@
 #include "g_syscalls.h"
 #include "bg_state.h"
 #include "compat/coduo_native_x87.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/libm/coduo_libm.h"
 #include "qcommon/com_sprintf.h"
 #include "qcommon/q_string.h"
@@ -101,11 +103,13 @@ typedef struct script_function_s {
 #define STATUS_ICON_CONFIGSTRING_COUNT CS_STATUS_ICONS_COUNT
 #define HEAD_ICON_CONFIGSTRING_BASE CS_HEAD_ICONS
 #define HEAD_ICON_CONFIGSTRING_COUNT CS_HEAD_ICONS_COUNT
-#define SCRIPT_PI 3.141592653589793 /* original double64 0x400921fb54442d18 */
-#define SCRIPT_HALF_CIRCLE_DEGREES 180.0 /* original double64 0x4066800000000000 */
+#define SCRIPT_PI 3.141592653589793f /* original float32 0x40490fdb */
+#define SCRIPT_RECIPROCAL_HALF_CIRCLE 0.0055555556900799274444580078125f /* float32 0x3bb60b61 */
+#define SCRIPT_RECIPROCAL_PI 0.3183098733425140380859375f /* float32 0x3ea2f983 */
 #define SCRIPT_HALF_CIRCLE_DEGREES_FLOAT 180.0f /* original float32 0x43340000 */
 #define RELIABLE_SERVER_COMMAND 1
 #define SCRIPT_SECONDS_TO_MILLISECONDS 1000.0f
+#define SCRIPT_INTEGER_ROUNDING_BIAS 0.000000000931322574615478515625 /* 2^-30 */
 #define SCRIPT_MUSIC_PLAY_COMMAND "o %s"
 #define SCRIPT_MUSIC_STOP_COMMAND "p %i"
 #define SCRIPT_SOUNDFADE_COMMAND "q %f %i\n"
@@ -643,11 +647,12 @@ void Scr_MakeGameMessage(int entityNum, const char *command)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_debug_set_default_color). */
-static void game_compat_script_debug_set_default_color(vec3_t color)
+static void game_compat_script_debug_set_default_color(vec4_t color)
 {
     color[0] = 1.0f;
     color[1] = 1.0f;
     color[2] = 1.0f;
+    color[3] = 1.0f;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_item_index_from_def). */
@@ -679,21 +684,22 @@ static void game_compat_script_add_means_of_death_name(int meansOfDeath)
     Scr_AddString(modNames[meansOfDeath]);
 }
 
-/* VERIFIED_DECOMPILER(0x6f0b9, 7f0b9_FUN_0007f0b9.c, VERIFY-SCRIPT-BUILTINS-PACKET-2026-06-17): DATAFLOW_VERIFIED - 0.5 bias, ROUND call semantics, integer cast, and return checked against current decompiler output. */
+/* Windows inlines this helper in audio fades, looped effects, earthquakes and
+ * shellshock durations: load float, add binary64 2^-30, then FISTP m32. */
 int Script_BiasedRoundToInt(float value)
 {
     /*
-     * 0x6f0cb..0x6f0e8: fld value; fadd 0.5f; truncating fistp (RC=0xc00).
-     * The sum is truncated straight from the x87 register -> shim.
+     * Keep the biased sum wide until conversion under the active rounding
+     * mode. The shared adapter also preserves the integer-indefinite result.
      */
-    return (int)((long double)value + (long double)0.5f);
+    return coduo_x87_fistp_i32((WIDE_FLOAT)value + SCRIPT_INTEGER_ROUNDING_BIAS);
 }
 
 /* VERIFIED_DECOMPILER(0x6f0f7, 7f0f7_FUN_0007f0f7.c, VERIFY-SCRIPT-BUILTINS-PACKET-2026-06-17): DATAFLOW_VERIFIED - binary32 load, single fsincos operation, cosine-then-sine binary32 stores, and void return checked. */
-/* Stock 0x6f0f7 is `fld DWORD; fsincos; fstp(cos); fstp(sin)`.  Native x87
+/* Windows 0x3a77f is `fld DWORD; fsincos; fstp(cos); fstp(sin)`. Native x87
  * targets use that exact sequence; only non-x87 targets use the permitted libm
- * fallback.  script_func_sin/cos call the stock libm boundary directly; only
- * tan routes through this helper. */
+ * fallback. The sine/cosine builtins use live FSIN/FCOS operands; only tangent
+ * routes through this float-input helper. */
 void Script_SinCos(float radians, float *sine, float *cosine)
 {
 #if defined(__i386__) || defined(__x86_64__)
@@ -890,7 +896,7 @@ void script_func_iprintlnbold(void)
 void script_func_print3d(void)
 {
     float scale = SCRIPT_DEBUG_DEFAULT_SCALE;
-    vec3_t color;
+    vec4_t color;
     vec3_t origin;
     const char *text;
     uint32_t paramCount = Scr_GetNumParam();
@@ -902,7 +908,7 @@ void script_func_print3d(void)
             if (paramCount != 4) {
                 scale = Scr_GetFloat(4);
             }
-            (void)Scr_GetFloat(3);
+            color[3] = Scr_GetFloat(3);
         }
         Scr_GetVector(2, color);
     }
@@ -916,7 +922,7 @@ void script_func_print3d(void)
 void script_func_line(void)
 {
     int depthTest = SCRIPT_DEBUG_DEFAULT_DEPTH_TEST;
-    vec3_t color;
+    vec4_t color;
     vec3_t start;
     vec3_t end;
     uint32_t paramCount = Scr_GetNumParam();
@@ -928,7 +934,7 @@ void script_func_line(void)
             if (paramCount != 4) {
                 depthTest = Scr_GetInt(4);
             }
-            (void)Scr_GetFloat(3);
+            color[3] = Scr_GetFloat(3);
         }
         Scr_GetVector(2, color);
     }
@@ -1099,18 +1105,18 @@ void script_func_getbrushmodelcenter(void)
 {
     gentity_t *ent = Scr_GetEntity(0);
     vec3_t center;
+    wide_vec3_t sum;
 
     /*
-     * 0x677ba..0x6781a: each absMin+absMax sum is stored to the center slot
-     * (rounded to float), then reloaded and scaled by 0.5f in place — two
-     * roundings per component, adds first, then the three multiplies.
+     * Keep the X/Y sums wide through scaling. Only the Z sum crosses a
+     * float store before multiplication; all final components are floats.
      */
-    center[0] = ent->absMin[0] + ent->absMax[0];
-    center[1] = ent->absMin[1] + ent->absMax[1];
-    center[2] = ent->absMin[2] + ent->absMax[2];
-    center[0] *= 0.5f;
-    center[1] *= 0.5f;
-    center[2] *= 0.5f;
+    sum[0] = (WIDE_FLOAT)ent->absMax[0] + ent->absMin[0];
+    sum[1] = (WIDE_FLOAT)ent->absMax[1] + ent->absMin[1];
+    sum[2] = coduo_round_f32((WIDE_FLOAT)ent->absMax[2] + ent->absMin[2]);
+    center[0] = sum[0] * 0.5f;
+    center[1] = sum[1] * 0.5f;
+    center[2] = sum[2] * 0.5f;
     Scr_AddVector(center);
 }
 
@@ -3948,9 +3954,15 @@ void script_func_randomfloatrange(void)
     float max = Scr_GetFloat(1);
 
     if (max <= min) {
-        /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-        Com_Printf("Scr_RandomFloatRange parms: %f %f ", (double)min,
-                   (double)max);
+        /* NOT_FROM_ORIGINAL_SOURCE: the original integer format reads the low
+         * and high words of the first promoted double. Supply those words
+         * explicitly so the diagnostic is independent of the host varargs ABI. */
+        double promotedMin = (double)min;
+        uint64_t minBits;
+        memcpy(&minBits, &promotedMin, sizeof(minBits));
+        Com_Printf("Scr_RandomFloatRange parms: %d %d ",
+                   coduo_int32_from_bits((uint32_t)minBits),
+                   coduo_int32_from_bits((uint32_t)(minBits >> 32)));
         Scr_Error("Scr_RandomFloatRange range must be positive float.\n");
     }
 
@@ -3960,29 +3972,27 @@ void script_func_randomfloatrange(void)
 /* VERIFIED_DECOMPILER(0x6b551, 7b551_script_func_sin.c, VERIFY-SCRIPT-BUILTINS-RANDOM-TRIG-2026-06-17): DATAFLOW_VERIFIED; degree-to-radian conversion, sin call, float cast, and return checked against current decompiler output. */
 void script_func_sin(void)
 {
-    /* 0x6b56f..0x6b57f: fmul QWORD pi, fdiv QWORD 180.0 (double consts), rounded
-     * to double at the libm CoduoLibm_Sin() call boundary -> shim. */
-    double radians = (double)Scr_GetFloat(0) * SCRIPT_PI /
-                     SCRIPT_HALF_CIRCLE_DEGREES;
-    Scr_AddFloat((float)CoduoLibm_Sin(radians));
+    /* Two float-constant multiplies stay live through FSIN; only its result
+     * rounds to float. This instruction does not use CRT range reduction. */
+    WIDE_FLOAT radians = (WIDE_FLOAT)Scr_GetFloat(0) * SCRIPT_PI;
+    radians *= SCRIPT_RECIPROCAL_HALF_CIRCLE;
+    Scr_AddFloat((float)coduo_x87_sinl(radians));
 }
 
 /* VERIFIED_DECOMPILER(0x6b59b, 7b59b_script_func_cos.c, VERIFY-SCRIPT-BUILTINS-RANDOM-TRIG-2026-06-17): DATAFLOW_VERIFIED; degree-to-radian conversion, cos call, float cast, and return checked against current decompiler output. */
 void script_func_cos(void)
 {
-    /* 0x6b5b9..0x6b5c9: fmul QWORD pi, fdiv QWORD 180.0 (see script_func_sin). */
-    double radians = (double)Scr_GetFloat(0) * SCRIPT_PI /
-                     SCRIPT_HALF_CIRCLE_DEGREES;
-    Scr_AddFloat((float)CoduoLibm_Cos(radians));
+    /* Same live float-constant products as sine, followed by FCOS. */
+    WIDE_FLOAT radians = (WIDE_FLOAT)Scr_GetFloat(0) * SCRIPT_PI;
+    radians *= SCRIPT_RECIPROCAL_HALF_CIRCLE;
+    Scr_AddFloat((float)coduo_x87_cosl(radians));
 }
 
 /* VERIFIED_DECOMPILER(0x6b5e5, 7b5e5_script_func_tan.c, VERIFY-SCRIPT-BUILTINS-RANDOM-TRIG-2026-06-17): DATAFLOW_VERIFIED; SinCos helper call, divide-by-zero error fallthrough, and sine/cosine return checked against current decompiler output. */
 void script_func_tan(void)
 {
-    /* 0x6b603..0x6b613: fmul QWORD pi, fdiv QWORD 180.0, then ONE direct
-     * rounding to a float slot (fstp DWORD) — no intermediate double rounding. */
-    float radians = (float)((double)Scr_GetFloat(0) * SCRIPT_PI /
-                            SCRIPT_HALF_CIRCLE_DEGREES);
+    /* The same two products round once to float before FSINCOS. */
+    float radians = (float)(((WIDE_FLOAT)Scr_GetFloat(0) * SCRIPT_PI) * SCRIPT_RECIPROCAL_HALF_CIRCLE);
     float sine;
     float cosine;
 
@@ -4011,15 +4021,15 @@ void script_func_asin(void)
     float value = Scr_GetFloat(0);
 
     game_compat_script_trig_check_unit_range(value);
-    /* 0x6b6cf..0x6b6ea: asin result rounded to a float slot, then reloaded,
-     * fmul DWORD 180.0f, fdiv QWORD pi, rounded to float again — not a
-     * precombined 180/pi float factor. */
+    /* Retain the live CRT result through two float-constant multiplies, then
+     * round once to the script float result. */
     {
-        float degrees = (float)CoduoLibm_Asin((double)value);
+        WIDE_FLOAT degrees = coduomp_crt_asinl((double)value);
 
-        /* degrees * 180.0f(DWORD) / PI(QWORD) kept 80-bit, one store -> shim. */
-        degrees = degrees * SCRIPT_HALF_CIRCLE_DEGREES_FLOAT / SCRIPT_PI;
-        Scr_AddFloat(degrees);
+        /* Keep the original products separate and in their original order. */
+        degrees *= SCRIPT_HALF_CIRCLE_DEGREES_FLOAT;
+        degrees *= SCRIPT_RECIPROCAL_PI;
+        Scr_AddFloat((float)degrees);
     }
 }
 
@@ -4029,41 +4039,42 @@ void script_func_acos(void)
     float value = Scr_GetFloat(0);
 
     game_compat_script_trig_check_unit_range(value);
-    /* 0x6b76b..0x6b781: same shape as script_func_asin — float store, fmul
-     * DWORD 180.0f, fdiv QWORD pi, float store. */
+    /* The CRT result stays wide through the same degree conversion as asin. */
     {
-        float degrees = (float)CoduoLibm_Acos((double)value);
+        WIDE_FLOAT degrees = coduomp_crt_acosl((double)value);
 
-        /* degrees * 180.0f(DWORD) / PI(QWORD) kept 80-bit, one store -> shim. */
-        degrees = degrees * SCRIPT_HALF_CIRCLE_DEGREES_FLOAT / SCRIPT_PI;
-        Scr_AddFloat(degrees);
+        /* Keep the original products separate and in their original order. */
+        degrees *= SCRIPT_HALF_CIRCLE_DEGREES_FLOAT;
+        degrees *= SCRIPT_RECIPROCAL_PI;
+        Scr_AddFloat((float)degrees);
     }
 }
 
 /* VERIFIED_DECOMPILER(0x6b795, 7b795_script_func_atan.c, VERIFY-SCRIPT-BUILTINS-RANDOM-TRIG-2026-06-17): DATAFLOW_VERIFIED; atan call, float degree conversion, and return checked against current decompiler output. */
 void script_func_atan(void)
 {
-    /* 0x6b7b3..0x6b7d1: argument passed straight to atan (no float local),
-     * result rounded to a float slot, fmul DWORD 180.0f, fdiv QWORD pi,
-     * rounded to float again. */
-    float degrees = (float)atan((double)Scr_GetFloat(0));
+    /* Inline FLD1/FPATAN leaves a live result without a CRT control-word change
+     * or intermediate float/double store. */
+    WIDE_FLOAT degrees = coduo_x87_atan2l((WIDE_FLOAT)Scr_GetFloat(0), 1.0L);
 
-    /* degrees * 180.0f(DWORD) / PI(QWORD) kept 80-bit, one store -> shim. */
-    degrees = degrees * SCRIPT_HALF_CIRCLE_DEGREES_FLOAT / SCRIPT_PI;
-    Scr_AddFloat(degrees);
+    /* Two float-constant products, then the single script-result store. */
+    degrees *= SCRIPT_HALF_CIRCLE_DEGREES_FLOAT;
+    degrees *= SCRIPT_RECIPROCAL_PI;
+    Scr_AddFloat((float)degrees);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_vector_length_squared). */
-static float game_compat_script_vector_length_squared(const vec3_t value)
+static WIDE_FLOAT game_compat_script_vector_length_squared(const vec3_t value)
 {
-    /* 3-mul/2-add dot kept 80-bit, rounded to float on return -> shim. */
-    return value[0] * value[0] + value[1] * value[1] + value[2] * value[2];
+    /* Fold Z,Y,X without narrowing; the caller owns the final float store
+     * and, for length, the intervening native square root. */
+    return ((WIDE_FLOAT)value[2] * value[2] + (WIDE_FLOAT)value[1] * value[1]) + (WIDE_FLOAT)value[0] * value[0];
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_vector_dot). */
-static float game_compat_script_vector_dot(const vec3_t a, const vec3_t b)
+static WIDE_FLOAT game_compat_script_vector_dot(const vec3_t a, const vec3_t b)
 {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    return ((WIDE_FLOAT)b[2] * a[2] + (WIDE_FLOAT)b[1] * a[1]) + (WIDE_FLOAT)b[0] * a[0];
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_fade_seconds_to_milliseconds). */
@@ -4075,11 +4086,9 @@ static int game_compat_script_fade_seconds_to_milliseconds(float seconds)
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_soundfade_seconds_to_milliseconds). */
 static int game_compat_script_soundfade_seconds_to_milliseconds(float seconds)
 {
-    /* 0x6bd0a..0x6bd24: fmul DWORD 1000.0f then truncating fistp (RC=0xc00)
-     * straight from the x87 register — plain truncation -> shim. */
-    return game_compat_int32_from_long_double_trunc(
-        (long double)seconds *
-        (long double)SCRIPT_SECONDS_TO_MILLISECONDS);
+    /* The live product reaches _ftol2; the caller consumes its low dword,
+     * including for results beyond the signed 32-bit range. */
+    return coduo_fp_to_i32_extended((WIDE_FLOAT)seconds * SCRIPT_SECONDS_TO_MILLISECONDS);
 }
 
 /* VERIFIED_DECOMPILER(0x6b7e5, 7b7e5_script_func_distance.c, VERIFY-SCRIPT-BUILTINS-VECTOR-AUDIO-2026-06-17): DATAFLOW_VERIFIED; vector fetch order, VectorDistance call, and float return checked against current decompiler output. */
@@ -4104,20 +4113,18 @@ void script_func_distancesquared(void)
     Scr_AddFloat(VectorDistanceSquared(a, b));
 }
 
-/* VERIFIED_DECOMPILER(0x6b895, 7b895_script_func_length.c, VERIFY-SCRIPT-BUILTINS-VECTOR-AUDIO-2026-06-17): DATAFLOW_VERIFIED; vector fetch, squared-length helper, double sqrt, float cast, and return checked against current decompiler output. */
+/* Source: Windows game RVA 0x3a9d0, Linux name/structure RVA 0x6b895.
+ * Fetch one vector, accumulate its squared length, take the native square root,
+ * then publish one float result. The Windows body has no double argument store. */
 void script_func_length(void)
 {
     vec3_t value;
 
     Scr_GetVector(0, value);
-    /* 0x6b8ba..0x6b8d8: the squared-length chain stays in the x87 register and
-     * is rounded to DOUBLE at the sqrt argument store (fstp QWORD) — no
-     * intermediate float rounding, so the helper (which returns float) is not
-     * usable here. */
-    /* dot 80-bit -> double at sqrt boundary -> float -> shim. */
-    Scr_AddFloat((float)CoduoLibm_Sqrt((double)(value[0] * value[0] +
-                                      value[1] * value[1] +
-                                      value[2] * value[2])));
+    /* The Windows Z,Y,X squared sum stays live through inline FSQRT. There
+     * is no intermediate float/double store or CRT control-word adjustment. */
+    /* Round only the square-root result to the script float boundary. */
+    Scr_AddFloat((float)coduo_x87_sqrtl(game_compat_script_vector_length_squared(value)));
 }
 
 /* VERIFIED_DECOMPILER(0x6b8ec, 7b8ec_script_func_lengthsquared.c, VERIFY-SCRIPT-BUILTINS-VECTOR-AUDIO-2026-06-17): DATAFLOW_VERIFIED; vector fetch, squared-length expression, and float return checked against current decompiler output. */
@@ -4126,7 +4133,7 @@ void script_func_lengthsquared(void)
     vec3_t value;
 
     Scr_GetVector(0, value);
-    Scr_AddFloat(game_compat_script_vector_length_squared(value));
+    Scr_AddFloat((float)game_compat_script_vector_length_squared(value));
 }
 
 /* VERIFIED_DECOMPILER(0x6b935, 7b935_script_func_closer.c, VERIFY-SCRIPT-BUILTINS-VECTOR-AUDIO-2026-06-17): DATAFLOW_VERIFIED; three vector fetches, distance-squared comparison order, and integer return checked against current decompiler output. */
@@ -4154,7 +4161,7 @@ void script_func_vectordot(void)
 
     Scr_GetVector(0, a);
     Scr_GetVector(1, b);
-    Scr_AddFloat(game_compat_script_vector_dot(a, b));
+    Scr_AddFloat((float)game_compat_script_vector_dot(a, b));
 }
 
 /* VERIFIED_DECOMPILER(0x6ba27, 7ba27_script_func_vectornormalize.c, VERIFY-SCRIPT-BUILTINS-VECTOR-AUDIO-2026-06-17): DATAFLOW_VERIFIED; vector fetch, local copy, VectorNormalize call, and vector return checked against current decompiler output. */
