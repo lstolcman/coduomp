@@ -17,16 +17,19 @@ regardless of the local CD key: missing, invalid, valid, or reported as already
 in use. None of these key states blocks a connection to a no-auth server.
 
 Local validation checks the key's checksum; it does not establish whether the
-authorization service accepts the key or considers it in use. Locally valid
-keys still use the normal proactive authorization exchange. The client ignores
-direct authorization replies; a key-related rejection must come from the
-selected game server.
+authorization service accepts the key or considers it in use. The client
+contacts the authorization service only after the selected game server sends
+`needcdkey` during connection setup. Challenge retries and gamestate loading do
+not send background authorization requests, even with a locally valid key.
+Requests from other servers or outside connection setup are ignored.
 
 If the selected server requests CD-key authorization during connection setup,
 a missing or locally invalid key causes an invalid-key error and disconnect.
 With a locally valid key, authorization proceeds normally, and the server can
-still reject it as invalid or already in use. The `stock` branch retains its
-original local key requirement.
+still reject it as invalid or already in use. Direct authorization replies do
+not reject the client; that decision belongs to the selected game server. The
+`stock` branch retains its original local key requirement and proactive
+authorization exchange.
 
 ## Default locations
 
