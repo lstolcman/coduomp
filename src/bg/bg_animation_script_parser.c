@@ -381,6 +381,7 @@ void BG_AnimParseAnimScript(bg_static_animation_table_t *table,
             if (state == 0) {
                 if (idx[0] >= 0) {
                     BG_AnimParseError(STR_UNEXPECTED, token);
+                    continue;
                 }
                 if (Q_stricmpn(STR_STATE, token, ANIM_SCRIPT_TEXT_MAX) != 0) {
                     BG_AnimParseError(STR_EXPECT_STATE);
@@ -405,6 +406,7 @@ void BG_AnimParseAnimScript(bg_static_animation_table_t *table,
                  * statechanges/events guard at 0x30002d0b. */
                 if (idx[1] >= 0) {
                     BG_AnimParseError(STR_UNEXPECTED, token);
+                    continue;
                 }
                 animState = BG_IndexForString(token, ANIM_ANIMSTATE_TABLE, qfalse);
                 idx[1] = animState;
@@ -423,6 +425,7 @@ void BG_AnimParseAnimScript(bg_static_animation_table_t *table,
             if (state == 2) {
                 if (idx[2] >= 0) {
                     BG_AnimParseError(STR_UNEXPECTED, token);
+                    continue;
                 }
                 bg_compat_unget_token_and_verify(&data_p, token);
                 memset(&block, 0, sizeof(block));
@@ -434,6 +437,10 @@ void BG_AnimParseAnimScript(bg_static_animation_table_t *table,
             /* state == 3: command body (no idx guard at 0x30002ac5). 0x30002b10
              * passes the [ESP+0x24] slot — the LAST APPENDED command block the
              * conditions pass just linked — not currentSlot. */
+            if (state != 3) {
+                BG_AnimParseError(STR_UNEXPECTED, token);
+                continue;
+            }
             bg_compat_unget_token_and_verify(&data_p, token);
             BG_ParseCommands(&data_p, lastCommandBlock,
                              (bg_static_animation_t *)table);
@@ -466,6 +473,7 @@ void BG_AnimParseAnimScript(bg_static_animation_table_t *table,
             if (state == 0) {
                 if (idx[0] >= 0) {
                     BG_AnimParseError(STR_UNEXPECTED, token);
+                    continue;
                 }
                 if (currentSection == ANIM_SECTION_STATECHANGES) {
                     int32_t toState, fromState;
@@ -511,6 +519,7 @@ void BG_AnimParseAnimScript(bg_static_animation_table_t *table,
             if (state == 1) {
                 if (idx[1] >= 0) {
                     BG_AnimParseError(STR_UNEXPECTED, token);
+                    continue;
                 }
                 bg_compat_unget_token_and_verify(&data_p, token);
                 memset(&block, 0, sizeof(block));
@@ -524,6 +533,7 @@ void BG_AnimParseAnimScript(bg_static_animation_table_t *table,
              * animations section) errors out. */
             if (state != 2) {
                 BG_AnimParseError(STR_UNEXPECTED, token);
+                continue;
             }
             /* 0x30002e58 passes the last appended command block ([ESP+0x24]),
              * not currentSlot. */
