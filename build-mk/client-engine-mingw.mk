@@ -195,7 +195,7 @@ help:
 	  'Targets: mingw32 mingw64 clean' \
 	  'MINGW32_DEP_PREFIX=path names the i686 dependency prefix.' \
 	  'MINGW64_DEP_PREFIX=path names the x86_64 dependency prefix.' \
-	  'The i686 client detects Miles at runtime and falls back to Miniaudio.' \
+	  'The i686 client defaults to Miniaudio and offers Miles when detected at runtime.' \
 	  'The mingw64 target uses the built-in Miniaudio backend.'
 
 -include $(MINGW32_C_OBJECTS:.o=.d)
