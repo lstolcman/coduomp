@@ -3914,10 +3914,9 @@ qboolean Scr_Vehicle_PushAway(gentity_t *player, gentity_t *vehicle)
     /* 0x8d427/0x8d43c: the origin delta is stored to direction[2] first,
      * then the mins delta is added in a second rounded store. */
     direction[2] = player->currentOrigin[2] - vehicle->currentOrigin[2];
-    /* origin delta above is a single sub (native); the second store adds the
-     * mins delta: (mins_p - mins_v) + direction[2] is sub+add kept 80-bit until
-     * the store -> shim. */
-    direction[2] = (player->mins[2] - vehicle->mins[2]) + direction[2];
+    /* Retain the mins subtraction through the addition to the already-rounded
+     * origin delta, then store the adjusted direction as float. */
+    direction[2] = ((WIDE_FLOAT)player->mins[2] - vehicle->mins[2]) + direction[2];
     VectorNormalize(direction);
 
     pushedOrigin[0] = player->currentOrigin[0];
@@ -3926,24 +3925,21 @@ qboolean Scr_Vehicle_PushAway(gentity_t *player, gentity_t *vehicle)
 
     /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
     for (;;) {
-        /* Stock 0x8d493..0x8d4b1: VectorDistance is called first, then
-         * RADIUS+collisionMaxs[0]+PAD is summed on the x87 stack and compared
-         * with a FULL-WIDTH fucompp -- the 80-bit sum is NOT spilled to a float.
-         * The recon's inline form makes our -mfpmath=387 build evaluate the sum
-         * first and spill it (fstp DWORD) -> a 32-bit compare that deviates; so
-         * bind the distance to a float first (matches stock: no spill), and
-         * emulate the compare at 80-bit width. */
+        /* Round the distance to float, but retain the collision-limit sum
+         * through comparison. The radius and clearance combine exactly
+         * before adding the collision bound. */
         {
             const float pushDistance =
                 VectorDistance(pushedOrigin, vehicle->currentOrigin);
-            if (!(VEH_PUSH_AWAY_PLAYER_RADIUS +
-                      vehicleInfo->collisionMaxs[0] + kVehSafetyBuffer >
+            if (!((WIDE_FLOAT)vehicleInfo->collisionMaxs[0] +
+                      (VEH_PUSH_AWAY_PLAYER_RADIUS + kVehSafetyBuffer) >
                   pushDistance)) {
                 return qfalse;
             }
         }
 
-        /* pushedOrigin += direction*STEP: mul then add-into, 80-bit, one store */
+        /* Scaling the normalized float direction by this power-of-two step
+         * is exact; each subsequent position addition rounds to float. */
         pushedOrigin[0] += direction[0] * VEH_PUSH_AWAY_STEP;
         pushedOrigin[1] += direction[1] * VEH_PUSH_AWAY_STEP;
         pushedOrigin[2] += direction[2] * VEH_PUSH_AWAY_STEP;
@@ -5319,12 +5315,10 @@ void script_vehicle_owner_enable(gentity_t *ent)
          * Owner-icon entities reuse entity-state time for the rounded absolute
          * expiry time.
          */
-        /* 0x91991..0x919bc: level.time feeds the sum via fild with no
-         * float store, and the sum feeds fistp directly. */
-        ent->s.time =
-            (int)((long double)ent->ownerIconDelaySeconds *
-                      (long double)VEH_OWNER_ICON_TIME_SCALE +
-                  (long double)level.time);
+        /* Keep the scaled delay and integer clock wide until the truncating
+         * signed-qword conversion; the timestamp consumes its low dword. */
+        ent->s.time = coduo_fp_to_i32_extended(
+            (WIDE_FLOAT)ent->ownerIconDelaySeconds * VEH_OWNER_ICON_TIME_SCALE + (WIDE_FLOAT)level.time);
         /*
          * Owner-icon entities write enemyScanRadius as a float at gentity_t+0x0d8,
          * reusing the player client-info lean-fraction word.
@@ -5333,7 +5327,7 @@ void script_vehicle_owner_enable(gentity_t *ent)
         trap_LinkEntity(ent);
     }
 
-    ent->nextthink = level.time + VEH_OWNER_ICON_DELAY_MS;
+    ent->nextthink = coduo_int32_from_bits((uint32_t)level.time + VEH_OWNER_ICON_DELAY_MS);
 }
 
 /* ------------------------------------------------------------------ */
@@ -5345,7 +5339,7 @@ void SP_script_vehicle_owner_icon(gentity_t *ent)
 {
     ent->s.eType = ET_VEHICLE_OWNER_ICON;
     ent->think = script_vehicle_owner_enable;
-    ent->nextthink = level.time + VEH_OWNER_ICON_DELAY_MS;
+    ent->nextthink = coduo_int32_from_bits((uint32_t)level.time + VEH_OWNER_ICON_DELAY_MS);
 }
 
 /* ------------------------------------------------------------------ */
@@ -9188,9 +9182,9 @@ void GScr_GetVehicleNode(void)
 {
     uint16_t value = Scr_GetConstString(0);
     const char *fieldName = Scr_GetString(1);
-    int fieldIndex = (int16_t)Scr_GetOffset(
+    int32_t fieldIndex = coduo_int32_from_bits(Scr_GetOffset(
         g_scr_data.classMap[SCRIPT_OBJECT_VEHICLE_NODE].classnum,
-        fieldName);
+        fieldName));
     vehicle_path_node_t *match = NULL;
 
     if (fieldIndex < 0) {
@@ -9232,9 +9226,9 @@ void GScr_GetVehicleNodeArray(void)
 {
     uint16_t value = Scr_GetConstString(0);
     const char *fieldName = Scr_GetString(1);
-    int fieldIndex = (int16_t)Scr_GetOffset(
+    int32_t fieldIndex = coduo_int32_from_bits(Scr_GetOffset(
         g_scr_data.classMap[SCRIPT_OBJECT_VEHICLE_NODE].classnum,
-        fieldName);
+        fieldName));
 
     if (fieldIndex < 0) {
         return;

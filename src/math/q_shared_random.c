@@ -1,6 +1,7 @@
 #include "q_math.h"
 
 #include "compat/coduo_int32_bits.h"
+#include "compat/crt/sin_cos_compat.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -14,6 +15,8 @@ enum {
 };
 
 #define SHARED_RANDOM_INITIAL_SEED UINT32_C(0x89abcdef)
+#define SHARED_SWAY_MILLISECONDS_PER_SECOND 1000.0
+#define SHARED_SWAY_RADIANS_PER_CYCLE 6.283185482025146484375
 
 /*
  * Complete stateful q_math random bank.  The four Windows implementations are
@@ -77,19 +80,14 @@ int32_t irand(int32_t minimum, int32_t maximum)
  * x87, multiply by binary64 pi, double the angle in x87, and only then store
  * the libm argument as binary64 (coduo_lnxded 0x0806b480 and game RVA
  * 0x0003f3f6). The maintained body follows the Windows graph using native
- * arithmetic and explicit stores.
+ * arithmetic and explicit stores. The CRT entries consume live arguments
+ * and return live results; only seconds and the final product are stored.
  */
 float Q_SwayRand(float sineRate, float cosineRate, float milliseconds)
 {
-    const double seconds =
-        (double)((long double)milliseconds / 1000.0L);
-    const long double sineArgument =
-        (long double)sineRate * (long double)seconds *
-        6.283185482025146484375L;
-    const long double cosineArgument =
-        (long double)cosineRate * (long double)seconds *
-        6.283185482025146484375L;
+    const volatile double seconds = (WIDE_FLOAT)milliseconds / SHARED_SWAY_MILLISECONDS_PER_SECOND;
+    const WIDE_FLOAT sine = coduomp_crt_sinl((WIDE_FLOAT)sineRate * seconds * SHARED_SWAY_RADIANS_PER_CYCLE);
+    const WIDE_FLOAT cosine = coduomp_crt_cosl((WIDE_FLOAT)cosineRate * seconds * SHARED_SWAY_RADIANS_PER_CYCLE);
 
-    return (float)((long double)sin((double)sineArgument) *
-                   (long double)cos((double)cosineArgument));
+    return coduo_round_f32(sine * cosine);
 }
