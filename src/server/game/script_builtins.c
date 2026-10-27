@@ -5264,16 +5264,10 @@ void *Scr_LoadRead(uint32_t size)
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_mover_truncate_milliseconds). */
 static int game_compat_script_mover_truncate_milliseconds(float seconds)
 {
-    /*
-     * Linux mover duration conversions (e.g. 0x6f1b2, 0x6f717, 0x6fc01) are
-     * fmul DWORD 1000.0f followed by a truncating fistp (RC=0xc00) straight
-     * from the x87 register — no +0.5 bias and no intermediate float rounding
-     * of the product -> shim.
-     */
-    /* The adapter selects Windows low-dword qword conversion or Linux dword conversion. */
+    /* Multiply by 1000.0f without an intermediate float store, then consume
+     * the low dword of the truncating 64-bit conversion. */
     return coduo_fp_to_i32_extended(
-        (long double)seconds *
-        (long double)SCRIPT_SECONDS_TO_MILLISECONDS);
+        (WIDE_FLOAT)seconds * SCRIPT_SECONDS_TO_MILLISECONDS);
 }
 
 /* VERIFIED_DECOMPILER(0x6f168, 7f168_FUN_0007f168.c, VERIFY-SCRIPT-MOVER-CORE-2026-06-17): DATAFLOW_VERIFIED; accel-to-linear, decel, gravity-evaluate, stationary target snap, trajectory stores, return values, and round-to-ms conversions checked against current decompiler output.
@@ -5859,7 +5853,7 @@ void ScriptEntCmdGetCommandTimes(float *totalTime, float *accelTime,
     }
 
     /* Compare the live sum before any binary32 rounding. */
-    if (*totalTime < *accelTime + *decelTime) {
+    if (*totalTime < (WIDE_FLOAT)*accelTime + *decelTime) {
         Scr_Error("accel time plus decel time is greater than total time");
     }
 }
