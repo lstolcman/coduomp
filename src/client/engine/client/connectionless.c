@@ -309,6 +309,23 @@ void CL_ConnectionlessPacket(netadr_t address, msg_t *message,
         return;
     }
     if (strncmp(command, "needcdkey", 9) == 0) {
+        /* NOT_FROM_ORIGINAL_SOURCE: only the selected server may require a
+         * key during connection setup. Ignore requests outside that exchange
+         * before changing connection state or contacting the authorizer. */
+        if ((cls.state != CA_CONNECTING && cls.state != CA_CHALLENGING) ||
+            NET_CompareAdr(address, clc.serverAddress) == qfalse) {
+            return;
+        }
+
+        /* NOT_FROM_ORIGINAL_SOURCE: an unusable local key is allowed until
+         * the server requires authorization. Report the connection error
+         * immediately instead of waiting for an authorization we cannot send. */
+        if (CL_CDKeyValidate(
+                &cl_cdkey[CL_PRIMARY_CDKEY_OFFSET],
+                &cl_cdkeyChecksums[CL_PRIMARY_CDKEY_CHECKSUM_OFFSET]) == qfalse) {
+            Com_Error(ERR_DROP, "EXE_ERR_INVALID_CD_KEY");
+        }
+
         strncpy(clc.serverMessage, "EXE_AWAITINGCDKEYAUTH",
                 CL_SERVER_MESSAGE_SIZE - 1);
         clc.serverMessage[CL_SERVER_MESSAGE_SIZE - 1] = '\0';

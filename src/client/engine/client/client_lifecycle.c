@@ -552,9 +552,12 @@ void CL_Reconnect_f(void)
 /* Source: CoDUOMP.exe 0x00410fe0..0x004111b8.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00410fe0_004111b9.mcode.
  * Name and no-argument signature: exact same-module Mac symbol CL_Connect_f.
- * The client first tears down any local listen server and old connection,
+ * The original client first tears down any local listen server and old connection,
  * resolves the requested address, validates the retail key for non-local
- * servers, then primes the challenge resend state. */
+ * servers, then primes the challenge resend state.
+ * NOT_FROM_ORIGINAL_SOURCE: master defers invalid-key rejection until the
+ * selected server requests authorization, allowing unauthenticated servers
+ * to accept clients without a locally valid key. */
 void CL_Connect_f(void)
 {
     if (Cmd_Argc() != CL_CONNECT_ARGUMENT_COUNT) {
@@ -608,14 +611,6 @@ void CL_Connect_f(void)
                clc.serverAddress.ip[3],
                (int32_t)(int16_t)BigShort(
                    (int16_t)clc.serverAddress.port));
-
-    if (clc.serverAddress.type != NA_LOOPBACK &&
-        clc.serverAddress.type != NA_BAD &&
-        CL_CDKeyValidate(
-            &cl_cdkey[CL_PRIMARY_CDKEY_OFFSET],
-            &cl_cdkeyChecksums[CL_PRIMARY_CDKEY_CHECKSUM_OFFSET]) == qfalse) {
-        Com_Error(ERR_DROP, "EXE_ERR_INVALID_CD_KEY");
-    }
 
     if (clc.serverAddress.type == NA_LOOPBACK ||
         clc.serverAddress.type == NA_BAD) {
@@ -1311,10 +1306,13 @@ void CL_RequestAuthorization(void)
     static const char authorizeHost[] =
         "coduoauthorize.activision.com";
 
+    /* NOT_FROM_ORIGINAL_SOURCE: proactive requests during challenge resend and
+     * gamestate loading are optional when the key is unusable. The selected
+     * server's needcdkey response is responsible for rejecting that connection.
+     * Valid keys retain the original proactive authorization exchange. */
     if (CL_CDKeyValidate(
             &cl_cdkey[CL_PRIMARY_CDKEY_OFFSET],
             &cl_cdkeyChecksums[CL_PRIMARY_CDKEY_CHECKSUM_OFFSET]) == qfalse) {
-        Com_Error(1, "EXE_ERR_INVALID_CD_KEY");
         return;
     }
 

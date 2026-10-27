@@ -10,6 +10,15 @@ issue report, or log. Enter it through the multiplayer UI when possible. If
 migrating an existing `codkey` file, copy the complete file without printing
 its contents.
 
+## Connecting without a key
+
+On `master`, clients without a locally valid key can connect to servers that
+accept unauthenticated clients. If the selected server requests CD-key
+authorization during connection setup, the client reports an invalid-key error
+and disconnects. Valid keys still use the normal proactive authorization
+exchange; the client does not wait for the server to request one. The `stock`
+branch retains its original local key requirement.
+
 ## Default locations
 
 ### macOS
