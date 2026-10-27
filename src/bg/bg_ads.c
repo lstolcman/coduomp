@@ -89,11 +89,10 @@ void PM_UpdateAimDownSightFlag(void)
         int32_t contents;
 
         AngleVectors(yawAngles, forward, NULL, NULL);
-        probe[0] = forward[0] * 15.0f + ps->psOrigin[0];
-        probe[1] = forward[1] * 15.0f + ps->psOrigin[1];
-        probe[2] = forward[2] * 15.0f + ps->psOrigin[2];
-        /* The original stores the Z sum before performing this addition. */
-        probe[2] += 1.0f;
+        probe[0] = (WIDE_FLOAT)forward[0] * 15.0f + ps->psOrigin[0];
+        probe[1] = (WIDE_FLOAT)forward[1] * 15.0f + ps->psOrigin[1];
+        /* Keep the Z sum live through the height adjustment before its float store. */
+        probe[2] = (WIDE_FLOAT)forward[2] * 15.0f + ps->psOrigin[2] + 1.0f;
 
         contents = pm->pointContents(probe, ps->psClientNum,
                                      ADS_POINT_CONTENTS_MASK);
