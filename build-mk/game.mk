@@ -174,6 +174,14 @@ GAME_STORAGE_FLAGS := -fno-common
 CFLAGS += -std=c99 -Wall -Wextra -Werror -pedantic -fsigned-char \
 	-fno-short-enums -fwrapv $(GAME_STORAGE_FLAGS) -MMD -MP
 
+# Match the native engine's separate multiply/add policy. Apple Clang can
+# otherwise contract recovered expressions into arm64 FMADD even at -O0.
+ifeq ($(shell uname -s),Darwin)
+CFLAGS += -ffp-contract=off
+# Invalidate existing native objects when this compiler policy changes.
+$(OBJS) $(SHARED_OBJS) $(NATIVE64_OBJS) $(NATIVE64_SHARED_OBJS): build-mk/game.mk
+endif
+
 # x87 floating-point faithfulness policy (shared with the engine, and the single
 # source of truth for FP faithfulness across both). Governs whether the x86-64
 # library reproduces the original's x87 float rounding (-mfpmath=387 on GCC/x86)

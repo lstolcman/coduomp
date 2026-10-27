@@ -259,8 +259,12 @@ typedef enum vehicle_turret_activity_slot_e {
 #define VEH_PLAYER_BLEND_TAG_FAIL_WARNING "WARNING: aborting player positioning on turret since '%s' does not exist\n"
 #define VEH_PLAYER_BLEND_ANIM_CHILD_ERROR \
     COM_ERROR_MARKER "Player anim '%s' has no children"
-#define VEH_PLAYER_BLEND_LEAN_YAW_LIMIT 45.0f
+/* Exact binary32/binary64 reciprocal values, including under excess-precision
+ * evaluation of decimal literals. */
+#define VEH_PLAYER_BLEND_POSITIVE_SCALE 0.02222222276031970977783203125f
+#define VEH_PLAYER_BLEND_NEGATIVE_SCALE 0.0222222222222222230703092549219945794902741909027099609375
 #define VEH_PLAYER_BLEND_RATE_SCALE      10.0f
+#define VEH_PLAYER_BLEND_LEAN_PASSENGER_SLOT 3
 #define VEH_OWNER_ICON_SVFLAG_LINKED     0x00000800u
 #define VEH_OWNER_ICON_DELAY_MS          100
 #define VEH_OWNER_ICON_TIME_SCALE        1000.0f
@@ -1197,7 +1201,7 @@ static qboolean game_compat_veh_path_node_has_angles(const vehicle_path_node_t *
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
 static uint32_t game_compat_veh_player_blend_anim(const clientInfo_t *clientInfo)
 {
-    const uint32_t animTreeIndex = (uint32_t)Scr_GetAnimsIndex(bgAnimStaticTable->animTreeHandle);
+    const uint32_t animTreeIndex = (uint32_t)Scr_GetAnimsIndex(bgs.animationTable.animTreeHandle);
 
     /* The four original branches all clear the animation restart toggle from
      * this packed tree/index value: Linux 0x90602/0x90b8e/0x90f0a/0x9129c,
@@ -1223,20 +1227,17 @@ static qboolean game_compat_veh_player_blend_anim_slot_enabled(
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-/* targetWeight is long double so caller expressions (e.g. 1.0f - leanWeight)
- * reach the weight-delta subtraction unrounded, as in the inline original
- * (0x908b5: fsub feeds fsubp with no intermediate float store). */
+/* targetWeight is an original float store. The current-weight subtraction,
+ * absolute value and rate product remain wide through the reciprocal. */
 static float game_compat_veh_player_blend_goal_time(XAnimTree *animTree, uint32_t anim,
-                                     long double targetWeight)
+                                     float targetWeight)
 {
-    /* 0x908c3/0x908c5: fabs result is stored to a float slot BEFORE the
-     * rate-scale multiply, which is a second rounded store. */
-    const float weightDelta =
-        fabsf((float)(trap_XAnimGetWeight(animTree, anim) - targetWeight));
-    const float delta = weightDelta * VEH_PLAYER_BLEND_RATE_SCALE;
+    /* The float argument store follows the reciprocal; no intermediate
+     * binary32 store separates subtraction, absolute value or scaling. */
+    const WIDE_FLOAT delta = fabsl((WIDE_FLOAT)trap_XAnimGetWeight(animTree, anim) - targetWeight) * VEH_PLAYER_BLEND_RATE_SCALE;
 
     if (delta > 0.0f) {
-        return 1.0f / delta;
+        return (float)coduo_round_f32((WIDE_FLOAT)1.0f / delta);
     }
 
     return 0.0f;
@@ -1244,7 +1245,7 @@ static float game_compat_veh_player_blend_goal_time(XAnimTree *animTree, uint32_
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
 static void game_compat_veh_player_blend_set_weight(XAnimTree *animTree, uint32_t anim,
-                                     long double targetWeight)
+                                     float targetWeight)
 {
     trap_XAnimSetGoalWeight(
         animTree, anim, (float)targetWeight,
@@ -1252,7 +1253,7 @@ static void game_compat_veh_player_blend_set_weight(XAnimTree *animTree, uint32_
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-static void game_compat_veh_player_blend_get_middle_child(uint32_t parentAnim,
+static int game_compat_veh_player_blend_get_middle_child(uint32_t parentAnim,
                                           uint32_t *outChild)
 {
     const int childCount = trap_XAnimGetNumChildren(parentAnim);
@@ -1263,6 +1264,7 @@ static void game_compat_veh_player_blend_get_middle_child(uint32_t parentAnim,
     }
 
     trap_XAnimGetChildAt(outChild, parentAnim, childCount / 2);
+    return childCount;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
@@ -1275,22 +1277,21 @@ static uint32_t game_compat_veh_player_blend_first_child(uint32_t parentAnim)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-static uint32_t game_compat_veh_player_blend_last_child(uint32_t parentAnim)
+static uint32_t game_compat_veh_player_blend_last_child(uint32_t parentAnim, int childCount)
 {
     uint32_t childAnim;
-    const int childCount = trap_XAnimGetNumChildren(parentAnim);
 
     trap_XAnimGetChildAt(&childAnim, parentAnim, childCount - 1);
     return childAnim;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-static void game_compat_veh_player_blend_resolve_anims(uint32_t rootAnim,
+static int game_compat_veh_player_blend_resolve_anims(uint32_t rootAnim,
                                         uint32_t *topAnim,
                                         uint32_t *centerAnim)
 {
     game_compat_veh_player_blend_get_middle_child(rootAnim, topAnim);
-    game_compat_veh_player_blend_get_middle_child(*topAnim, centerAnim);
+    return game_compat_veh_player_blend_get_middle_child(*topAnim, centerAnim);
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
@@ -1310,32 +1311,42 @@ static void game_compat_veh_player_blend_update_anims(gentity_t *player, gentity
 {
     const int vehiclePosition = player->client->ps.vehiclePosition;
     const int vehicleAnimType = vehicleEnt->s.vehicleType;
+    const qboolean leaning =
+        (vehiclePosition == VEH_PASSENGER_SLOT_DRIVER || vehiclePosition == VEH_PLAYER_BLEND_LEAN_PASSENGER_SLOT) &&
+        vehicleAnimType == VEHICLE_TYPE_4_WHEEL;
+    const qboolean centered =
+        (vehiclePosition == VEH_PASSENGER_SLOT_GUNNER && vehicleAnimType == VEHICLE_TYPE_4_WHEEL) ||
+        vehicleAnimType == VEHICLE_TYPE_ARTILLERY ||
+        (vehicleAnimType == VEHICLE_TYPE_TANK && vehiclePosition == VEH_PASSENGER_SLOT_GUNNER);
+
+    /* Other seat/type pairs leave the animation tree untouched. Capture lean
+     * before the animation callbacks, and reuse the queried child count. */
+    if (!leaning && !centered) {
+        return;
+    }
+
+    const float vehicleLeanYaw = leaning ? vehicleEnt->s.clientInfoLeanFraction : 0.0f;
     XAnimTree *animTree = clientInfo->animTree;
     const uint32_t rootAnim = game_compat_veh_player_blend_anim(clientInfo);
     uint32_t topAnim;
     uint32_t centerAnim;
 
     trap_XAnimClearTreeGoalWeightsStrict(animTree, rootAnim, 0.0f);
-    game_compat_veh_player_blend_resolve_anims(rootAnim, &topAnim, &centerAnim);
+    const int childCount = game_compat_veh_player_blend_resolve_anims(rootAnim, &topAnim, &centerAnim);
 
-    if ((vehiclePosition == 1 || vehiclePosition == 3) &&
-        vehicleAnimType == 1) {
+    if (leaning) {
         uint32_t leanAnim;
         float leanWeight;
-        const float vehicleLeanYaw =
-            vehicleEnt->s.clientInfoLeanFraction;
 
         if (vehicleLeanYaw > 0.0f) {
-            /* single float/float divide -> shim; fabsf is an exact sign clear */
-            leanWeight =
-                game_compat_veh_clamp_float(vehicleLeanYaw / VEH_PLAYER_BLEND_LEAN_YAW_LIMIT,
-                               0.0f, 1.0f);
-            leanAnim = game_compat_veh_player_blend_last_child(topAnim);
+            /* Positive lean uses a binary32 reciprocal; negative lean uses
+             * a binary64 reciprocal. Clamp before the final float store. */
+            const WIDE_FLOAT scaled = (WIDE_FLOAT)vehicleLeanYaw * VEH_PLAYER_BLEND_POSITIVE_SCALE;
+            leanWeight = (float)coduo_round_f32(scaled < 1.0f ? scaled : 1.0f);
+            leanAnim = game_compat_veh_player_blend_last_child(topAnim, childCount);
         } else if (vehicleLeanYaw < 0.0f) {
-            leanWeight =
-                game_compat_veh_clamp_float(fabsf(vehicleLeanYaw) /
-                                   VEH_PLAYER_BLEND_LEAN_YAW_LIMIT,
-                               0.0f, 1.0f);
+            const WIDE_FLOAT scaled = fabsl((WIDE_FLOAT)vehicleLeanYaw) * VEH_PLAYER_BLEND_NEGATIVE_SCALE;
+            leanWeight = (float)coduo_round_f32(scaled < 1.0 ? scaled : 1.0);
             leanAnim = game_compat_veh_player_blend_first_child(topAnim);
         } else {
             leanWeight = 0.0f;
@@ -1343,15 +1354,13 @@ static void game_compat_veh_player_blend_update_anims(gentity_t *player, gentity
         }
 
         trap_XAnimClearTreeGoalWeightsStrict(animTree, rootAnim, 0.0f);
-        game_compat_veh_player_blend_set_weight(animTree, centerAnim, 1.0f - leanWeight);
+        game_compat_veh_player_blend_set_weight(animTree, centerAnim, (float)coduo_round_f32((WIDE_FLOAT)1.0f - leanWeight));
         if (leanWeight != 0.0f || isnan(leanWeight)) {
             game_compat_veh_player_blend_set_weight(animTree, leanAnim, leanWeight);
         }
         trap_XAnimSetGoalWeight(animTree, topAnim, 1.0f, 1.0f, 1.0f, 0, 0);
         game_compat_veh_player_blend_set_weight(animTree, topAnim, 1.0f);
-    } else if ((vehiclePosition == 2 && vehicleAnimType == 1) ||
-               vehicleAnimType == 5 ||
-               (vehicleAnimType == 2 && vehiclePosition == 2)) {
+    } else {
         game_compat_veh_player_blend_set_centered(animTree, rootAnim, topAnim, centerAnim);
     }
 }
@@ -5273,32 +5282,34 @@ qboolean G_PlayerVehiclePositionAndBlend(gentity_t *player)
         game_compat_veh_player_blend_update_anims(player, vehicleEnt, clientInfo);
     }
 
+    client = player->client;
     tagName = BG_GetVehiclePosTag(client->ps.vehiclePosition);
     if (G_DObjGetWorldTagMatrix(vehicleEnt, tagName, &tagMatrix) == 0) {
         Com_Printf(VEH_PLAYER_BLEND_TAG_FAIL_WARNING, tagName);
         return qfalse;
     }
 
+    client = player->client;
     client->ps.psOrigin[0] = tagMatrix.origin[0];
     client->ps.psOrigin[1] = tagMatrix.origin[1];
     client->ps.psOrigin[2] = tagMatrix.origin[2];
 
     vehicleType = vehicleEnt->s.vehicleType;
     tagOffset = BG_GetVehiclePosOffset(vehicleType, client->ps.vehiclePosition);
-    /* 0x916e1..0x91837: nine separate += stores, one rounded store per
-     * axis term (offset component groups of three), not three collapsed
-     * dot products. */
-    client->ps.psOrigin[0] += tagMatrix.axis[0][0] * tagOffset[0];
-    client->ps.psOrigin[1] += tagMatrix.axis[0][1] * tagOffset[0];
-    client->ps.psOrigin[2] += tagMatrix.axis[0][2] * tagOffset[0];
-    client->ps.psOrigin[0] += tagMatrix.axis[1][0] * tagOffset[1];
-    client->ps.psOrigin[1] += tagMatrix.axis[1][1] * tagOffset[1];
-    client->ps.psOrigin[2] += tagMatrix.axis[1][2] * tagOffset[1];
-    client->ps.psOrigin[0] += tagMatrix.axis[2][0] * tagOffset[2];
-    client->ps.psOrigin[1] += tagMatrix.axis[2][1] * tagOffset[2];
-    client->ps.psOrigin[2] += tagMatrix.axis[2][2] * tagOffset[2];
+    /* Apply each offset-axis contribution in order. Each product and sum
+     * stays wide until its own float store; there are nine rounding points. */
+    client->ps.psOrigin[0] = coduo_round_f32((WIDE_FLOAT)tagMatrix.axis[0][0] * tagOffset[0] + client->ps.psOrigin[0]);
+    client->ps.psOrigin[1] = coduo_round_f32((WIDE_FLOAT)tagMatrix.axis[0][1] * tagOffset[0] + client->ps.psOrigin[1]);
+    client->ps.psOrigin[2] = coduo_round_f32((WIDE_FLOAT)tagMatrix.axis[0][2] * tagOffset[0] + client->ps.psOrigin[2]);
+    client->ps.psOrigin[0] = coduo_round_f32((WIDE_FLOAT)tagMatrix.axis[1][0] * tagOffset[1] + client->ps.psOrigin[0]);
+    client->ps.psOrigin[1] = coduo_round_f32((WIDE_FLOAT)tagMatrix.axis[1][1] * tagOffset[1] + client->ps.psOrigin[1]);
+    client->ps.psOrigin[2] = coduo_round_f32((WIDE_FLOAT)tagMatrix.axis[1][2] * tagOffset[1] + client->ps.psOrigin[2]);
+    client->ps.psOrigin[0] = coduo_round_f32((WIDE_FLOAT)tagMatrix.axis[2][0] * tagOffset[2] + client->ps.psOrigin[0]);
+    client->ps.psOrigin[1] = coduo_round_f32((WIDE_FLOAT)tagMatrix.axis[2][1] * tagOffset[2] + client->ps.psOrigin[1]);
+    client->ps.psOrigin[2] = coduo_round_f32((WIDE_FLOAT)tagMatrix.axis[2][2] * tagOffset[2] + client->ps.psOrigin[2]);
 
     BG_PlayerStateToEntityState(&client->ps, &player->s, qtrue);
+    client = player->client;
     player->currentOrigin[0] = client->ps.psOrigin[0];
     player->currentOrigin[1] = client->ps.psOrigin[1];
     player->currentOrigin[2] = client->ps.psOrigin[2];
