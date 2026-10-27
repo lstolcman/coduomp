@@ -552,12 +552,13 @@ void G_TouchTriggers(gentity_t *ent)
                                         (int)MAX_GENTITIES,
                                         TOUCH_TRIGGERS_CONTENTS_MASK);
 
-    contactMins[0] = client->ps.psOrigin[0] + ent->mins[0];
-    contactMins[1] = client->ps.psOrigin[1] + ent->mins[1];
-    contactMins[2] = client->ps.psOrigin[2] + ent->mins[2];
-    contactMaxs[0] = client->ps.psOrigin[0] + ent->maxs[0];
-    contactMaxs[1] = client->ps.psOrigin[1] + ent->maxs[1];
-    contactMaxs[2] = client->ps.psOrigin[2] + ent->maxs[2];
+    client = ent->client;
+    contactMins[0] = ent->mins[0] + client->ps.psOrigin[0];
+    contactMins[1] = ent->mins[1] + client->ps.psOrigin[1];
+    contactMins[2] = ent->mins[2] + client->ps.psOrigin[2];
+    contactMaxs[0] = ent->maxs[0] + client->ps.psOrigin[0];
+    contactMaxs[1] = ent->maxs[1] + client->ps.psOrigin[1];
+    contactMaxs[2] = ent->maxs[2] + client->ps.psOrigin[2];
 
     for (int touchIndex = 0; touchIndex < touchCount; touchIndex++) {
         gentity_t *other = &g_entities[touchList[touchIndex]];
@@ -568,7 +569,8 @@ void G_TouchTriggers(gentity_t *ent)
         }
 
         if (other->s.eType == ET_ITEM) {
-            touched = BG_PlayerTouchesItem(client, other, level.time);
+            /* Read the current client after any preceding touch callbacks. */
+            touched = BG_PlayerTouchesItem(ent->client, other, level.time);
         } else {
             touched = trap_EntityContact(contactMins, contactMaxs, other);
         }
@@ -1208,57 +1210,45 @@ int G_GetNonPVSFriendlyInfo(gentity_t *ent, const float *origin, int lastClient)
             continue;
         }
 
-        /* Stock 0x458a7/0x458bb: each planar delta is a single sub rounded to
-         * float (native); 0x458db/0x458ef: the biased sum (delta+0.5f) is kept
-         * 80-bit and truncated straight from the x87 register (fistp direct, no
-         * float store) -> shim. */
-        float deltaXf = candidate->currentOrigin[0] - origin[0];
-        float deltaYf = candidate->currentOrigin[1] - origin[1];
-        int deltaX = game_compat_int32_from_long_double_trunc(
-            (long double)deltaXf + 0.5L);
-        int deltaY = game_compat_int32_from_long_double_trunc(
-            (long double)deltaYf + 0.5L);
-        float scaleX = 1.0f;
+        /* X remains live through bias and conversion; Y reloads a float
+         * store. Both conversions consume the low dword of the CRT result. */
+        WIDE_FLOAT deltaXf = (WIDE_FLOAT)candidate->currentOrigin[0] - origin[0];
+        float deltaYf = coduo_round_f32((WIDE_FLOAT)candidate->currentOrigin[1] - origin[1]);
+        int deltaX = coduo_fp_to_i32_extended(deltaXf + 0.5f);
+        int deltaY = coduo_fp_to_i32_extended((WIDE_FLOAT)deltaYf + 0.5f);
+        WIDE_FLOAT scaleX = 1.0f;
         float scaleY = 1.0f;
 
-        /* Stock 0x4590c..0x45960: scale = (float)LIMIT / (fild)delta; the divide
-         * is kept 80-bit and rounded to float on store -> shim. */
+        /* The X quotient stays wide through selection and multiplication.
+         * Only the Y quotient has an intervening float store. */
         if (deltaX > CLIENTEND_NONPVS_OFFSET_LIMIT_POS) {
-            scaleX = (float)((long double)CLIENTEND_NONPVS_OFFSET_LIMIT_POS /
-                             (long double)deltaX);
+            scaleX = (WIDE_FLOAT)CLIENTEND_NONPVS_OFFSET_LIMIT_POS / deltaX;
         } else if (deltaX < CLIENTEND_NONPVS_OFFSET_LIMIT_NEG) {
-            scaleX = (float)((long double)CLIENTEND_NONPVS_OFFSET_LIMIT_NEG /
-                             (long double)deltaX);
+            scaleX = (WIDE_FLOAT)CLIENTEND_NONPVS_OFFSET_LIMIT_NEG / deltaX;
         }
 
         if (deltaY > CLIENTEND_NONPVS_OFFSET_LIMIT_POS) {
-            scaleY = (float)((long double)CLIENTEND_NONPVS_OFFSET_LIMIT_POS /
-                             (long double)deltaY);
+            scaleY = coduo_round_f32((WIDE_FLOAT)CLIENTEND_NONPVS_OFFSET_LIMIT_POS / deltaY);
         } else if (deltaY < CLIENTEND_NONPVS_OFFSET_LIMIT_NEG) {
-            scaleY = (float)((long double)CLIENTEND_NONPVS_OFFSET_LIMIT_NEG /
-                             (long double)deltaY);
+            scaleY = coduo_round_f32((WIDE_FLOAT)CLIENTEND_NONPVS_OFFSET_LIMIT_NEG / deltaY);
         }
 
         if (scaleX < 1.0f || scaleY < 1.0f) {
-            /* Stock 0x4599d/0x459bd: (fild)delta * scale kept 80-bit, fistp
-             * truncate straight from the register (no float store) -> shim. */
+            /* Each scaled integer remains wide until CRT truncation,
+             * without a float product store. */
             if (scaleX < scaleY) {
-                deltaY = game_compat_int32_from_long_double_trunc(
-                    (long double)deltaY * (long double)scaleX);
+                deltaY = coduo_fp_to_i32_extended(deltaY * scaleX);
             } else if (scaleY < scaleX) {
-                deltaX = game_compat_int32_from_long_double_trunc(
-                    (long double)deltaX * (long double)scaleY);
+                deltaX = coduo_fp_to_i32_extended((WIDE_FLOAT)deltaX * scaleY);
             }
         }
 
         deltaX = game_compat_client_end_frame_clamp_non_pvs_offset(deltaX);
         deltaY = game_compat_client_end_frame_clamp_non_pvs_offset(deltaY);
 
-        /* Stock 0x45a93: (int)(currentAngles[1] * YAW_SCALE) kept 80-bit, fistp
-         * truncate straight from the register (no float store) -> shim. */
-        int yawByte = game_compat_int32_from_long_double_trunc(
-            (long double)candidate->currentAngles[1] *
-            (long double)CLIENTEND_NONPVS_YAW_SCALE);
+        /* The yaw product remains wide until CRT truncation. */
+        int yawByte = coduo_fp_to_i32_extended(
+            (WIDE_FLOAT)candidate->currentAngles[1] * CLIENTEND_NONPVS_YAW_SCALE);
         return (int)(
             (((uint32_t)yawByte & 0xffu)
              << CLIENTEND_NONPVS_YAW_SHIFT) |
