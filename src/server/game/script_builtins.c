@@ -4804,9 +4804,9 @@ void Scr_ParseGameTypeList(void)
         }
 
         if (gametypeCount == GAMETYPE_MAX_COUNT) {
-            /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
+            /* The historical warning displays one less than the table capacity. */
             G_Printf("Too many game type scripts found! Only loading the first %i\n",
-                     GAMETYPE_MAX_COUNT);
+                     GAMETYPE_MAX_COUNT - 1);
             g_scr_data.gametypeCount = gametypeCount;
             return;
         }
