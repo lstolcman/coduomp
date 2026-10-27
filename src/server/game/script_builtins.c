@@ -5284,16 +5284,16 @@ int ScriptMover_Updatemove(trajectory_t *trajectory,
 
     if (trajectory->trType == TR_ACCELERATE && linearTime > 0.0f) {
         trajectory->trTime = level.time;
-        /* Convert the live seconds * 1000 product at the selected platform width, without a +0.5 bias. */
+        /* Convert the live seconds * 1000 product without a +0.5 bias. */
         trajectory->trDuration = game_compat_script_mover_truncate_milliseconds(linearTime);
         game_compat_script_copy_vector(trajectory->trBase, linearStart);
 
         /* X/Y differences remain extended. X uses the live reciprocal;
          * Y/Z use its float copy, and Z also uses a float difference. */
-        const long double deltaX = (long double)decelStart[0] - linearStart[0];
-        const long double deltaY = (long double)decelStart[1] - linearStart[1];
+        const WIDE_FLOAT deltaX = (WIDE_FLOAT)decelStart[0] - linearStart[0];
+        const WIDE_FLOAT deltaY = (WIDE_FLOAT)decelStart[1] - linearStart[1];
         const float deltaZ = decelStart[2] - linearStart[2];
-        const long double inverseDurationRaw = (long double)SCRIPT_SECONDS_TO_MILLISECONDS / trajectory->trDuration;
+        const WIDE_FLOAT inverseDurationRaw = (WIDE_FLOAT)SCRIPT_SECONDS_TO_MILLISECONDS / trajectory->trDuration;
         const float inverseDuration = (float)inverseDurationRaw;
 
         trajectory->trDelta[0] = (float)(deltaX * inverseDurationRaw);
@@ -5309,7 +5309,7 @@ int ScriptMover_Updatemove(trajectory_t *trajectory,
         vec3_t direction;
 
         trajectory->trTime = level.time;
-        /* 0x6f2c3..0x6f2e0: inline fmul 1000.0f + truncating fistp — no +0.5. */
+        /* Convert the live product with the truncating low-dword adapter. */
         trajectory->trDuration = game_compat_script_mover_truncate_milliseconds(decelTime);
         game_compat_script_copy_vector(trajectory->trBase, decelStart);
 
@@ -5475,25 +5475,16 @@ static void game_compat_script_mover_init_light(gentity_t *ent)
     int hasColor = G_SpawnVector("color", "1 1 1", color);
 
     if (hasLight != 0 || hasColor != 0) {
-        /*
-         * 0x703fc..0x70494: each color component is fmul DWORD 255.0f then a
-         * truncating fistp straight from the register (no round(), no float
-         * store of the product); the intensity is fdiv DWORD 4.0f — a divide,
-         * not a multiply by 0.25f.
-         */
-        /* color[k]*255.0f fistp-direct; light/4.0f divide fistp-direct -> shim. */
+        /* Each live color * 255.0f or light * 0.25f product is truncated to
+         * 64 bits; its signed low dword is then clamped only from above. */
         uint32_t red = game_compat_script_mover_clamp_light_component(
-            game_compat_int32_from_long_double_trunc(
-                (long double)color[0] * (long double)255.0f));
+            coduo_fp_to_i32_extended((WIDE_FLOAT)color[0] * 255.0f));
         uint32_t green = game_compat_script_mover_clamp_light_component(
-            game_compat_int32_from_long_double_trunc(
-                (long double)color[1] * (long double)255.0f));
+            coduo_fp_to_i32_extended((WIDE_FLOAT)color[1] * 255.0f));
         uint32_t blue = game_compat_script_mover_clamp_light_component(
-            game_compat_int32_from_long_double_trunc(
-                (long double)color[2] * (long double)255.0f));
+            coduo_fp_to_i32_extended((WIDE_FLOAT)color[2] * 255.0f));
         uint32_t intensity = game_compat_script_mover_clamp_light_component(
-            game_compat_int32_from_long_double_trunc(
-                (long double)light / (long double)4.0f));
+            coduo_fp_to_i32_extended((WIDE_FLOAT)light * 0.25f));
 
         ent->s.constantLight = (intensity << 24) | (blue << 16) |
                              (green << 8) | red;
@@ -5532,7 +5523,7 @@ void ScriptMover_SetupMove(trajectory_t *trajectory,
         game_compat_script_copy_vector(trajectory->trBase, currentValue);
 
         /* Windows retains the reciprocal through all three velocity products. */
-        long double inverseDuration = (long double)SCRIPT_SECONDS_TO_MILLISECONDS / trajectory->trDuration;
+        WIDE_FLOAT inverseDuration = (WIDE_FLOAT)SCRIPT_SECONDS_TO_MILLISECONDS / trajectory->trDuration;
         trajectory->trDelta[0] = delta[0] * inverseDuration;
         trajectory->trDelta[1] = delta[1] * inverseDuration;
         trajectory->trDelta[2] = delta[2] * inverseDuration;
@@ -5540,22 +5531,21 @@ void ScriptMover_SetupMove(trajectory_t *trajectory,
         BG_EvaluateTrajectory(trajectory, level.time, currentValue);
     } else {
 
-        /* totalTime - accelTime - decelTime kept 80-bit, one store -> shim. */
-        *linearTime = totalTime - accelTime - decelTime;
+        /* Both subtractions remain wide before the single float store. */
+        *linearTime = (WIDE_FLOAT)totalTime - accelTime - decelTime;
         *storedDecelTime = decelTime;
 
         {
             /* Windows keeps the square root live until the speed is stored. */
-            long double distance = sqrtl((long double)delta[2] * delta[2] +
-                                         (long double)delta[1] * delta[1] +
-                                         (long double)delta[0] * delta[0]);
+            WIDE_FLOAT distance = coduo_x87_sqrtl((WIDE_FLOAT)delta[2] * delta[2] +
+                                                (WIDE_FLOAT)delta[1] * delta[1] +
+                                                (WIDE_FLOAT)delta[0] * delta[0]);
             vec3_t velocity;
 
-            /* Both platforms compute (dist+dist) / ((tt+tt) - at - dt), then store speed as float.
-             * Windows doubles the live square root; Linux reloads its already-rounded float value.
-             * The addition and division retain x87 precision on both paths. */
+            /* Double the live square root and retain the denominator's
+             * additions/subtractions through division, then store speed as float. */
             *speed = (distance + distance) /
-                     ((totalTime + totalTime) - accelTime - decelTime);
+                     (((WIDE_FLOAT)totalTime + totalTime) - accelTime - decelTime);
             VectorNormalize2(delta, velocity);
             velocity[0] *= *speed;
             velocity[1] *= *speed;
@@ -5581,10 +5571,10 @@ void ScriptMover_SetupMove(trajectory_t *trajectory,
                     game_compat_script_copy_vector(trajectory->trBase, currentValue);
 
                     /* Windows retains X/Y products and uses the live reciprocal for X. */
-                    long double linearDeltaX = (long double)velocity[0] * *linearTime;
-                    long double linearDeltaY = (long double)velocity[1] * *linearTime;
+                    WIDE_FLOAT linearDeltaX = (WIDE_FLOAT)velocity[0] * *linearTime;
+                    WIDE_FLOAT linearDeltaY = (WIDE_FLOAT)velocity[1] * *linearTime;
                     float linearDeltaZ = velocity[2] * *linearTime;
-                    long double inverseDuration = (long double)SCRIPT_SECONDS_TO_MILLISECONDS / trajectory->trDuration;
+                    WIDE_FLOAT inverseDuration = (WIDE_FLOAT)SCRIPT_SECONDS_TO_MILLISECONDS / trajectory->trDuration;
                     float storedInverseDuration = inverseDuration;
                     trajectory->trDelta[0] = inverseDuration * linearDeltaX;
                     trajectory->trDelta[1] = storedInverseDuration * linearDeltaY;
@@ -5600,10 +5590,10 @@ void ScriptMover_SetupMove(trajectory_t *trajectory,
                 }
             }
 
-            /* linearStart[k] + velocity[k]*linearTime, MA one store -> shim. */
-            decelStart[0] = linearStart[0] + velocity[0] * *linearTime;
-            decelStart[1] = linearStart[1] + velocity[1] * *linearTime;
-            decelStart[2] = linearStart[2] + velocity[2] * *linearTime;
+            /* Each multiply/add remains wide until the waypoint's float store. */
+            decelStart[0] = (WIDE_FLOAT)velocity[0] * *linearTime + linearStart[0];
+            decelStart[1] = (WIDE_FLOAT)velocity[1] * *linearTime + linearStart[1];
+            decelStart[2] = (WIDE_FLOAT)velocity[2] * *linearTime + linearStart[2];
             game_compat_script_copy_vector(storedTargetValue, targetValue);
         }
 
@@ -5642,13 +5632,13 @@ void ScriptMover_SetupMoveSpeed(trajectory_t *trajectory,
                               targetValue);
     } else {
 
-        /* totalTime - accelTime - decelTime, 2 subs one store; velocity length
-         * dot 80-bit -> double -> sqrt -> float -> shim. */
-        *linearTime = totalTime - accelTime - decelTime;
+        /* Subtract both phases before the float store. The Y,Z,X dot and
+         * square root stay wide until the speed's float store. */
+        *linearTime = (WIDE_FLOAT)totalTime - accelTime - decelTime;
         *storedDecelTime = decelTime;
-        *speed = (float)CoduoLibm_Sqrt((double)(velocity[0] * velocity[0] +
-                                      velocity[1] * velocity[1] +
-                                      velocity[2] * velocity[2]));
+        *speed = coduo_x87_sqrtl(((WIDE_FLOAT)velocity[1] * velocity[1] +
+                                (WIDE_FLOAT)velocity[2] * velocity[2]) +
+                                (WIDE_FLOAT)velocity[0] * velocity[0]);
 
         if (accelTime != 0.0f) {
             trajectory->trTime = level.time;
@@ -5678,10 +5668,10 @@ void ScriptMover_SetupMoveSpeed(trajectory_t *trajectory,
             }
         }
 
-        /* linearStart[k] + velocity[k]*linearTime, MA one store -> shim. */
-        decelStart[0] = linearStart[0] + velocity[0] * *linearTime;
-        decelStart[1] = linearStart[1] + velocity[1] * *linearTime;
-        decelStart[2] = linearStart[2] + velocity[2] * *linearTime;
+        /* Each multiply/add remains wide until the waypoint's float store. */
+        decelStart[0] = (WIDE_FLOAT)velocity[0] * *linearTime + linearStart[0];
+        decelStart[1] = (WIDE_FLOAT)velocity[1] * *linearTime + linearStart[1];
+        decelStart[2] = (WIDE_FLOAT)velocity[2] * *linearTime + linearStart[2];
 
         if (*storedDecelTime != 0.0f) {
             trajectory_t decelTrajectory;
