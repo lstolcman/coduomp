@@ -26,6 +26,7 @@
 #include "g_syscalls.h"
 #include "bg_state.h"
 #include "compat/coduo_native_x87.h"
+#include "compat/coduo_x87_eval.h"
 #include "compat/libm/coduo_libm.h"
 #include "qcommon/com_sprintf.h"
 #include "qcommon/q_string.h"
@@ -643,11 +644,12 @@ void Scr_MakeGameMessage(int entityNum, const char *command)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_debug_set_default_color). */
-static void game_compat_script_debug_set_default_color(vec3_t color)
+static void game_compat_script_debug_set_default_color(vec4_t color)
 {
     color[0] = 1.0f;
     color[1] = 1.0f;
     color[2] = 1.0f;
+    color[3] = 1.0f;
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: local helper extracted from recovered script builtin behavior (game_compat_script_item_index_from_def). */
@@ -890,7 +892,7 @@ void script_func_iprintlnbold(void)
 void script_func_print3d(void)
 {
     float scale = SCRIPT_DEBUG_DEFAULT_SCALE;
-    vec3_t color;
+    vec4_t color;
     vec3_t origin;
     const char *text;
     uint32_t paramCount = Scr_GetNumParam();
@@ -902,7 +904,7 @@ void script_func_print3d(void)
             if (paramCount != 4) {
                 scale = Scr_GetFloat(4);
             }
-            (void)Scr_GetFloat(3);
+            color[3] = Scr_GetFloat(3);
         }
         Scr_GetVector(2, color);
     }
@@ -916,7 +918,7 @@ void script_func_print3d(void)
 void script_func_line(void)
 {
     int depthTest = SCRIPT_DEBUG_DEFAULT_DEPTH_TEST;
-    vec3_t color;
+    vec4_t color;
     vec3_t start;
     vec3_t end;
     uint32_t paramCount = Scr_GetNumParam();
@@ -928,7 +930,7 @@ void script_func_line(void)
             if (paramCount != 4) {
                 depthTest = Scr_GetInt(4);
             }
-            (void)Scr_GetFloat(3);
+            color[3] = Scr_GetFloat(3);
         }
         Scr_GetVector(2, color);
     }
@@ -1099,18 +1101,18 @@ void script_func_getbrushmodelcenter(void)
 {
     gentity_t *ent = Scr_GetEntity(0);
     vec3_t center;
+    wide_vec3_t sum;
 
     /*
-     * 0x677ba..0x6781a: each absMin+absMax sum is stored to the center slot
-     * (rounded to float), then reloaded and scaled by 0.5f in place — two
-     * roundings per component, adds first, then the three multiplies.
+     * Keep the X/Y sums wide through scaling. Only the Z sum crosses a
+     * float store before multiplication; all final components are floats.
      */
-    center[0] = ent->absMin[0] + ent->absMax[0];
-    center[1] = ent->absMin[1] + ent->absMax[1];
-    center[2] = ent->absMin[2] + ent->absMax[2];
-    center[0] *= 0.5f;
-    center[1] *= 0.5f;
-    center[2] *= 0.5f;
+    sum[0] = (WIDE_FLOAT)ent->absMax[0] + ent->absMin[0];
+    sum[1] = (WIDE_FLOAT)ent->absMax[1] + ent->absMin[1];
+    sum[2] = coduo_round_f32((WIDE_FLOAT)ent->absMax[2] + ent->absMin[2]);
+    center[0] = sum[0] * 0.5f;
+    center[1] = sum[1] * 0.5f;
+    center[2] = sum[2] * 0.5f;
     Scr_AddVector(center);
 }
 
