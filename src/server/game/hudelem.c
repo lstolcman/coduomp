@@ -201,11 +201,7 @@ void HudElem_SetDefaults(game_hudElem_t *elem)
     elem->client.label = 0;
     elem->client.sortKey = 0;
     elem->archived = qtrue;
-    /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-    elem->client.moveFromX = 0;
-    elem->client.moveFromY = 0;
-    elem->client.moveStartTime = 0;
-    elem->client.moveTime = 0;
+    /* Preserve movement interpolation endpoints and timing across resets. */
     HudElem_ClearTypeSettings(elem);
 }
 
