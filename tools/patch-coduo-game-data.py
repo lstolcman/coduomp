@@ -16,6 +16,10 @@ Supported fixes:
     rconmenu    Join the unterminated quoted string in the bundled rcon menu's
                 about page. The literal newline makes the menu parser reject
                 the whole item, so the page never loads.
+    polishquotes
+                Remove quotation marks that the Polish and French translations
+                doubled by mistake. The string loader strips only one leading
+                and one trailing quote, so the extra quote is displayed.
 
 Usage:
 
@@ -53,7 +57,59 @@ POLISH_ENTRY_COUNTS = {
 RCON_MENU_BAD = b'\t\t\ttext\t\t\t"Special thanks to mnml *\r\n"'
 RCON_MENU_GOOD = b'\t\t\ttext\t\t\t"Special thanks to mnml *"'
 
-FIX_NAMES = ("retrieval", "polish", "rconmenu")
+# The .str loader (CStringEdPackage::InsideQuotes) strips at most one leading
+# and one trailing quote, so a doubled quote at either end is shown to the
+# player. Each entry below is a literal the shipped translation stores with
+# that extra quote.
+QUOTE_FIXES = (
+    (
+        "localizedstrings/polish/gmi_cgame.str",
+        b'""Naci\x9cnij [%s], aby u\xbfy\xe6 kaemu kaliber 50""',
+        b'"Naci\x9cnij [%s], aby u\xbfy\xe6 kaemu kaliber 50"',
+    ),
+    (
+        "localizedstrings/polish/gmi_cgame.str",
+        b'""Naci\x9cnij [%s], aby u\xbfy\xe6 DP28""',
+        b'"Naci\x9cnij [%s], aby u\xbfy\xe6 DP28"',
+    ),
+    (
+        "localizedstrings/polish/gmi_cgame.str",
+        b'""Naci\x9cnij [%s], aby u\xbfy\xe6 SG43""',
+        b'"Naci\x9cnij [%s], aby u\xbfy\xe6 SG43"',
+    ),
+    (
+        "localizedstrings/polish/gmi_cgame.str",
+        b'""Naci\x9cnij [%s], aby u\xbfy\xe6 kaemu kaliber 30""',
+        b'"Naci\x9cnij [%s], aby u\xbfy\xe6 kaemu kaliber 30"',
+    ),
+    (
+        "localizedstrings/polish/gmi_cgame.str",
+        b'""Naci\x9cnij [%s], aby u\xbfy\xe6 MG34""',
+        b'"Naci\x9cnij [%s], aby u\xbfy\xe6 MG34"',
+    ),
+    (
+        "localizedstrings/polish/gmi_ctf.str",
+        b'""%s upu\x9cci\xb3 flag\xea do wody. "',
+        b'"%s upu\x9cci\xb3 flag\xea do wody. "',
+    ),
+    (
+        "localizedstrings/polish/gmi_script.str",
+        b'""Naci\x9cnij [%s], aby zabra\xe6 wa\xbfne dokumenty."',
+        b'"Naci\x9cnij [%s], aby zabra\xe6 wa\xbfne dokumenty."',
+    ),
+    (
+        "localizedstrings/polish/pi_ponyri.str",
+        b'radzieckiej ziemi!""',
+        b'radzieckiej ziemi!"',
+    ),
+    (
+        "localizedstrings/french/re_obj.str",
+        b'le camp alli\xe9.""',
+        b'le camp alli\xe9."',
+    ),
+)
+
+FIX_NAMES = ("retrieval", "polish", "rconmenu", "polishquotes")
 SKIP_DIRECTORIES = {"server-cache"}
 
 
@@ -150,6 +206,34 @@ def plan_rconmenu(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
     return replacements
 
 
+def plan_polishquotes(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        lower = info.filename.lower()
+        group = [
+            (old, new)
+            for suffix, old, new in QUOTE_FIXES
+            if lower.endswith(suffix)
+        ]
+        if not group:
+            continue
+        data = archive.read(info)
+        counts = [data.count(old) for old, _ in group]
+        if all(count == 0 for count in counts):
+            continue
+        if any(count != 1 for count in counts):
+            raise ValueError(
+                f"{label}: {info.filename}: expected each quoted entry once, "
+                f"found {counts}"
+            )
+        for old, new in group:
+            data = data.replace(old, new, 1)
+        replacements[info.filename] = data
+    return replacements
+
+
 PLANNERS = {
     "retrieval": (
         "RETRIEVAL guard fix",
@@ -162,6 +246,10 @@ PLANNERS = {
     "rconmenu": (
         "rcon menu about-page string fix",
         plan_rconmenu,
+    ),
+    "polishquotes": (
+        "Polish and French stray-quote fix",
+        plan_polishquotes,
     ),
 }
 
