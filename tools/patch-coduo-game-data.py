@@ -54,6 +54,11 @@ Supported fixes:
                 explosion effect. The map requests fx/map_mp/mp_exp_generic_complete.efx,
                 which no archive contains, so every Arnhem start logs an effect
                 load failure and the precached effect is empty.
+    mpsun       Point multiplayer sky shaders at the sun files that shipped.
+                Eight shaders request sunfile mp_<map>, but only three mp_*
+                sun files exist; the rest ship under their single-player names.
+                Every affected map start warns that the sun file cannot be
+                loaded and renders without its sun.
 
 Usage:
 
@@ -317,6 +322,24 @@ DEMOTION_GOOD = b"mp_demotion,,music/mp_demotion.mp3,1,"
 ARNHEM_FX_BAD = b'loadfx("fx/map_mp/mp_exp_generic_complete.efx")'
 ARNHEM_FX_GOOD = b'loadfx("fx/explosions/vehicles/generic_complete.efx")'
 
+# Multiplayer sky shaders name their sun file "mp_<map>". Only mp_carentan,
+# mp_dawnville, mp_harbor and mp_sicily shipped under those names; the others
+# shipped under the single-player names. The renderer loads "scripts/<name>.sun"
+# exactly, warns on a miss, and renders the map without its sun. Each target
+# below is the single-player shader for the same sky: dam, brecourt, pavlov,
+# powcamp, rocket, railyard, ship and hurtgen. The Bocage shader reuses the
+# Brecourt sun on purpose and keeps doing so under the corrected name.
+MPSUN_FIXES = (
+    (b"sunfile mp_hurtgen", b"sunfile hurtgen"),
+    (b"sunfile mp_depot", b"sunfile dam"),
+    (b"sunfile mp_brecourt", b"sunfile brecourt"),
+    (b"sunfile mp_pavlov", b"sunfile pavlov"),
+    (b"sunfile mp_powcamp", b"sunfile powcamp"),
+    (b"sunfile mp_rocket", b"sunfile rocket"),
+    (b"sunfile mp_railyard", b"sunfile railyard"),
+    (b"sunfile mp_ship", b"sunfile ship"),
+)
+
 FIX_NAMES = (
     "retrieval",
     "polish",
@@ -329,6 +352,7 @@ FIX_NAMES = (
     "basbomb",
     "demotionsound",
     "arnhemfx",
+    "mpsun",
 )
 
 SKIP_DIRECTORIES = {"server-cache"}
@@ -677,6 +701,34 @@ def plan_arnhemfx(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
     return replacements
 
 
+def plan_mpsun(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        lower = info.filename.lower()
+        if info.is_dir() or not (
+            lower.endswith("scripts/sky.shader")
+            or lower.endswith("scripts/gmi_sky.shader")
+        ):
+            continue
+        data = archive.read(info)
+        original = data
+        seen = 0
+        for bad, good in MPSUN_FIXES:
+            seen += data.count(bad)
+            data = data.replace(bad, good)
+        if seen == 0:
+            continue
+        for bad, _ in MPSUN_FIXES:
+            if bad in data:
+                raise ValueError(
+                    f"{label}: {info.filename}: sun-file rewrite left {bad!r}"
+                )
+        if data == original:
+            continue
+        replacements[info.filename] = data
+    return replacements
+
+
 PLANNERS = {
     "retrieval": (
         "RETRIEVAL guard fix",
@@ -721,6 +773,10 @@ PLANNERS = {
     "arnhemfx": (
         "Arnhem antitank explosion effect fix",
         plan_arnhemfx,
+    ),
+    "mpsun": (
+        "multiplayer sky sun-file fix",
+        plan_mpsun,
     ),
 }
 
