@@ -39,7 +39,6 @@
 //   0x3007bce0 = 1.0f            (z-clamp epsilon at the bounds edges)
 //   0x3f800000 = 1.0f            (trace fraction == far-end test, compared as int bits)
 
-#include "compat/crt/sqrt_compat.h"
 #include "client/cgame/globals.h"
 #include "client/cgame/client_recovered.h"
 #include "compat/coduo_native_x87.h"
@@ -158,7 +157,7 @@ void CG_FlameDamage(const vec3_t flamePos, int32_t ownerClientNum,
      * hands the CRT sqrt helper its argument RAW in st0, so the argument must not
      * round to float. sqrtl on the 80-bit chain, one float rounding at the result
      * store (0x300267f7). */
-    dist = (float)coduomp_crt_sqrtl(
+    dist = (float)coduo_x87_sqrtl(
         (long double)diff[2] * diff[2] +
         (long double)diff[1] * diff[1] +
         (long double)diff[0] * diff[0]); /* CALL 0x3006bee0 */

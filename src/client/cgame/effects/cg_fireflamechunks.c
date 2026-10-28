@@ -69,7 +69,6 @@
 // `2*(rand/32768) - 1` maps it to [-1,1).  The m32 constant at c0d8 is 900.0f.
 
 #include "client/cgame/common/native_power.h"
-#include "compat/crt/sqrt_compat.h"
 #include <math.h>       /* fabs: direct C form of the inline x87 FABS (d9 e1) in the jitter block */
 #include "client/cgame/globals.h"
 #include "client/cgame/client_recovered.h"
@@ -965,7 +964,7 @@ finalize_child:
                                 (long double)ddz * (long double)ddz
                                 + (long double)ddy * (long double)ddy
                                 + (long double)ddx * (long double)ddx;
-                            float dist = (float)coduomp_crt_sqrtl(distSquared);
+                            float dist = (float)coduo_x87_sqrtl(distSquared);
 
                             /* 0x30028fb7..0x30028fd8: clamp dist up to 2.0f. */
                             if (dist < 2.0f) {

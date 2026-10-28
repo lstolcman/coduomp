@@ -1,7 +1,6 @@
 // Source: uo_cgame_mp_x86.dll 0x3002fe70..0x300302c9
 // Evidence: cgame_mp/mcode/uo_cgame_mp_x86/FUN_3002fe70_300302c9.mcode
 
-#include "compat/crt/sqrt_compat.h"
 #include "../client_recovered.h"
 #include "../globals.h"
 
@@ -178,7 +177,7 @@ void CG_DrawObjectivePointers(const rectDef_t *rect, const vec3_t color)
 
         /* 0x30030000..0x30030028: horizontal distance to the objective, sqrt(dx^2+dy^2).
          * (The FADDP order is dy^2 + dx^2; the sum is identical.) */
-        float distance = (float)coduomp_crt_sqrtl(
+        float distance = (float)coduo_x87_sqrtl(
             (long double)dir[1] * (long double)dir[1] +
             (long double)dir[0] * (long double)dir[0]);
 

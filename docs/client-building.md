@@ -212,7 +212,15 @@ its rounding-dependent zero sign. Non-x87 hosts use native binary64 arithmetic.
 Complete sticky-status parity, custom `matherr` callbacks, and OS exception
 dispatch remain outside this provider.
 
-CRT square-root callers use `src/compat/crt/sqrt_compat.c`. Native x87 keeps
+CG_ square-root expressions use native arithmetic through the inline
+`coduo_x87_sqrtl` primitive: hardware `FSQRT` on GNU/Clang x86 and native
+`sqrtl` elsewhere. This master customization avoids the recovered CRT's
+classification, control-word and error dispatch, accepting native results,
+rounding and error behavior. Surrounding wide expressions and explicit stores
+remain in place. Shared math and BG functions retain their own CRT boundaries,
+including when called from CG_ functions.
+
+Other recovered CRT square-root callers use `src/compat/crt/sqrt_compat.c`. Native x87 keeps
 the live operand and result, reproduces the classification store, temporary
 rounding controls and conditional binary64 return store, and restores the
 caller control word. Domain results preserve signed zero, quieted NaN payloads,
