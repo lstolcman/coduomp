@@ -13,6 +13,9 @@ Supported fixes:
                 permanently disables the objective after one early use.
     polish      Replace the invalid Polish key token [{+aktywacja}] with the
                 engine command [{+activate}] in the shipped localization.
+    rconmenu    Join the unterminated quoted string in the bundled rcon menu's
+                about page. The literal newline makes the menu parser reject
+                the whole item, so the page never loads.
 
 Usage:
 
@@ -47,7 +50,10 @@ POLISH_ENTRY_COUNTS = {
     "gmi_vehicle.str": 10,
 }
 
-FIX_NAMES = ("retrieval", "polish")
+RCON_MENU_BAD = b'\t\t\ttext\t\t\t"Special thanks to mnml *\r\n"'
+RCON_MENU_GOOD = b'\t\t\ttext\t\t\t"Special thanks to mnml *"'
+
+FIX_NAMES = ("retrieval", "polish", "rconmenu")
 SKIP_DIRECTORIES = {"server-cache"}
 
 
@@ -121,6 +127,29 @@ def plan_polish(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
     return replacements
 
 
+def plan_rconmenu(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        lower = info.filename.lower()
+        if not lower.endswith("ui_mp/scriptmenus/about.menu"):
+            continue
+        data = archive.read(info)
+        bad_count = data.count(RCON_MENU_BAD)
+        if bad_count == 0:
+            continue
+        if bad_count != 1:
+            raise ValueError(
+                f"{label}: {info.filename}: expected one unterminated rcon "
+                f"menu string, found {bad_count}"
+            )
+        replacements[info.filename] = data.replace(
+            RCON_MENU_BAD, RCON_MENU_GOOD, 1
+        )
+    return replacements
+
+
 PLANNERS = {
     "retrieval": (
         "RETRIEVAL guard fix",
@@ -129,6 +158,10 @@ PLANNERS = {
     "polish": (
         "Polish use-key token fix",
         plan_polish,
+    ),
+    "rconmenu": (
+        "rcon menu about-page string fix",
+        plan_rconmenu,
     ),
 }
 
