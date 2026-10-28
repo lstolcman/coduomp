@@ -1,29 +1,11 @@
 #include "pow_compat.h"
 #include "pow_tables.h"
-#include "compat/coduo_x87_math_ops.h"
+#include "math_dispatch.h"
 
 #include <errno.h>
 #include <fenv.h>
 #include <stdint.h>
 #include <string.h>
-
-#if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
-#define CODUOMP_POW_INTEL 1
-#include <emmintrin.h>
-#if defined(_MSC_VER)
-#include <intrin.h>
-#else
-#include <cpuid.h>
-#endif
-#if defined(__GNUC__) || defined(__clang__)
-#define CODUOMP_POW_SSE2 __attribute__((target("sse2")))
-#else
-#define CODUOMP_POW_SSE2
-#endif
-#else
-#define CODUOMP_POW_INTEL 0
-#define CODUOMP_POW_SSE2
-#endif
 
 #define POW_SIGN UINT64_C(0x8000000000000000)
 #define POW_MAGNITUDE UINT64_C(0x7fffffffffffffff)
@@ -34,9 +16,6 @@
 #define POW_ONE UINT64_C(0x3ff0000000000000)
 #define POW_SPLIT UINT64_C(0xfffffffff8000000)
 #define POW_SIGNALING_NAN UINT64_C(0x7ff0000000000001)
-#define POW_AMD_VENDOR_B UINT32_C(0x68747541)
-#define POW_AMD_VENDOR_C UINT32_C(0x444d4163)
-#define POW_AMD_VENDOR_D UINT32_C(0x69746e65)
 
 /* Binary64 coefficients retain their exact stored bit patterns. */
 #define POW_SUBNORMAL_NORMALIZER 0x1p64
@@ -69,15 +48,11 @@ enum {
     POW_EXTREME_HIGH = 0x40000,
     POW_PRODUCT_LOW = 0x3c70,
     POW_PRODUCT_HIGH = 0x40a0,
-    POW_MXCSR_MASKS = 0x1f80,
     POW_X87_MASKS = 0x007f,
     POW_X87_PRECISION = 0x0300,
     POW_NONINTEGRAL = 0,
     POW_ODD = 1,
-    POW_EVEN = 2,
-    POW_CPU_FEATURES_LEAF = 1,
-    POW_CPU_SSE2_BIT = 26,
-    POW_CPU_EXTENDED_FAMILY = 15
+    POW_EVEN = 2
 };
 
 /* NOT_FROM_ORIGINAL_SOURCE: alias-safe binary64 representation boundaries. */
@@ -101,9 +76,9 @@ static double coduomp_pow_value(uint64_t bits)
  * use MXCSR, including its rounding and denormal modes. Other hosts use native
  * double arithmetic with an explicit store; contraction is disabled by the
  * product build. No x87 arithmetic or instruction emulation is involved. */
-#if CODUOMP_POW_INTEL
+#if CODUOMP_CRT_INTEL
 #define CODUOMP_POW_OPERATION(name, intrinsic, operation) \
-    static CODUOMP_POW_SSE2 CODUO_MATH_INLINE double coduomp_pow_##name(double a, double b) \
+    static CODUOMP_CRT_SSE2 CODUO_MATH_INLINE double coduomp_pow_##name(double a, double b) \
     { return _mm_cvtsd_f64(intrinsic(_mm_set_sd(a), _mm_set_sd(b))); }
 #else
 #define CODUOMP_POW_OPERATION(name, intrinsic, operation) \
@@ -118,9 +93,9 @@ CODUOMP_POW_OPERATION(div, _mm_div_sd, /)
 
 /* NOT_FROM_ORIGINAL_SOURCE: CVTSD2SI uses the active rounding mode. The kernel
  * only reaches this conversion with a finite value well inside int32 range. */
-static CODUOMP_POW_SSE2 int coduomp_pow_integer(double value)
+static CODUOMP_CRT_SSE2 int coduomp_pow_integer(double value)
 {
-#if CODUOMP_POW_INTEL
+#if CODUOMP_CRT_INTEL
     return _mm_cvtsd_si32(_mm_set_sd(value));
 #else
     int integer = (int)value;
@@ -175,7 +150,7 @@ static double coduomp_pow_overflow(uint64_t sign)
  * normalized mantissa. Each table index rounds a selected group of fraction
  * bits upward at its midpoint; the final entry folds into the next exponent.
  * High/low logarithm lanes remain separate until exponent multiplication. */
-static CODUOMP_POW_SSE2 double coduomp_pow_binary64(double base, double exponent)
+static CODUOMP_CRT_SSE2 double coduomp_pow_binary64(double base, double exponent)
 {
     const uint64_t baseBits = coduomp_pow_bits(base);
     const uint64_t exponentBits = coduomp_pow_bits(exponent);
@@ -360,45 +335,6 @@ static CODUOMP_POW_SSE2 double coduomp_pow_binary64(double base, double exponent
 
 #if CODUO_X87_MATH_AVAILABLE
 
-/* NOT_FROM_ORIGINAL_SOURCE: preserve the original CPU exclusion. Supported
- * x86 operating systems provide SSE state management whenever SSE2 is present;
- * the per-call exception checks remain separate from CPU availability. */
-static int coduomp_pow_cpu_sse2(void)
-{
-    unsigned eax, edx;
-    unsigned vendorB, vendorC, vendorD;
-#if defined(_MSC_VER)
-    int registers[4];
-    __cpuid(registers, 0);
-    if (registers[0] < POW_CPU_FEATURES_LEAF)
-        return 0;
-    vendorB = (unsigned)registers[1];
-    vendorC = (unsigned)registers[2];
-    vendorD = (unsigned)registers[3];
-    __cpuid(registers, POW_CPU_FEATURES_LEAF);
-    eax = (unsigned)registers[0];
-    edx = (unsigned)registers[3];
-#else
-    unsigned ebx, ecx;
-    if (__get_cpuid_max(0, 0) < POW_CPU_FEATURES_LEAF)
-        return 0;
-    __cpuid(0, eax, vendorB, vendorC, vendorD);
-    __cpuid(POW_CPU_FEATURES_LEAF, eax, ebx, ecx, edx);
-#endif
-    if ((edx & (1u << POW_CPU_SSE2_BIT)) == 0)
-        return 0;
-    unsigned family = (eax >> 8) & 15;
-    if (family == POW_CPU_EXTENDED_FAMILY)
-        family += (eax >> 20) & 255;
-    return !(vendorB == POW_AMD_VENDOR_B && vendorD == POW_AMD_VENDOR_D && vendorC == POW_AMD_VENDOR_C && family == POW_CPU_EXTENDED_FAMILY);
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: query MXCSR only after CPU availability is known. */
-static CODUOMP_POW_SSE2 int coduomp_pow_sse_masks(void)
-{
-    return (_mm_getcsr() & POW_MXCSR_MASKS) == POW_MXCSR_MASKS;
-}
-
 /* NOT_FROM_ORIGINAL_SOURCE: the CRT scales by 2^1536, stores binary64, then
  * shifts the significand into the subnormal range without rounding it up.
  * This integer result conversion is independent of the native x87 core. */
@@ -488,8 +424,7 @@ WIDE_FLOAT coduomp_math_powl(WIDE_FLOAT base, WIDE_FLOAT exponent)
 {
     const volatile double storedBase = (double)base;
 #if CODUO_X87_MATH_AVAILABLE
-    if (!coduomp_pow_cpu_sse2() || !coduomp_pow_sse_masks() ||
-        (coduomp_x87_control() & POW_X87_MASKS) != POW_X87_MASKS)
+    if (!coduomp_crt_use_sse2_math())
         return coduomp_pow_x87(storedBase, exponent);
 #endif
     const volatile double storedExponent = (double)exponent;

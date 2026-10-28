@@ -57,6 +57,7 @@ LAYOUT_CRT_COMPAT_C_SOURCES := \
 	src/compat/crt/atan2_compat.c \
 	src/compat/crt/atof_compat.c \
 	src/compat/crt/format_compat.c \
+	src/compat/crt/modf_compat.c \
 	src/compat/crt/msvc_compat.c \
 	src/compat/crt/pow_compat.c \
 	src/compat/crt/qsort_compat.c \
