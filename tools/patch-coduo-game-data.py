@@ -40,6 +40,10 @@ Supported fixes:
                 menus. Without them the Controls tab loses the UO weapon
                 slots, the PunkBuster join and start prompts never appear, and
                 the Game Type Settings tab does nothing for the UO game types.
+    basbomb     Rename the base-assault defuse sound request from the model
+                name MP_bomb1_defuse to the shipped alias MP_bomb_defuse.
+                The misspelled request matches no alias, so defusing the bomb
+                plays nothing.
 
 Usage:
 
@@ -274,6 +278,15 @@ RCON_LOAD_SETTINGS_MENUS = (
     b'\tloadMenu { "ui_mp/settings_ctf.menu" }\r\n',
 )
 
+# Base assault builds its bomb objective from two models, mp_bomb1 and
+# mp_bomb1_defuse, and plays the defuse sound with a name copied from the
+# model: MP_bomb1_defuse. The sound alias bank defines MP_bomb_defuse (and
+# MP_bomb_plant), and every search-and-destroy script plays MP_bomb_defuse.
+# A request for a name that no CSV defines selects no alias, so the client
+# returns without playing anything and without printing a warning.
+BAS_BOMB_BAD = b'other playsound("MP_bomb1_defuse");'
+BAS_BOMB_GOOD = b'other playsound("MP_bomb_defuse");'
+
 FIX_NAMES = (
     "retrieval",
     "polish",
@@ -283,6 +296,7 @@ FIX_NAMES = (
     "percentfix",
     "shockcvar",
     "rconmenuload",
+    "basbomb",
 )
 
 SKIP_DIRECTORIES = {"server-cache"}
@@ -559,6 +573,30 @@ def plan_rconmenuload(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
     return replacements
 
 
+def plan_basbomb(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        if info.is_dir() or not info.filename.lower().endswith(
+            "gametypes/bas.gsc"
+        ):
+            continue
+        data = archive.read(info)
+        bad_count = data.count(BAS_BOMB_BAD)
+        good_count = data.count(BAS_BOMB_GOOD)
+        if bad_count == 0 and good_count == 1:
+            continue
+        if bad_count != 1 or good_count != 0:
+            raise ValueError(
+                f"{label}: {info.filename}: expected exactly one base-assault "
+                f"defuse sound request, found {bad_count} misspelled and "
+                f"{good_count} corrected"
+            )
+        replacements[info.filename] = data.replace(
+            BAS_BOMB_BAD, BAS_BOMB_GOOD, 1
+        )
+    return replacements
+
+
 PLANNERS = {
     "retrieval": (
         "RETRIEVAL guard fix",
@@ -591,6 +629,10 @@ PLANNERS = {
     "rconmenuload": (
         "rcon addon menu list fix",
         plan_rconmenuload,
+    ),
+    "basbomb": (
+        "base-assault bomb defuse sound fix",
+        plan_basbomb,
     ),
 }
 
