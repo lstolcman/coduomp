@@ -3,6 +3,7 @@
 //
 // CG_DrawCompassTanks - refresh and render the 64 allied vehicle compass blips.
 
+#include "compat/crt/sqrt_compat.h"
 #include "client/cgame/client_recovered.h"
 #include "compat/coduo_native_x87.h"
 #include "client/cgame/globals.h"
@@ -158,7 +159,7 @@ void CG_DrawCompassTanks(const rectDef_t *rect, const vec4_t color)
                  (long double)cg_compassRefYaw) *
                 (long double)TANK_COMPASS_ANGLE2SHORT) & 0xffffu;
             bearingDeg = (float)(int32_t)packedBearing * TANK_COMPASS_SHORT2ANGLE;
-            distance = (float)coduo_x87_sqrtl(
+            distance = (float)coduomp_crt_sqrtl(
                 (long double)delta[1] * (long double)delta[1] +
                 (long double)delta[0] * (long double)delta[0]);
             float clamped = distance;

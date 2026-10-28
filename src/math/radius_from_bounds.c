@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "q_math.h"
 
 #include <math.h>
@@ -16,7 +17,7 @@
  * They select fabs(first[lane]) only when it is ordered-greater than
  * fabs(second[lane]); equality and unordered select the second operand.  Their
  * squared sum is (z*z + y*y) + x*x under Windows PC=53, then the CRT sqrt
- * helper narrows that sum to binary64 and the function narrows the result to
+ * helper retains the live sum and the function narrows the result to
  * binary32.
  *
  * Both Linux bodies make the same per-lane selection at coduo_lnxded
@@ -42,11 +43,11 @@ float RadiusFromBounds(const vec3_t mins, const vec3_t maxs)
 
     /* Volatile separates the two original FADDP operations and prevents an
      * SSE/NEON compiler from reassociating or contracting the graph. */
-    volatile double zy =
-        (double)corner[2] * (double)corner[2] +
-        (double)corner[1] * (double)corner[1];
-    const double squared =
-        zy + (double)corner[0] * (double)corner[0];
+    volatile WIDE_FLOAT zy =
+        (WIDE_FLOAT)corner[2] * (WIDE_FLOAT)corner[2] +
+        (WIDE_FLOAT)corner[1] * (WIDE_FLOAT)corner[1];
+    const WIDE_FLOAT squared =
+        zy + (WIDE_FLOAT)corner[0] * (WIDE_FLOAT)corner[0];
 
-    return (float)sqrt(squared);
+    return (float)coduomp_crt_sqrtl(squared);
 }

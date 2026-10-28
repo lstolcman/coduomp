@@ -8,6 +8,7 @@
 // refdef builder at 0x30041cb1.  The size-only Scr_Vehicle_DamageScale guess is
 // rejected; this function reads no vehicle damage state.
 //
+#include "compat/crt/sqrt_compat.h"
 #include "../client_recovered.h"
 #include "../globals.h"
 #include "compat/coduo_native_x87.h"
@@ -142,7 +143,7 @@ void CG_OffsetThirdPersonView(void)
     /* 0x3003f947: _CIsqrt consumes the sum-of-squares as a raw st(0) (80-bit,
      * not rounded to float); the x87 adapter keeps the argument in ST0 and the
      * store to horizontalDistance (0x3003f94c FSTP DWORD) is the only rounding. */
-    horizontalDistance = (float)coduo_x87_sqrtl(
+    horizontalDistance = (float)coduomp_crt_sqrtl(
         (long double)focusPoint[0] * focusPoint[0] +
         (long double)focusPoint[1] * focusPoint[1]);
     if (horizontalDistance < CG_THIRD_PERSON_MIN_HORIZONTAL_DISTANCE) {

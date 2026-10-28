@@ -33,19 +33,12 @@ int64_t CoduoLibm_FloatToInt64(double value);
  * the int64 result, matching callers that use only EAX. */
 int32_t CoduoLibm_FloatToInt32(double value);
 
-/* sqrt. Reconstructed from uo_gamex86.dll 0x2008a640 (41 call sites).
- *
- * Runs at the owning image's ambient precision: the CRT's control-word helper
- * (0x2008aa15) preserves the PC field and only forces round-to-nearest and
- * masked exceptions. The native square root retains that precision and
- * narrows to double at the return boundary.
- *
- * Edge cases follow the machine code exactly:
- *   +inf      -> +inf   (FSQRT is skipped)
- *   -0.0      -> -0.0   (FSQRT is skipped)
- *   x < 0     -> indefinite QNaN (domain error), including -inf
- *   NaN       -> quieted NaN
- */
+/* Binary64 square-root adapter. The shared CRT provider preserves the
+ * temporary rounding mode, default domain errors and conditional return store.
+ * Use coduomp_crt_sqrtl from compat/crt/sqrt_compat.h for live x87 operands and
+ * results; this adapter intentionally owns double argument/return boundaries.
+ * Negative zero and positive infinity are preserved; negative magnitudes
+ * return negative indefinite, and NaNs preserve their quieted payload. */
 double CoduoLibm_Sqrt(double value);
 
 /* asin / acos. Reconstructed from uo_gamex86.dll 0x2008a700 and 0x2008a0e0.

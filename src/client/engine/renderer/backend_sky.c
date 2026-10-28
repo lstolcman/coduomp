@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "backend.h"
 
 #include "gl_api.h"
@@ -831,7 +832,7 @@ void R_InitSkyTexCoords(float cloudHeight)
                 float ySquared;
                 float zSquared;
                 float lengthSquared;
-                float radicand;
+                WIDE_FLOAT radicand;
                 float root;
                 float numerator;
                 float inverseDenominator;
@@ -846,11 +847,10 @@ void R_InitSkyTexCoords(float cloudHeight)
                 zSquared = vertex->position[2] * vertex->position[2];
                 lengthSquared = (xSquared + ySquared) + zSquared;
                 radicand =
-                    (xSquared + ySquared) * cloudHeightSquared +
-                    lengthSquared * cloudHeight *
-                        r_skyCloudWorldDiameter +
-                    cloudHeightSquaredPlusRadiusSquared * zSquared;
-                root = (float)sqrt((double)radicand);
+                    (((WIDE_FLOAT)xSquared + ySquared) + zSquared) * cloudHeight * r_skyCloudWorldDiameter +
+                    ((WIDE_FLOAT)xSquared + ySquared) * cloudHeightSquared +
+                    (WIDE_FLOAT)cloudHeightSquaredPlusRadiusSquared * zSquared;
+                root = (float)coduomp_crt_sqrtl(radicand);
                 numerator = (root + root) -
                             vertex->position[2] *
                                 r_skyCloudWorldDiameter;

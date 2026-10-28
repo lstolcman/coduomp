@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "cgame.h"
 
 #include "cinematic.h"
@@ -456,7 +457,7 @@ void CL_MouseMove(usercmd_t *command)
     /* The squared components stay wide through the square root. The length
      * is stored as float before division, and acceleration is stored only
      * after adding the base sensitivity. */
-    const float mouseLength = (float)coduo_x87_sqrtl(
+    const float mouseLength = (float)coduomp_crt_sqrtl(
         (long double)mouseX * mouseX + (long double)mouseY * mouseY);
     const float mouseRate = mouseLength / (float)cl_commandFrameMsec;
     const float acceleratedSensitivity = (float)(

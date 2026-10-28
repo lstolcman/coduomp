@@ -2736,7 +2736,7 @@ void SP_func_door_rotating(gentity_t *ent)
 {
     int locked;
     int health;
-    float axisLength;
+    WIDE_FLOAT axisLength;
 
     if ((ent->spawnflags & FUNC_DOOR_ROTATING_SPAWNFLAG_START_OPEN) != 0) {
         ent->spawnflags |= FUNC_DOOR_ROTATING_SPAWNFLAG_TOGGLE;
@@ -2786,12 +2786,12 @@ void SP_func_door_rotating(gentity_t *ent)
         ent->damageDir[2] = 1.0f;
     }
 
-    /* 0x64d6e..0x64daa: stock rounds the 80-bit sum to DOUBLE at the
-     * CoduoLibm_Sqrt() call boundary, then the result to float -- sqrtf() would
-     * round the argument to float instead. */
-    axisLength = (float)CoduoLibm_Sqrt((double)ent->damageDir[0] * (double)ent->damageDir[0] +
-                             (double)ent->damageDir[1] * (double)ent->damageDir[1] +
-                             (double)ent->damageDir[2] * (double)ent->damageDir[2]);
+    /* Windows RVA 0x35189..0x351b3 applies inline FSQRT to the live
+     * X/Y/Z sum and compares its live result. There is no CRT call or
+     * binary64/binary32 rounding boundary here. */
+    axisLength = coduo_x87_sqrtl((WIDE_FLOAT)ent->damageDir[0] * ent->damageDir[0] +
+                               (WIDE_FLOAT)ent->damageDir[1] * ent->damageDir[1] +
+                               (WIDE_FLOAT)ent->damageDir[2] * ent->damageDir[2]);
     if (axisLength > 1.0f) {
         G_Error(FUNC_DOOR_ROTATING_AXIS_ERROR);
         ent->damageDir[0] = 0.0f;

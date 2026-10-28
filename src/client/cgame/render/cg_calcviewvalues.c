@@ -1,6 +1,7 @@
 // Source: uo_cgame_mp_x86.dll 0x30041a30..0x30041e1c
 // Evidence: cgame_mp/mcode/uo_cgame_mp_x86/FUN_30041a30_30041e1c.mcode
 
+#include "compat/crt/sqrt_compat.h"
 #include "../client_recovered.h"
 #include "compat/coduo_native_x87.h"
 
@@ -97,7 +98,7 @@ qboolean CG_CalcViewValues(void)
              * (80-bit, never rounded to float). sqrtl keeps the argument 80-bit;
              * the store to cg_weaponMoveSpeed (0x30041b96 FSTP DWORD) is the only
              * rounding to float. sqrtf would round the argument first. */
-            cg_weaponMoveSpeed = (float)coduo_x87_sqrtl(
+            cg_weaponMoveSpeed = (float)coduomp_crt_sqrtl(
                 (long double)vy * (long double)vy +
                 (long double)vx * (long double)vx);
         }

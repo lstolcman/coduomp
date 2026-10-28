@@ -62,7 +62,8 @@ LAYOUT_CRT_COMPAT_C_SOURCES := \
 	src/compat/crt/pow_compat.c \
 	src/compat/crt/qsort_compat.c \
 	src/compat/crt/random_compat.c \
-	src/compat/crt/sin_cos_compat.c
+	src/compat/crt/sin_cos_compat.c \
+	src/compat/crt/sqrt_compat.c
 
 LAYOUT_MATH_C_SOURCES := \
 	src/math/angle_delta.c \

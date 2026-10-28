@@ -2,6 +2,7 @@
 //          uo_game_mp_x86.dll  0x20009670..0x20009968,
 //          game.mp.uo.i386.so  0x000256ed..0x00025b9a
 
+#include "compat/crt/sqrt_compat.h"
 #include "bg_pmove.h"
 
 #include "compat/coduo_native_x87.h"
@@ -67,7 +68,7 @@ void PM_UFOMove(void)
             (long double)move->ps->velocity[1] * move->ps->velocity[1];
         speedSquared +=
             (long double)move->ps->velocity[2] * move->ps->velocity[2];
-        speed = (float)coduo_x87_sqrtl(speedSquared);
+        speed = (float)coduomp_crt_sqrtl(speedSquared);
     }
 
     if (speed < 1.0f) {

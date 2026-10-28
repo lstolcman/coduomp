@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "backend.h"
 
 #include "compat/coduo_native_x87.h"
@@ -745,9 +746,9 @@ void Autosprite2Deform(void)
         (void)VectorNormalize(perpendicular);
 
         const float shortestHalfLength =
-            sqrtf(shortestSquared) * 0.5f;
+            (float)(coduomp_crt_sqrtl(shortestSquared) * 0.5L);
         const float secondHalfLength =
-            sqrtf(secondShortestSquared) * 0.5f;
+            (float)(coduomp_crt_sqrtl(secondShortestSquared) * 0.5L);
         const float negativeShortestHalfLength = -shortestHalfLength;
         const float negativeSecondHalfLength = -secondHalfLength;
 

@@ -5,6 +5,7 @@
  * 4d2391c10e234559ace294fb69d96741cad522653c361f13f626f4dc1891acb7
  */
 
+#include "compat/crt/sqrt_compat.h"
 #include "compat/coduo_posix.h"
 #include "compat/coduo_compiler.h"
 #include <stdint.h>
@@ -910,11 +911,11 @@ static float game_compat_veh_clamp_abs(float value, float maxAbs)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: maintained source helper; no standalone original body. */
-/* Binary64 square-root boundary followed by a float result. Callers whose
+/* CRT square root of the live sum followed by a float result. Callers whose
  * original FSQRT result remains live use the wide helper below instead. */
 static float game_compat_veh_length3(const vec3_t value)
 {
-    return (float)CoduoLibm_Sqrt((double)(
+    return (float)coduomp_crt_sqrtl((
         (long double)value[0] * (long double)value[0] +
         (long double)value[1] * (long double)value[1] +
         (long double)value[2] * (long double)value[2]));
@@ -933,7 +934,7 @@ static WIDE_FLOAT game_compat_veh_length3_wide(const vec3_t value)
  * and predicted velocity lengths, including the float square-root result. */
 static float game_compat_veh_length3_zyx(const vec3_t value)
 {
-    return (float)CoduoLibm_Sqrt((double)(
+    return (float)coduomp_crt_sqrtl((
         ((WIDE_FLOAT)value[2] * value[2] + (WIDE_FLOAT)value[1] * value[1]) +
         (WIDE_FLOAT)value[0] * value[0]));
 }
@@ -6494,7 +6495,7 @@ void VEH_GroundMove(gentity_t *ent)
 {
     vehicle_state_t *vehicleState = (vehicle_state_t *)ent->vehicle;
     vec3_t originalVelocity;
-    const float speed = game_compat_veh_length3(vehicleState->velocity);
+    const float speed = (float)game_compat_veh_length3_wide(vehicleState->velocity);
 
     originalVelocity[0] = vehicleState->velocity[0];
     originalVelocity[1] = vehicleState->velocity[1];
@@ -6715,7 +6716,7 @@ void VEH_UpdateSuspension(gentity_t *ent, qboolean livePhysicsPass)
             squares[component] = (WIDE_FLOAT)axis.axis[0][component] * axis.axis[0][component];
         }
         const float squaredLength = coduo_round_f32((squares[0] + squares[2]) + squares[1]);
-        const float length = coduo_round_f32(CoduoLibm_Sqrt((double)squaredLength));
+        const float length = coduo_round_f32(coduomp_crt_sqrtl(squaredLength));
         if (length != 0.0f) {
             const float inverseLength = coduo_round_f32((WIDE_FLOAT)1.0f / length);
             for (int component = 0; component < 3; component++) {
@@ -6834,9 +6835,8 @@ void VEH_GroundFriction(gentity_t *ent)
 
     if (localVelocity[0] > VEH_GROUND_STEER_MIN_FORWARD &&
         localVelocity[1] > VEH_GROUND_STEER_MIN_SIDE) {
-        /* The squared sum stays wide through the square-root call. With the
-         * original 53-bit control word, finite float-derived sums and roots
-         * fit the binary64 boundary here; the result then rounds to float. */
+        /* The squared sum stays wide through the CRT square-root call;
+         * only the returned result rounds to float. */
         const float speed = game_compat_veh_length3(vehicleState->velocity);
         vec3_t correction;
         float correctionLength;
@@ -7522,7 +7522,7 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
                     for (int component = 0; component < 3; component++) {
                         squares[component] = (WIDE_FLOAT)hitState->velocity[component] * hitState->velocity[component];
                     }
-                    hitSpeed = (float)CoduoLibm_Sqrt((double)((squares[2] + squares[0]) + squares[1]));
+                    hitSpeed = (float)coduomp_crt_sqrtl(((squares[2] + squares[0]) + squares[1]));
                     if (hitSpeed > hitInfo->maxSpeed) {
                         VectorNormalize(hitState->velocity);
                         hitState->velocity[0] =
@@ -7591,7 +7591,7 @@ qboolean VEH_VerifyPosition(gentity_t *ent, int passNumber)
                 squares[component] = (WIDE_FLOAT)hitDirection[component] * hitDirection[component];
             }
             const float squaredLength = coduo_round_f32((squares[2] + squares[1]) + squares[0]);
-            const float length = (float)CoduoLibm_Sqrt((double)squaredLength);
+            const float length = (float)coduomp_crt_sqrtl(squaredLength);
             if (length != 0.0f) {
                 const float inverseLength = coduo_round_f32((WIDE_FLOAT)1.0f / length);
                 for (int component = 0; component < 3; component++) {
@@ -9535,9 +9535,8 @@ qboolean VEH_FindValidDismountSpot(gentity_t *vehicleEnt,
 
         AngleVectors(vehicleState->viewClampTargetAngles, forward, right, NULL);
 
-        /* Only positivity is consumed. A nonzero finite float vector's
-         * length cannot become zero when the root rounds to float. */
-        if (game_compat_veh_length3(vehicleState->velocity) > 0.0f) {
+        /* The inline FSQRT result stays live through the positivity test. */
+        if (game_compat_veh_length3_wide(vehicleState->velocity) > 0.0f) {
             direction[0] = -vehicleState->velocity[0];
             direction[1] = -vehicleState->velocity[1];
         } else {

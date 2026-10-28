@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "q_math.h"
 
 #include "compat/crt/asin_compat.h"
@@ -95,35 +96,17 @@ float _DotProduct(const vec3_t left, const vec3_t right)
  *
  * The Linux bodies at coduo_lnxded 0x08066531 and game.mp.uo.i386.so RVA
  * 0x00039f6f use the same X,Y,Z fold under PC=64, store that sum to binary64,
- * call the platform double square root, and narrow to binary32.  A PC=53 x87
- * sum is exactly representable by the same binary64 carrier, so this boundary
- * does not create a distinct Windows computation.
+ * call the platform double square root, and narrow to binary32. The Windows
+ * CRT keeps the live operand, including its wider exponent range; its
+ * binary64 classification probe must not replace that operand.
  * None of the supporting PowerPC images retains a standalone traceback body.
  */
 float _VectorLength(const vec3_t vector)
 {
-    double squaredLength;
-
-#if   (defined(__i386__) || defined(__x86_64__)) &&        (defined(__GNUC__) || defined(__clang__))
-    __asm__ __volatile__("flds %1\n\t"
-                         "fmuls %1\n\t"
-                         "flds %2\n\t"
-                         "fmuls %2\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "flds %3\n\t"
-                         "fmuls %3\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fstpl %0"
-                         : "=m"(squaredLength)
-                         : "m"(vector[0]), "m"(vector[1]), "m"(vector[2])
-                         : "st", "st(1)", "memory");
-#else
-    squaredLength = (double)(
-        ((long double)vector[0] * (long double)vector[0] +
-         (long double)vector[1] * (long double)vector[1]) +
-        (long double)vector[2] * (long double)vector[2]);
-#endif
-    return (float)sqrt(squaredLength);
+    const WIDE_FLOAT squaredLength =
+        ((WIDE_FLOAT)vector[0] * vector[0] + (WIDE_FLOAT)vector[1] * vector[1]) +
+        (WIDE_FLOAT)vector[2] * vector[2];
+    return (float)coduomp_crt_sqrtl(squaredLength);
 }
 
 /*
@@ -171,37 +154,14 @@ float VectorMax(const vec3_t vector)
  */
 float VectorDistance(const vec3_t first, const vec3_t second)
 {
-    const float differenceX = first[0] - second[0];
-    const float differenceY = first[1] - second[1];
-    const float differenceZ = first[2] - second[2];
+    volatile float differenceX = first[0] - second[0];
+    volatile float differenceY = first[1] - second[1];
+    volatile float differenceZ = first[2] - second[2];
 
-#if (defined(__i386__) || defined(__x86_64__)) && \
-    (defined(__GNUC__) || defined(__clang__))
-    float result;
-
-    __asm__ __volatile__("flds %[z]\n\t"
-                         "fmuls %[z]\n\t"
-                         "flds %[y]\n\t"
-                         "fmuls %[y]\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "flds %[x]\n\t"
-                         "fmuls %[x]\n\t"
-                         "faddp %%st, %%st(1)\n\t"
-                         "fsqrt\n\t"
-                         "fstps %[result]"
-                         : [result] "=m"(result)
-                         : [x] "m"(differenceX), [y] "m"(differenceY),
-                           [z] "m"(differenceZ)
-                         : "st", "st(1)", "memory");
-    return result;
-#else
-    const double squaredDistance =
-        ((double)differenceZ * (double)differenceZ +
-         (double)differenceY * (double)differenceY) +
-        (double)differenceX * (double)differenceX;
-
-    return (float)sqrt(squaredDistance);
-#endif
+    const WIDE_FLOAT squaredDistance =
+        ((WIDE_FLOAT)differenceZ * differenceZ + (WIDE_FLOAT)differenceY * differenceY) +
+        (WIDE_FLOAT)differenceX * differenceX;
+    return (float)coduomp_crt_sqrtl(squaredDistance);
 }
 
 /* The original i386 body returns its binary32 expression without first
@@ -230,11 +190,11 @@ float VectorDistance2D(const vec3_t first, const vec3_t second)
 {
     volatile float differenceX = first[0] - second[0];
     volatile float differenceY = first[1] - second[1];
-    const double squaredDistance = (double)(
-        (long double)differenceX * (long double)differenceX +
-        (long double)differenceY * (long double)differenceY);
+    const WIDE_FLOAT squaredDistance = (
+        (long double)differenceY * (long double)differenceY +
+        (long double)differenceX * (long double)differenceX);
 
-    return (float)sqrt(squaredDistance);
+    return (float)coduomp_crt_sqrtl(squaredDistance);
 }
 
 /* Preserve the original live-ST0 return for the two-lane body. */
