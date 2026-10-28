@@ -44,6 +44,12 @@ Supported fixes:
                 name MP_bomb1_defuse to the shipped alias MP_bomb_defuse.
                 The misspelled request matches no alias, so defusing the bomb
                 plays nothing.
+    demotionsound
+                Rename the mistyped multiplayer demotion alias mop_demotion to
+                mp_demotion and point it at the demotion music file instead of
+                the promotion one. The battle-rank script plays mp_demotion, so
+                the misspelled alias is never selected and a demotion is
+                silent.
 
 Usage:
 
@@ -287,6 +293,16 @@ RCON_LOAD_SETTINGS_MENUS = (
 BAS_BOMB_BAD = b'other playsound("MP_bomb1_defuse");'
 BAS_BOMB_GOOD = b'other playsound("MP_bomb_defuse");'
 
+# The battle-rank script plays the multiplayer demotion alias by name:
+#     player playLocalSound("mp_demotion");
+# The alias table spells the row mop_demotion, and that row also points at the
+# promotion music. The same table already stores the demotion music under the
+# ge_demotion and uk_demotion rows, and sound/music/mp_demotion.mp3 ships in
+# uo/pakuo02.pk3. A name no row defines selects no alias, so the client returns
+# without playing anything and without printing a warning.
+DEMOTION_BAD = b"mop_demotion,,music/mp_promotion.mp3,1,"
+DEMOTION_GOOD = b"mp_demotion,,music/mp_demotion.mp3,1,"
+
 FIX_NAMES = (
     "retrieval",
     "polish",
@@ -297,6 +313,7 @@ FIX_NAMES = (
     "shockcvar",
     "rconmenuload",
     "basbomb",
+    "demotionsound",
 )
 
 SKIP_DIRECTORIES = {"server-cache"}
@@ -597,6 +614,30 @@ def plan_basbomb(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
     return replacements
 
 
+def plan_demotionsound(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        if info.is_dir() or not info.filename.lower().endswith(
+            "soundaliases/generic_mp_sound.csv"
+        ):
+            continue
+        data = archive.read(info)
+        bad_count = data.count(DEMOTION_BAD)
+        good_count = data.count(DEMOTION_GOOD)
+        if bad_count == 0 and good_count == 1:
+            continue
+        if bad_count != 1 or good_count != 0:
+            raise ValueError(
+                f"{label}: {info.filename}: expected exactly one multiplayer "
+                f"demotion alias row, found {bad_count} mistyped and "
+                f"{good_count} corrected"
+            )
+        replacements[info.filename] = data.replace(
+            DEMOTION_BAD, DEMOTION_GOOD, 1
+        )
+    return replacements
+
+
 PLANNERS = {
     "retrieval": (
         "RETRIEVAL guard fix",
@@ -633,6 +674,10 @@ PLANNERS = {
     "basbomb": (
         "base-assault bomb defuse sound fix",
         plan_basbomb,
+    ),
+    "demotionsound": (
+        "multiplayer demotion sound alias fix",
+        plan_demotionsound,
     ),
 }
 
