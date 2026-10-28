@@ -6,6 +6,7 @@
 #include "../client/console.h"
 #include "../client/server_browser.h"
 #include "filesystem/filesystem.h"
+#include "compat/coduo_native_x87.h"
 #include "../localization/string_ed_api.h"
 #include "qcommon/hunk.h"
 #include "../renderer/renderer_api.h"
@@ -416,18 +417,20 @@ intptr_t CL_UISystemCalls(intptr_t *arguments)
         return (intptr_t)strncpy(
             UI_PTR(char, 1), UI_STRING(2), UI_SIZE(3));
     case UI_SIN:
-        return CL_UISyscallFloatResult(
-            sinf(CL_UISyscallFloatArgument(UI_ARG(1))));
+        /* CoDUOMP.exe RVAs 0x1be8f..0x1bed9: float VM operands feed
+         * inline x87 math, followed by one float result store. */
+        return CL_UISyscallFloatResult((float)coduo_x87_sinl(
+            (long double)CL_UISyscallFloatArgument(UI_ARG(1))));
     case UI_COS:
-        return CL_UISyscallFloatResult(
-            cosf(CL_UISyscallFloatArgument(UI_ARG(1))));
+        return CL_UISyscallFloatResult((float)coduo_x87_cosl(
+            (long double)CL_UISyscallFloatArgument(UI_ARG(1))));
     case UI_ATAN2:
-        return CL_UISyscallFloatResult(
-            atan2f(CL_UISyscallFloatArgument(UI_ARG(1)),
-                   CL_UISyscallFloatArgument(UI_ARG(2))));
+        return CL_UISyscallFloatResult((float)coduo_x87_atan2l(
+            (long double)CL_UISyscallFloatArgument(UI_ARG(1)),
+            (long double)CL_UISyscallFloatArgument(UI_ARG(2))));
     case UI_SQRT:
-        return CL_UISyscallFloatResult(
-            sqrtf(CL_UISyscallFloatArgument(UI_ARG(1))));
+        return CL_UISyscallFloatResult((float)coduo_x87_sqrtl(
+            (long double)CL_UISyscallFloatArgument(UI_ARG(1))));
     case UI_FLOOR:
         return CL_UISyscallFloatResult((float)floor(
             (double)CL_UISyscallFloatArgument(UI_ARG(1))));
