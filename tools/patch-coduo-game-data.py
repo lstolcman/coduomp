@@ -50,6 +50,10 @@ Supported fixes:
                 the promotion one. The battle-rank script plays mp_demotion, so
                 the misspelled alias is never selected and a demotion is
                 silent.
+    arnhemfx    Point the Arnhem antitank-gun explosion at the shipped vehicle
+                explosion effect. The map requests fx/map_mp/mp_exp_generic_complete.efx,
+                which no archive contains, so every Arnhem start logs an effect
+                load failure and the precached effect is empty.
 
 Usage:
 
@@ -303,6 +307,16 @@ BAS_BOMB_GOOD = b'other playsound("MP_bomb_defuse");'
 DEMOTION_BAD = b"mop_demotion,,music/mp_promotion.mp3,1,"
 DEMOTION_GOOD = b"mp_demotion,,music/mp_demotion.mp3,1,"
 
+# Arnhem precaches its antitank-gun explosion at map start. The requested file
+# name does not exist in any archive, and the client FX loader has no fallback:
+# it prints "Effect file load failed" and keeps effect id 0. The shipped
+# full-detail generic explosion is fx/explosions/vehicles/generic_complete.efx,
+# which the base-game scripts and the UO turret and bomb scripts use for the
+# same role; the low-detail map copy lofx/map_mp/mp_generic_complete.efx is the
+# reduced variant of that effect.
+ARNHEM_FX_BAD = b'loadfx("fx/map_mp/mp_exp_generic_complete.efx")'
+ARNHEM_FX_GOOD = b'loadfx("fx/explosions/vehicles/generic_complete.efx")'
+
 FIX_NAMES = (
     "retrieval",
     "polish",
@@ -314,6 +328,7 @@ FIX_NAMES = (
     "rconmenuload",
     "basbomb",
     "demotionsound",
+    "arnhemfx",
 )
 
 SKIP_DIRECTORIES = {"server-cache"}
@@ -638,6 +653,30 @@ def plan_demotionsound(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]
     return replacements
 
 
+def plan_arnhemfx(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        if info.is_dir() or not info.filename.lower().endswith(
+            "maps/mp/mp_arnhem_fx.gsc"
+        ):
+            continue
+        data = archive.read(info)
+        bad_count = data.count(ARNHEM_FX_BAD)
+        good_count = data.count(ARNHEM_FX_GOOD)
+        if bad_count == 0 and good_count == 1:
+            continue
+        if bad_count != 1 or good_count != 0:
+            raise ValueError(
+                f"{label}: {info.filename}: expected exactly one Arnhem "
+                f"antitank explosion effect, found {bad_count} missing-file "
+                f"and {good_count} corrected"
+            )
+        replacements[info.filename] = data.replace(
+            ARNHEM_FX_BAD, ARNHEM_FX_GOOD, 1
+        )
+    return replacements
+
+
 PLANNERS = {
     "retrieval": (
         "RETRIEVAL guard fix",
@@ -678,6 +717,10 @@ PLANNERS = {
     "demotionsound": (
         "multiplayer demotion sound alias fix",
         plan_demotionsound,
+    ),
+    "arnhemfx": (
+        "Arnhem antitank explosion effect fix",
+        plan_arnhemfx,
     ),
 }
 
