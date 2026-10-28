@@ -25,6 +25,10 @@ Supported fixes:
                 adds although its caller supplies no argument. The engine keeps
                 the unmatched %s in the message, so the hint shows a literal
                 %s.
+    percentfix  Restore the missing "s" in the format markers of the Korean and
+                Taiwanese vote, timeout, and server-restart messages. A bare
+                percent is not a format marker, so the value is appended after
+                the sentence and the percent sign is displayed.
 
 Usage:
 
@@ -120,12 +124,97 @@ QUOTE_FIXES = (
 POLISH_FORMAT_BAD = b', aby podnie\x9c\xe6 %s cel misji"'
 POLISH_FORMAT_GOOD = b', aby podnie\x9c\xe6 cel misji"'
 
+# The Korean and Taiwanese translations store "%%" instead of "%s" in several
+# patch_1_5/EXE messages. The server passes the value as a separate message
+# fragment, so a bare % leaves the value appended after the sentence and prints
+# the percent sign. Each tuple is (file suffix, stored line, corrected line,
+# expected occurrences).
+PERCENT_FIXES = (
+    (
+        "localizedstrings/korean/patch_1_5.str",
+        b'LANG_KOREAN         "%\xb0\xa1 \xc5\xb8\xc0\xd3\xbe\xc6\xbf\xf4'
+        b'\xc0\xbb \xbf\xe4\xc3\xbb\xc7\xdf\xbd\xc0\xb4\xcf\xb4\xd9."',
+        b'LANG_KOREAN         "%s\xb0\xa1 \xc5\xb8\xc0\xd3\xbe\xc6\xbf\xf4'
+        b'\xc0\xbb \xbf\xe4\xc3\xbb\xc7\xdf\xbd\xc0\xb4\xcf\xb4\xd9."',
+        2,
+    ),
+    (
+        "localizedstrings/korean/patch_1_5.str",
+        b'LANG_KOREAN         "%\xb4\xc2 \xc0\xcc\xb9\xcc \xc5\xb8\xc0\xd3'
+        b'\xbe\xc6\xbf\xf4\xc0\xbb \xb8\xf0\xb5\xce \xbb\xe7\xbf\xeb\xc7\xcf'
+        b'\xbf\xb4\xbd\xc0\xb4\xcf\xb4\xd9."',
+        b'LANG_KOREAN         "%s\xb4\xc2 \xc0\xcc\xb9\xcc \xc5\xb8\xc0\xd3'
+        b'\xbe\xc6\xbf\xf4\xc0\xbb \xb8\xf0\xb5\xce \xbb\xe7\xbf\xeb\xc7\xcf'
+        b'\xbf\xb4\xbd\xc0\xb4\xcf\xb4\xd9."',
+        1,
+    ),
+    (
+        "localizedstrings/korean/patch_1_5.str",
+        b'LANG_KOREAN         "\xbf\xec\xc8\xa3\xc0\xfb \xc1\xf6\xc7\xa5'
+        b'\xb5\xe9: %"',
+        b'LANG_KOREAN         "\xbf\xec\xc8\xa3\xc0\xfb \xc1\xf6\xc7\xa5'
+        b'\xb5\xe9: %s"',
+        1,
+    ),
+    (
+        "localizedstrings/korean/patch_1_5.str",
+        b'LANG_KOREAN         "\xc5\xb3\xc4\xb7: %"',
+        b'LANG_KOREAN         "\xc5\xb3\xc4\xb7: %s"',
+        1,
+    ),
+    (
+        "localizedstrings/korean/patch_1_5.str",
+        b'LANG_KOREAN         "\xbf\xec\xc8\xa3\xc0\xfb\xc0\xce \xc8\xad'
+        b'\xbf\xb0: %"',
+        b'LANG_KOREAN         "\xbf\xec\xc8\xa3\xc0\xfb\xc0\xce \xc8\xad'
+        b'\xbf\xb0: %s"',
+        1,
+    ),
+    (
+        "localizedstrings/korean/patch_1_5.str",
+        b'LANG_KOREAN         "\xc5\xf5\xc7\xa5 %\xb8\xa6 \xc0\xa7\xc7\xd1 '
+        b'\xc0\xaf\xc8\xbf\xc7\xd1 \xb3\xed\xc0\xef\xc0\xcc \xbe\xf8\xbd'
+        b'\xc0\xb4\xcf\xb4\xd9"',
+        b'LANG_KOREAN         "\xc5\xf5\xc7\xa5 %s\xb8\xa6 \xc0\xa7\xc7\xd1 '
+        b'\xc0\xaf\xc8\xbf\xc7\xd1 \xb3\xed\xc0\xef\xc0\xcc \xbe\xf8\xbd'
+        b'\xc0\xb4\xcf\xb4\xd9"',
+        1,
+    ),
+    (
+        "localizedstrings/korean/patch_1_5.str",
+        b'LANG_KOREAN         "%\xb0\xa1 \xc5\xb8\xc0\xd3\xc0\xce\xc0\xbb '
+        b'\xba\xd2\xb7\xb6\xbd\xc0\xb4\xcf\xb4\xd9."',
+        b'LANG_KOREAN         "%s\xb0\xa1 \xc5\xb8\xc0\xd3\xc0\xce\xc0\xbb '
+        b'\xba\xd2\xb7\xb6\xbd\xc0\xb4\xcf\xb4\xd9."',
+        1,
+    ),
+    (
+        "localizedstrings/korean/patch_1_5.str",
+        b'LANG_KOREAN         "%\xb0\xa1 \xbb\xe7\xbf\xeb \xb0\xa1\xb4\xc9'
+        b'\xc7\xd1 \xc5\xb8\xc0\xd3\xbe\xc6\xbf\xf4\xc0\xbb \xb8\xf0\xb5\xce '
+        b'\xbb\xe7\xbf\xeb\xc7\xdf\xbd\xc0\xb4\xcf\xb4\xd9."',
+        b'LANG_KOREAN         "%s\xb0\xa1 \xbb\xe7\xbf\xeb \xb0\xa1\xb4\xc9'
+        b'\xc7\xd1 \xc5\xb8\xc0\xd3\xbe\xc6\xbf\xf4\xc0\xbb \xb8\xf0\xb5\xce '
+        b'\xbb\xe7\xbf\xeb\xc7\xdf\xbd\xc0\xb4\xcf\xb4\xd9."',
+        1,
+    ),
+    (
+        "localizedstrings/taiwanese/exe.str",
+        b'LANG_TAIWANESE      "\xa5\xd1\xa9\xf3% \xa6]\xaf\xc0\xa1A\xad\xab'
+        b'\xb7s\xb1\xd2\xb0\xca\xa6\xf8\xaaA\xbe\xb9"',
+        b'LANG_TAIWANESE      "\xa5\xd1\xa9\xf3%s \xa6]\xaf\xc0\xa1A\xad\xab'
+        b'\xb7s\xb1\xd2\xb0\xca\xa6\xf8\xaaA\xbe\xb9"',
+        1,
+    ),
+)
+
 FIX_NAMES = (
     "retrieval",
     "polish",
     "rconmenu",
     "polishquotes",
     "polishformat",
+    "percentfix",
 )
 
 SKIP_DIRECTORIES = {"server-cache"}
@@ -276,6 +365,35 @@ def plan_polishformat(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
     return replacements
 
 
+def plan_percentfix(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        lower = info.filename.lower()
+        group = [
+            (old, new, expected)
+            for suffix, old, new, expected in PERCENT_FIXES
+            if lower.endswith(suffix)
+        ]
+        if not group:
+            continue
+        data = archive.read(info)
+        counts = [data.count(old) for old, _, _ in group]
+        if all(count == 0 for count in counts):
+            continue
+        expected = [item[2] for item in group]
+        if counts != expected:
+            raise ValueError(
+                f"{label}: {info.filename}: expected {expected} malformed "
+                f"format markers, found {counts}"
+            )
+        for old, new, _ in group:
+            data = data.replace(old, new)
+        replacements[info.filename] = data
+    return replacements
+
+
 PLANNERS = {
     "retrieval": (
         "RETRIEVAL guard fix",
@@ -296,6 +414,10 @@ PLANNERS = {
     "polishformat": (
         "Polish generic-objective format fix",
         plan_polishformat,
+    ),
+    "percentfix": (
+        "Korean and Taiwanese format marker fix",
+        plan_percentfix,
     ),
 }
 
