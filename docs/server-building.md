@@ -26,9 +26,10 @@ its original authorization defaults.
 - `make`
 - C and C++ compilers such as `cc`, `c++`, `clang`, or `gcc`
 - `ar`
-- For Windows cross-builds, a 32-bit MinGW compiler such as
-  `i686-w64-mingw32-gcc` plus its matching `g++`
+- For Windows cross-builds, an architecture-matched MinGW compiler,
+  `i686-w64-mingw32-gcc` or `x86_64-w64-mingw32-gcc`, and its matching `g++`
 - MinGW-compatible zlib headers and library for the Windows engine
+- For native Windows builds, CMake 4.4+ and MSVC 19.39+ or clang-cl 22+
 
 ## Compile Checks
 
@@ -45,13 +46,13 @@ dedicated-engine check compiles maintained engine code into a static archive.
 For server deployment, build the 32-bit Linux module:
 
 ```sh
-make game32
+make server-game32
 ```
 
 Output:
 
 ```text
-build/game/linux-i386/game.mp.uo.i386.so
+.workbench/build/game/linux-i386/game.mp.uo.i386.so
 ```
 
 This target uses `-m32`, so it requires a Linux toolchain with 32-bit compiler
@@ -60,13 +61,13 @@ and library support installed.
 For local shared-object experiments using the host toolchain:
 
 ```sh
-make game64
+make server-game64
 ```
 
 Output:
 
 ```text
-build/game/linux-x86_64/game.mp.uo.x86_64.so
+.workbench/build/game/linux-x86_64/game.mp.uo.x86_64.so
 ```
 
 For a local dedicated-engine shared-object link check, use the target Makefile:
@@ -87,26 +88,75 @@ Output:
 .workbench/build/server/linux-x86_64-noauth/coduo_lnxded_recovered
 ```
 
-## Windows Dedicated Server
+## Windows with MSVC or clang-cl
 
-The top-level Windows targets build a PE32 console engine and its matching PE32
-server game DLL:
+The same CMake target builds a dedicated engine and matching game DLL for
+all supported Windows compiler configurations:
+
+| Preset | Architecture | Compiler |
+| --- | --- | --- |
+| `msvc` | x86 (32-bit) | MSVC |
+| `msvc-x64` | x86-64 | MSVC |
+| `clang-cl-x64` | x86-64 | clang-cl 22+ |
+
+Each preset builds the client, its three modules, and the dedicated server by
+default. Select any row's preset for both commands:
 
 ```sh
-make windows-i386
-make windows-i686
+cmake --preset msvc
+cmake --build --preset msvc --parallel 2
+```
+
+For a server-only build, disable the client and its optional modules. The
+server still builds its required game DLL; only zlib is fetched as a dependency:
+
+```sh
+cmake --preset msvc -DCODUOMP_BUILD_CLIENT=OFF -DCODUOMP_BUILD_MODULES=OFF
+cmake --build --preset msvc --target coduo_dedicated_recovered --parallel 2
+```
+
+Outputs are `.workbench/build/<preset>/bin/Release/coduo_dedicated_recovered.exe`
+and `bin/Release/uo/uo_game_mp_x86.dll` in that same build directory. The DLL
+filename is the same on x86 and x64; the engine and DLL must have matching
+architectures. Selecting the server target builds both files.
+
+`BUNDLED_LIBS=OFF` with `CODUOMP_DEP_PREFIX` selects architecture-matched MSVC
+libraries instead. A server-only configuration then resolves only zlib.
+`CODUOMP_BUILD_SERVER=OFF` retains a client/module-only configuration.
+`CODUOMP_DISABLE_SERVER_AUTH=ON` disables external CD-key authorization.
+Its default preserves the branch's Makefile authorization setting. The Windows
+CMake server uses the disabled PunkBuster provider; the recovered dynamic
+PunkBuster loader currently requires POSIX services.
+
+Both engine build systems reserve 8 MiB of stack with a 4 KiB initial commit.
+MSVC's binary64 `long double` limits and clang-cl's explicit extended-arithmetic
+profile also apply to the server; see [client build limits](client-building.md#windows-with-clang-cl-or-msvc).
+
+## Windows Dedicated Server
+
+The top-level Windows targets build the engine and matching game DLL.
+`server-windows` builds both 32-bit and 64-bit products:
+
+```sh
+make server-windows
+make server-windows-i686
+make server-windows-x86_64
+make server-windows-i386
 ```
 
 Outputs:
 
 ```text
-build/server/windows-i386/coduo_dedicated_recovered.exe
-build/game/windows-i386/uo_game_mp_x86.dll
-build/server/windows-i686/coduo_dedicated_recovered.exe
-build/game/windows-i686/uo_game_mp_x86.dll
+.workbench/build/server/windows-i386/coduo_dedicated_recovered.exe
+.workbench/build/game/windows-i386/uo_game_mp_x86.dll
+.workbench/build/server/windows-i686/coduo_dedicated_recovered.exe
+.workbench/build/game/windows-i686/uo_game_mp_x86.dll
+.workbench/build/server/windows-x86_64/coduo_dedicated_recovered.exe
+.workbench/build/game/windows-x86_64/uo_game_mp_x86.dll
 ```
 
-Both targets use the 32-bit MinGW ABI and force `-O0 -mfpmath=387
+The i386 and i686 targets use the 32-bit MinGW ABI; x86-64 uses PE32+.
+All targets use `-O0 -mfpmath=387
 -fexcess-precision=fast` in both engine and module C/C++ compilation. The
 Windows engine establishes the retail-compatible 53-bit x87 precision mode at
 startup and restores it after loading the game DLL. The distinction between
@@ -114,17 +164,18 @@ the targets is the generated instruction baseline: `-march=i386` or
 `-march=i686`.
 
 The engine needs MinGW zlib. If it is not installed in the compiler's default
-search path, point `WINDOWS_DEP_PREFIX` at a prefix containing `include/zlib.h`
+search path, point `MINGW32_DEP_PREFIX` or `MINGW64_DEP_PREFIX` at a prefix containing `include/zlib.h`
 and `lib/libz.a`:
 
 ```sh
-make windows-i686 WINDOWS_DEP_PREFIX=/opt/mingw-i686
+make server-windows-i686 MINGW32_DEP_PREFIX=/opt/mingw-i686
+make server-windows-x86_64 MINGW64_DEP_PREFIX=/opt/mingw-x86_64
 ```
 
 Override the compiler names when necessary:
 
 ```sh
-make windows-i386 \
+make server-windows-i386 \
   MINGW32_CC=i386-mingw32-gcc \
   MINGW32_CXX=i386-mingw32-g++ \
   WINDOWS_DEP_PREFIX=/opt/mingw-i386

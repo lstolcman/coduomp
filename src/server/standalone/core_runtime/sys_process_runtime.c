@@ -18,6 +18,7 @@
 #endif
 
 #include "core_runtime_private.h"
+#include "compat/coduo_compiler.h"
 
 enum {
     SYS_CWD_GETCWD_LIMIT = MAX_OSPATH - 1,
@@ -425,7 +426,8 @@ int main(int argc, char **argv)
         commandLineSize += (int32_t)strlen(argv[index]) + 1;
     }
 
-    char commandLine[commandLineSize];
+    /* MSVC uses caller-stack allocation for this function-lifetime buffer. */
+    CODUO_STACK_ARRAY(char, commandLine, commandLineSize);
     commandLine[0] = '\0';
     for (int32_t index = 1; index < argc; ++index) {
         if (index > 1) {
