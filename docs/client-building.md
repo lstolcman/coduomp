@@ -191,8 +191,19 @@ MSVC x86's x87 adapters still narrow through their binary64 C carriers.
 Default power domain and overflow/pole errors preserve `EDOM` and `ERANGE`,
 respectively; underflow leaves `errno` unchanged. Custom `matherr` handlers,
 OS exception dispatch, and complete floating-point status parity are not
-implemented. This does not close the separate `modf` provider used by
-`RoundFloat`, or engine power calls that still use host math.
+implemented. Engine power calls that still use host math remain a separate
+boundary.
+
+`RoundFloat` also uses the shared `src/compat/crt/modf_compat.c` provider. It
+preserves binary64 whole/fraction stores, signed zeros, infinities, and quieted
+NaN payloads with `EDOM`. Power and modf share their CPU/exception-mask gate.
+With SSE2 denormals-are-zero enabled, modf retains the original NaN exception:
+the whole output is quieted, the fraction is signed zero, and errno is unchanged.
+The native x87 fallback temporarily selects PC64/chop and restores the caller
+control word; the portable binary64 path preserves the SSE2 subtraction and
+its rounding-dependent zero sign. Non-x87 hosts use native binary64 arithmetic.
+Complete sticky-status parity, custom `matherr` callbacks, and OS exception
+dispatch remain outside this provider.
 
 Recovered CRT atan2 callers use a separate shared entry from inline `FPATAN`
 callers. On native x87 it preserves the CRT's temporary precision setting,

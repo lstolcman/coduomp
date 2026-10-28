@@ -1,8 +1,6 @@
 #include "q_math.h"
 #include "compat/crt/pow_compat.h"
-
-
-#include <math.h>
+#include "compat/crt/modf_compat.h"
 
 /*
  * The complete fixed-decimal rounding body is retained in every authoritative
@@ -35,7 +33,7 @@ float RoundFloat(float value, int32_t decimals)
     double fraction;
 
     scaled = (double)(coduomp_math_powl(10.0, exponent) * (long double)value);
-    fraction = modf(scaled, &whole);
+    fraction = coduomp_crt_modf(scaled, &whole);
 
     if (fraction >= 0.5) {
         whole += 1.0;
