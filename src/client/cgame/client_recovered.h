@@ -5362,9 +5362,9 @@ void VectorNormalizeFast(vec3_t v);
  * provisional (matching the sqrt_f pattern) so flame/physics callers name their
  * pow call instead of a bare FUN_ address. Argument order proven from the two
  * CG_AddFlameChunks (0x300272b0) call sites, which load base then push the exponent
- * constant last (ST0). CG_ callers intentionally use native host power through
- * cgame_compat_native_powl, retaining their surrounding arithmetic and stores.
- * Shared RoundFloat retains the CRT power provider.
+ * constant last (ST0). Recovered callers use the shared CRT power provider,
+ * which preserves the selected binary64 or native x87 arithmetic route.
+ * The vehicle-owner-icon alpha expression alone uses native host power.
  */
 
 /*

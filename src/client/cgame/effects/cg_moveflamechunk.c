@@ -30,7 +30,7 @@
 // compare idioms (FCOMP/FUCOMPP + FNSTSW + TEST AH,{0x41,0x44,0x05} + Jcc) are
 // translated to the equivalent scalar comparisons.
 
-#include "client/cgame/common/native_power.h"
+#include "compat/libm/coduo_wide_math.h"
 #include "client/cgame/client_recovered.h"
 #include "client/cgame/globals.h"
 #include "compat/coduo_native_x87.h"
@@ -165,9 +165,9 @@ void CG_MoveFlameChunk(flameChunk_t *chunk, int32_t flameTime)
             /* result = CG_pow(ramp, 1.0): base ramp is a genuine double (FSTP
              * double [ESP+0x18]; FLD double before the CALL) so it is not widened,
              * but the raw ST0 result is consumed by FSUBR/FMUL with no store, so
-             * the native power adapter returns the widest host result available.
-             * The subsequent arithmetic stays wide until the explicit store. */
-            result = cgame_compat_native_powl(ramp, 1.0L);
+             * coduomp_math_powl keeps the selected CRT result live; a double
+             * return would add a rounding point on the x87 route. */
+            result = coduomp_math_powl(ramp, 1.0L);
             x = (1.0 - result) * bcScaled;
         } else {
             /* No matching owner chunk: x = field_bc*1800, halved-ish by 0.35 when

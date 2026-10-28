@@ -29,7 +29,7 @@
 // calling-convention detail; recovered here as ordered C parameters with no attribute
 // (the syntax-only build does not require one).
 
-#include "compat/coduo_native_x87.h"
+#include "compat/crt/sqrt_compat.h"
 #include "../client_recovered.h"
 #include "../globals.h"
 #include "../platform/crt_boundary.h"
@@ -109,7 +109,7 @@ void CG_SpawnTracerLine(const vec3_t endOrigin, const vec3_t startOrigin, int32_
      * [ESP+0x48] @0x3004838d (then copied to span's slot). sqrtl keeps arg+result
      * 80-bit and the store to `float span` is that one rounding -- sqrtf would round
      * the argument to float before the call, a rounding the binary does not perform. */
-    float span = (float)coduo_x87_sqrtl(
+    float span = (float)coduomp_crt_sqrtl(
         (long double)seg[2] * (long double)seg[2] +
         (long double)seg[1] * (long double)seg[1] +
         (long double)seg[0] * (long double)seg[0]); /* 0x3006bee0 */

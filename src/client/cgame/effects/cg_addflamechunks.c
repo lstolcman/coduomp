@@ -24,7 +24,8 @@
 // arrives in EAX (register ABI) and is moved to EDI. EBX/EBP/ESI/EDI save and the
 // 0x74-byte frame are i386 calling-convention plumbing, not source behavior.
 
-#include "client/cgame/common/native_power.h"
+#include "compat/crt/sqrt_compat.h"
+#include "compat/libm/coduo_wide_math.h"
 #include "client/cgame/client_recovered.h"
 #include "client/cgame/globals.h"
 #include "compat/coduo_native_x87.h"
@@ -32,9 +33,8 @@
 #include <math.h>
 
 /* 0x3006bb20 is the MSVC x87 pow intrinsic (base ST1, exp ST0, raw 80-bit
- * result in ST0). Cgame intentionally uses host power; its native adapter keeps
- * the wide base/result where the host ABI supports them. Surrounding stores
- * still follow the recovered caller. */
+ * result in ST0). Portable code uses powl so the base (operand widened) and the
+ * result stay 80-bit where the DLL keeps them; a double pow would round both. */
 
 /*
  * CG_AddFlameToScene (0x300268e0, provisional) — build and add one flame chunk's
@@ -143,7 +143,7 @@ void CG_AddFlameChunks(flameChunk_t *ownerChunk)
              * sqrt helper RAW in st0 (no float store of the argument), so the
              * argument must not round to float: sqrtl on the 80-bit chain, one
              * float rounding at the result store ([ESP+0x1c]). */
-            float distToView = (float)coduo_x87_sqrtl(
+            float distToView = (float)coduomp_crt_sqrtl(
                 (long double)vz * vz +
                 (long double)vy * vy +
                 (long double)vx * vx);
@@ -244,7 +244,7 @@ void CG_AddFlameChunks(flameChunk_t *ownerChunk)
                     /* Square sum passed RAW in st0 to the CRT sqrt helper
                      * (0x300275b2, no argument store), one float rounding at
                      * the result store. */
-                    float sepLen = (float)coduo_x87_sqrtl(
+                    float sepLen = (float)coduomp_crt_sqrtl(
                         (long double)sz * sz +
                         (long double)sy * sy +
                         (long double)sx * sx);
@@ -255,10 +255,10 @@ void CG_AddFlameChunks(flameChunk_t *ownerChunk)
                      * thr <= sepLen (or unordered); continue only when thr > sepLen.
                      * The raw CG_pow st0 result, both float multiplies, the
                      * doubling and the FCOMPP all stay in st registers with no
-                     * store, so thr is long double. The native power adapter
-                     * receives the live base; the caller keeps the host result
-                     * and later arithmetic wide through the comparison. */
-                    long double thr = cgame_compat_native_powl(((long double)ratioA + 1.0f) * 0.5f, 1.5L)
+                     * store, so thr is long double. The shared provider receives
+                     * the live base and applies the CRT's own stores and dispatch;
+                     * the caller keeps its selected result and later arithmetic live. */
+                    long double thr = coduomp_math_powl(((long double)ratioA + 1.0f) * 0.5f, 1.5L)
                                       * f->radius * weight;
                     thr = thr + thr;
                     if (!(thr > sepLen))
@@ -376,7 +376,7 @@ void CG_AddFlameChunks(flameChunk_t *ownerChunk)
              * FMUL sizeRatio([ESP+0x34]); FMUL 32.0(0x3007c258); raw st0 result
              * consumed straight by the FCOMPP -- powl keeps the base (1.0 - e8,
              * built raw via FSUBR double 1.0) and the result 80-bit. */
-            term = cgame_compat_native_powl(1.0 - (long double)f->lifeFraction, 3.0L);
+            term = coduomp_math_powl(1.0 - (long double)f->lifeFraction, 3.0L);
             term = term * sizeRatio * 32.0;
 
             /* FCOMPP compares term(ST0) vs score(ST1); TEST AH,0x41; JZ 0x30027823

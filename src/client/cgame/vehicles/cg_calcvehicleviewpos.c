@@ -23,6 +23,7 @@
 // the mode/ADS vertical adjustments, and clamps the displacement length to the
 // interval [0.5, 2.0] times the source tag-delta length.
 
+#include "compat/crt/sqrt_compat.h"
 #include <math.h>
 #include <string.h>
 
@@ -452,11 +453,11 @@ void CG_CalcVehicleViewPos(void)
             displacement[2] = (float)(candidate[2] -
                                       (long double)primaryMat.origin[2]);
 
-            long double displacementLength = coduo_x87_sqrtl(
+            long double displacementLength = coduomp_crt_sqrtl(
                 (long double)displacement[2] * (long double)displacement[2] +
                 (long double)displacement[1] * (long double)displacement[1] +
                 (long double)displacement[0] * (long double)displacement[0]);
-            long double sourceLength = coduo_x87_sqrtl(
+            long double sourceLength = coduomp_crt_sqrtl(
                 (long double)deltaVec[2] * (long double)deltaVec[2] +
                 (long double)deltaVec[1] * (long double)deltaVec[1] +
                 (long double)deltaVec[0] * (long double)deltaVec[0]);

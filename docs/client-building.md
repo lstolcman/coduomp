@@ -173,12 +173,20 @@ reproduce the complete original CRT's exception handling.
 Windows APIs and dependencies keep their normal Microsoft ABI; the SDK is
 not a general 80-bit long-double runtime.
 
-CG_ flame and vehicle-owner-icon power calls use the native host library through
+Native-math performance exceptions are limited to isolated presentation work.
+Server math and client movement, prediction, physics, damage, collision, bullet
+tracing, world geometry, and camera/projection calculations retain the original
+Windows arithmetic contract. A `CG_` prefix or renderer location does not make
+an expression cosmetic. Shared state, random sequences, and visibility or edge
+placement must also be checked before introducing an exception.
+
+The vehicle-owner-icon fade uses native power through
 `src/client/cgame/common/native_power.h`: `powl` on native long-double ABIs and
-`pow` on the Microsoft CRT's binary64 ABI, including clang-cl. This intentional
-master customization accepts host power results and error behavior, including
-in flame simulation that feeds damage checks. Surrounding wide expressions,
-explicit float/double stores, and integer conversions remain in place.
+`pow` on the Microsoft CRT's binary64 ABI, including clang-cl. This master-only
+exception affects icon alpha. Flame power calculations use the shared CRT
+provider, including their presentation consumers: flame state and drawing gates
+also feed damage checks. Surrounding wide expressions, explicit stores, and
+integer conversions remain in place.
 
 Shared power in `RoundFloat` and server vehicle calculations uses
 `src/compat/crt/pow_compat.c`. On hosts with a native x87 core, SSE2-capable CPUs
@@ -212,13 +220,12 @@ its rounding-dependent zero sign. Non-x87 hosts use native binary64 arithmetic.
 Complete sticky-status parity, custom `matherr` callbacks, and OS exception
 dispatch remain outside this provider.
 
-CG_ square-root expressions use native arithmetic through the inline
-`coduo_x87_sqrtl` primitive: hardware `FSQRT` on GNU/Clang x86 and native
-`sqrtl` elsewhere. This master customization avoids the recovered CRT's
-classification, control-word and error dispatch, accepting native results,
-rounding and error behavior. Surrounding wide expressions and explicit stores
-remain in place. Shared math and BG functions retain their own CRT boundaries,
-including when called from CG_ functions.
+Three HUD distance expressions in `CG_DrawCompassFriendlies`,
+`CG_DrawCompassTanks`, and `CG_DrawObjectivePointers` use the inline native
+`coduo_x87_sqrtl` primitive for marker placement, size, and alpha. This master
+customization accepts native results, rounding, and error behavior. Flame,
+camera, and tracer geometry use the recovered CRT provider. Shared math and BG
+functions retain their own boundaries even when called by HUD code.
 
 Other recovered CRT square-root callers use `src/compat/crt/sqrt_compat.c`. Native x87 keeps
 the live operand and result, reproduces the classification store, temporary

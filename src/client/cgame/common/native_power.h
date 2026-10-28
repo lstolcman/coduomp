@@ -3,9 +3,9 @@
 
 #include <math.h>
 
-/* NOT_FROM_ORIGINAL_SOURCE: cgame power uses the host library, accepting its
- * result and error behavior. Retain native long-double operands/results where
- * supported. The Microsoft CRT has a binary64 ABI even when clang-cl uses an
+/* NOT_FROM_ORIGINAL_SOURCE: isolated icon fading uses host power, accepting its
+ * result and error behavior. Gameplay and world geometry keep CRT fidelity.
+ * Retain native long-double operands/results where supported. The Microsoft CRT has a binary64 ABI even when clang-cl uses an
  * 80-bit source carrier, so cross that boundary explicitly through pow.
  * Callers retain their surrounding wide arithmetic and explicit stores. The
  * aliases add no wrapper call, and each argument is evaluated exactly once. */
