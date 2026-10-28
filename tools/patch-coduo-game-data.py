@@ -20,6 +20,11 @@ Supported fixes:
                 Remove quotation marks that the Polish and French translations
                 doubled by mistake. The string loader strips only one leading
                 and one trailing quote, so the extra quote is displayed.
+    polishformat
+                Drop the format insert that the Polish generic-objective hint
+                adds although its caller supplies no argument. The engine keeps
+                the unmatched %s in the message, so the hint shows a literal
+                %s.
 
 Usage:
 
@@ -109,7 +114,20 @@ QUOTE_FIXES = (
     ),
 )
 
-FIX_NAMES = ("retrieval", "polish", "rconmenu", "polishquotes")
+# RE_PRESS_TO_PICKUP_GENERIC is called with no message arguments, while
+# RE_PRESS_TO_PICKUP passes the objective name. The Polish generic text adds
+# the same %s insert and therefore leaves the marker visible in the hint.
+POLISH_FORMAT_BAD = b', aby podnie\x9c\xe6 %s cel misji"'
+POLISH_FORMAT_GOOD = b', aby podnie\x9c\xe6 cel misji"'
+
+FIX_NAMES = (
+    "retrieval",
+    "polish",
+    "rconmenu",
+    "polishquotes",
+    "polishformat",
+)
+
 SKIP_DIRECTORIES = {"server-cache"}
 
 
@@ -234,6 +252,30 @@ def plan_polishquotes(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
     return replacements
 
 
+def plan_polishformat(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        if not info.filename.lower().endswith(
+            "localizedstrings/polish/re.str"
+        ):
+            continue
+        data = archive.read(info)
+        bad_count = data.count(POLISH_FORMAT_BAD)
+        if bad_count == 0:
+            continue
+        if bad_count != 1:
+            raise ValueError(
+                f"{label}: {info.filename}: expected one unmatched Polish "
+                f"format insert, found {bad_count}"
+            )
+        replacements[info.filename] = data.replace(
+            POLISH_FORMAT_BAD, POLISH_FORMAT_GOOD, 1
+        )
+    return replacements
+
+
 PLANNERS = {
     "retrieval": (
         "RETRIEVAL guard fix",
@@ -250,6 +292,10 @@ PLANNERS = {
     "polishquotes": (
         "Polish and French stray-quote fix",
         plan_polishquotes,
+    ),
+    "polishformat": (
+        "Polish generic-objective format fix",
+        plan_polishformat,
     ),
 }
 
