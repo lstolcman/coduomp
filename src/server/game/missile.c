@@ -376,16 +376,13 @@ void G_RunMissile(gentity_t *ent)
         }
     } else {
         WIDE_FLOAT velocityMag;
-        /* Only zero/nonzero is consumed here. For finite float components,
-         * the double sum and float root are zero exactly when all components
-         * are zero; retaining the Windows root cannot change this decision. */
-        /* Linux stores the sum as double for libm, then rounds its result to float. */
+        /* Windows RVA 0x310c3..0x310ea keeps the X/Y/Z sum and inline
+         * FSQRT result live through the zero comparison. No CRT call or
+         * binary64/binary32 store belongs on this path. */
         volatile WIDE_FLOAT squareX = (WIDE_FLOAT)ent->s.pos.trDelta[0] * ent->s.pos.trDelta[0];
         volatile WIDE_FLOAT squareY = (WIDE_FLOAT)ent->s.pos.trDelta[1] * ent->s.pos.trDelta[1];
         volatile WIDE_FLOAT squareZ = (WIDE_FLOAT)ent->s.pos.trDelta[2] * ent->s.pos.trDelta[2];
-        volatile double squaredSpeed = (squareX + squareY) + squareZ;
-        volatile float storedSpeed = CoduoLibm_Sqrt(squaredSpeed);
-        velocityMag = storedSpeed;
+        velocityMag = coduo_x87_sqrtl((squareX + squareY) + squareZ);
         if (velocityMag != 0.0f) {
             ent->s.groundEntityNum = ENTITYNUM_NONE;
         }

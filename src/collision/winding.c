@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "winding.h"
 
 #include "math/q_math.h"
@@ -186,7 +187,7 @@ float WindingArea(const winding_t *winding)
             ((long double)cross[2] * (long double)cross[2] +
              (long double)cross[1] * (long double)cross[1]) +
             (long double)cross[0] * (long double)cross[0];
-        const float length = (float)sqrt((double)lengthSquared);
+        const float length = (float)coduomp_crt_sqrtl(lengthSquared);
         area = (float)((long double)length * 0.5L +
                        (long double)area);
     }
@@ -700,7 +701,7 @@ void CheckWinding(const winding_t *winding)
              (long double)edge[1] * (long double)edge[1]) +
             (long double)edge[0] * (long double)edge[0];
         const float edgeLength =
-            (float)sqrt((double)edgeLengthSquared);
+            (float)coduomp_crt_sqrtl(edgeLengthSquared);
         if (edgeLength < CM_WINDING_CLIP_EPSILON) {
             Com_Error(ERR_DROP,
                       "\x15" "CheckWinding: degenerate edge");

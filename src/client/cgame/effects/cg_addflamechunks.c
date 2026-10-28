@@ -25,6 +25,7 @@
 // 0x74-byte frame are i386 calling-convention plumbing, not source behavior.
 
 #include "client/cgame/common/native_power.h"
+#include "compat/crt/sqrt_compat.h"
 #include "client/cgame/client_recovered.h"
 #include "client/cgame/globals.h"
 #include "compat/coduo_native_x87.h"
@@ -143,7 +144,7 @@ void CG_AddFlameChunks(flameChunk_t *ownerChunk)
              * sqrt helper RAW in st0 (no float store of the argument), so the
              * argument must not round to float: sqrtl on the 80-bit chain, one
              * float rounding at the result store ([ESP+0x1c]). */
-            float distToView = (float)coduo_x87_sqrtl(
+            float distToView = (float)coduomp_crt_sqrtl(
                 (long double)vz * vz +
                 (long double)vy * vy +
                 (long double)vx * vx);
@@ -244,7 +245,7 @@ void CG_AddFlameChunks(flameChunk_t *ownerChunk)
                     /* Square sum passed RAW in st0 to the CRT sqrt helper
                      * (0x300275b2, no argument store), one float rounding at
                      * the result store. */
-                    float sepLen = (float)coduo_x87_sqrtl(
+                    float sepLen = (float)coduomp_crt_sqrtl(
                         (long double)sz * sz +
                         (long double)sy * sy +
                         (long double)sx * sx);

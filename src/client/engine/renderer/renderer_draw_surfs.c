@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "backend.h"
 
 #include "../client/debug_lines.h"
@@ -49,7 +50,7 @@ float R_GetLodDist(const trRefEntity_t *entity)
     /* The PE accumulates Z, then Y, then X on the x87 stack without a
      * binary32 spill before the square root. It rounds the distance before
      * applying scale/bias, then rounds again before the optional division. */
-    lodDistance = (float)sqrtl(
+    lodDistance = (float)coduomp_crt_sqrtl(
         ((long double)delta[2] * delta[2] +
          (long double)delta[1] * delta[1]) +
         (long double)delta[0] * delta[0]);

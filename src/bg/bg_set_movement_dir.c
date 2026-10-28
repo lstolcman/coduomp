@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "bg_pmove.h"
 
 #include "compat/coduo_fp_conversion.h"
@@ -26,7 +27,7 @@ enum {
  * Linux game retains the same prone, ladder, displacement, backpedal, clamp,
  * signed-byte, and zero-result decisions at 0x00023f62..0x000242b1.  Its only
  * material arithmetic difference here is the displacement length: Windows
- * applies FSQRT directly to the live z+y+x x87 sum, whereas Linux stores its
+ * passes the live z+y+x x87 sum to the CRT square root, whereas Linux stores its
  * x+y+z sum as binary64 for glibc sqrt and then stores the result as binary32.
  */
 void PM_SetMovementDir(void)
@@ -86,7 +87,7 @@ void PM_SetMovementDir(void)
         }
 
         float distance;
-        distance = (float)sqrtl(
+        distance = (float)coduomp_crt_sqrtl(
             ((long double)displacement[2] *
                  (long double)displacement[2] +
              (long double)displacement[1] *

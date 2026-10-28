@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "q_math.h"
 
 #include "compat/coduo_native_x87.h"
@@ -38,7 +39,7 @@
               (long double)(scale)) /                                       \
              (long double)Q_DIRECTION_PI))
 #define Q_DIRECTION_HORIZONTAL(x, y)                                        \
-    ((float)coduo_x87_sqrtl((long double)(x) * (long double)(x) +          \
+    ((float)coduomp_crt_sqrtl((long double)(x) * (long double)(x) +          \
                             (long double)(y) * (long double)(y)))
 #define Q_DIRECTION_WRAP(value)                                             \
     ((float)((long double)(value) + 360.0L))

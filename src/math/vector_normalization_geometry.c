@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "q_math.h"
 
 #include "compat/coduo_int32_bits.h"
@@ -107,7 +108,7 @@ float VectorNormalize2D(vec2_t vector)
     /* The squared sum has one binary32 store, after both products and the sum. */
     lengthSquared = (float)((WIDE_FLOAT)vector[0] * (WIDE_FLOAT)vector[0] +
                             (WIDE_FLOAT)vector[1] * (WIDE_FLOAT)vector[1]);
-    length = (float)sqrt((double)lengthSquared);
+    length = (float)coduomp_crt_sqrtl(lengthSquared);
     if (length != 0.0f) {
         const float inverseLength = 1.0f / length;
 
@@ -127,7 +128,7 @@ float VectorNormalize(vec3_t vector)
     lengthSquared = (float)(((long double)vector[0] * (long double)vector[0] +
                              (long double)vector[1] * (long double)vector[1]) +
                             (long double)vector[2] * (long double)vector[2]);
-    length = (float)sqrt((double)lengthSquared);
+    length = (float)coduomp_crt_sqrtl(lengthSquared);
     if (length != 0.0f) {
         const float inverseLength = 1.0f / length;
 
@@ -147,7 +148,7 @@ float VectorNormalize4D(vec4_t vector)
                               (WIDE_FLOAT)vector[1] * (WIDE_FLOAT)vector[1]) +
                              (WIDE_FLOAT)vector[2] * (WIDE_FLOAT)vector[2]) +
                             (WIDE_FLOAT)vector[3] * (WIDE_FLOAT)vector[3]);
-    length = (float)sqrt((double)lengthSquared);
+    length = (float)coduomp_crt_sqrtl(lengthSquared);
     if (length != 0.0f) {
         const float inverseLength = 1.0f / length;
 
@@ -221,7 +222,7 @@ float VectorNormalize2(const vec3_t input, vec3_t output)
     lengthSquared = (float)(((long double)input[0] * (long double)input[0] +
                              (long double)input[1] * (long double)input[1]) +
                             (long double)input[2] * (long double)input[2]);
-    length = (float)sqrt((double)lengthSquared);
+    length = (float)coduomp_crt_sqrtl(lengthSquared);
     if (length != 0.0f) {
         const float inverseLength = 1.0f / length;
 

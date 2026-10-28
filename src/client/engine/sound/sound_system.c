@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "sound_system.h"
 #include "audio_backend_api.h"
 
@@ -3777,7 +3778,7 @@ int32_t MSS_StartAlias3DSample(int32_t *outChannelIndex,
         listenerDelta[component] =
             mss_listenerOrigin[component] - position[component];
     }
-    const float distance = (float)sqrtl(
+    const float distance = (float)coduomp_crt_sqrtl(
         ((long double)listenerDelta[2] * listenerDelta[2] +
          (long double)listenerDelta[1] * listenerDelta[1]) +
         (long double)listenerDelta[0] * listenerDelta[0]);
@@ -5162,7 +5163,7 @@ void MSS_Update3DChannel(int32_t channelIndex)
         listenerDelta[component] =
             mss_listenerOrigin[component] - position[component];
     }
-    const float distance = (float)sqrtl(
+    const float distance = (float)coduomp_crt_sqrtl(
         ((long double)listenerDelta[2] * listenerDelta[2] +
          (long double)listenerDelta[1] * listenerDelta[1]) +
         (long double)listenerDelta[0] * listenerDelta[0]);

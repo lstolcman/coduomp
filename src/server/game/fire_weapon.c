@@ -5,6 +5,7 @@
  * 4d2391c10e234559ace294fb69d96741cad522653c361f13f626f4dc1891acb7
  */
 
+#include "compat/crt/sqrt_compat.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -623,7 +624,12 @@ void CalcMuzzlePoint(gentity_t *ent, float *muzzlePoint)
         /* This caller inlines division by 255 before scaling the phase;
          * the out-of-line BG_GetBobCycle uses a rounded reciprocal instead. */
         bobCycle = (float)(((long double)(uint8_t)client->ps.bobCycle / MUZZLE_BOB_CYCLE_DIVISOR) * MUZZLE_BOB_PHASE_TWO_PI + MUZZLE_BOB_PHASE_TWO_PI);
-        speed = BG_GetSpeed(&client->ps, level.time);
+        /* This inlined speed selection calls the CRT, whereas BG_GetSpeed's
+         * standalone body uses an inline FSQRT. Its result rounds to float. */
+        speed = (client->ps.playerStateFlags & PMF_LADDER) != 0
+            ? (float)BG_GetSpeed(&client->ps, level.time)
+            : (float)coduomp_crt_sqrtl((WIDE_FLOAT)client->ps.velocity[0] * client->ps.velocity[0] +
+                                     (WIDE_FLOAT)client->ps.velocity[1] * client->ps.velocity[1]);
 
         /* Both original callers store the vertical bob as binary32 before
          * adding it to the muzzle height. */

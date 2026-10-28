@@ -1,3 +1,4 @@
+#include "compat/crt/sqrt_compat.h"
 #include "backend.h"
 #include "renderer_gpu_profile.h"
 
@@ -416,9 +417,9 @@ int32_t R_FurthestReplaceableRefEntity(void)
             tr.refdef.vieworg[1] - sceneEntity->e.origin[1];
         difference[2] =
             tr.refdef.vieworg[2] - sceneEntity->e.origin[2];
-        distance = sqrtf(difference[2] * difference[2] +
-                         difference[1] * difference[1] +
-                         difference[0] * difference[0]);
+        distance = (float)coduomp_crt_sqrtl(
+            ((WIDE_FLOAT)difference[2] * difference[2] + (WIDE_FLOAT)difference[1] * difference[1]) +
+            (WIDE_FLOAT)difference[0] * difference[0]);
 
         if (distance > furthestDistance) {
             furthestDistance = distance;
