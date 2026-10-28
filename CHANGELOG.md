@@ -19,10 +19,17 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Favorites retain their last known or user-supplied hostname when a refresh times out instead of falling back to the numeric address.
 - A server whose public address changes is dropped from the global list after three master responses no longer report the old address, instead of keeping it for the rest of the session.
 - A failed master lookup, an oversize master query, or a master that never answers no longer leaves the internet browser stuck on its waiting state; the wait is released and the cached list is shown.
+- The Filter Servers popup offers **All**, **No** and **Yes** for empty, full, password, no-password, pure and dedicated, matching the rows that already had an explicit All choice.
 
 ### Mods/Server
 
-- The dedicated server startup banner reports the build date and time plus the source revision (`git describe`, with `-dirty` when the working tree has uncommitted changes) embedded at build time.
+- The dedicated server startup banner reports the build date and time plus the source revision (`git describe`, with `-dirty` when the working tree has uncommitted changes) embedded at build time. The main-menu footer shows the same revision and date while keeping the network-compatible `1.51` version.
+- The dedicated server mounts every supported localized pak, so a non-English installation finds `default_mp.cfg` instead of failing at startup.
+- Windows servers treat the `WSAECONNRESET` status from a departed client as a quiet receive, instead of logging a network error every frame until the client times out.
+- Server download caches are keyed by the server address and port plus its advertised name, so two servers that share the default `CoDHost` name no longer overwrite each other's cached files.
+- Redirect downloads insert exactly one separator after `sv_wwwBaseURL` and convert backslashes in the virtual pak path.
+- The MinGW server reserves the stock 8 MiB stack and links zlib statically, so map start no longer overflows the default 2 MiB stack and the package does not need an external `zlib1.dll`.
+- Server configuration samples are available in `misc/`: complete per-gametype configs, a general server, and optional gameplay, weapons, physics and map-rotation includes.
 
 - Attached models reload correctly when detached
 - Per-map `<map>_<gametype>.cfg` files load by the visible map name even when the map asset name contains color escapes.
