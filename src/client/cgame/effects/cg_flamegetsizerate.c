@@ -25,7 +25,7 @@
 // sites that FLD a literal base then FLD a variable exponent, e.g. pow(10.0,x)
 // and pow(0.1,x) in 0x3004d060). Expressed here as the source-level pow().
 
-#include "compat/libm/coduo_wide_math.h"
+#include "client/cgame/common/native_power.h"
 #include "client/cgame/client_recovered.h"
 #include <math.h>
 
@@ -72,11 +72,11 @@ long double CG_FlameGetSizeRate(flameChunk_t *f /* ESI */)
         // _CIpow leaves its result raw in st(0), which FADD ST0,ST0 (30023bbd)
         // then consumes; the sum stays in st through the FADDP at 30023be7 -- the
         // caller rounding on this path is the FSTP double [ESP+0xc] at 30023be9
-        // (into A). The shared provider receives the live base, then applies
-        // the CRT's own input stores and CPU dispatch. Its wide result retains
-        // the x87 return or promotes the already-rounded SSE2 return.
+        // (into A). The native power adapter receives the live base. Its result
+        // follows the host library and ABI; the following arithmetic stays wide
+        // through the explicit double store.
         long double cubed =
-            coduomp_math_powl((long double)f->driftSpeed * CG_FLAME_INPUT_SCALE, 3.0L);
+            cgame_compat_native_powl((long double)f->driftSpeed * CG_FLAME_INPUT_SCALE, 3.0L);
 
         // 30023bbd: FADD ST0,ST0 => 2 * cubed.
         long double doubled = cubed + cubed;
@@ -119,9 +119,9 @@ long double CG_FlameGetSizeRate(flameChunk_t *f /* ESI */)
     // 30023c05..30023c1e: result = pow(C, 2.0) * B + B / A.
     // pow(C,2.0): C raw in ST(1), 2.0 (0x3007bde8) in ST(0); _CIpow leaves the
     // result raw in ST(0), FMUL B and FADDP run on it 80-bit, and the RET hands
-    // it back unrounded (no store in the tail). The shared provider owns the
-    // CRT's input stores and dispatch; long double keeps its selected result
-    // and the following arithmetic live through the source return boundary.
-    return coduomp_math_powl(C, 2.0L) * (long double)B +
+    // it back unrounded (no store in the tail). Power intentionally follows the
+    // host library; long double keeps the native result and the following
+    // arithmetic wide through the source return boundary.
+    return cgame_compat_native_powl(C, 2.0L) * (long double)B +
            (long double)B / (long double)A;
 }

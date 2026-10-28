@@ -146,7 +146,7 @@
 //   double @0x3007bcf0 = 0.0
 //   .data  @0x30450148 = a float global (cg_flameSpawnScale_30450148, refs=1)
 
-#include "compat/libm/coduo_wide_math.h"
+#include "client/cgame/common/native_power.h"
 #include "client/cgame/client_recovered.h"
 #include "client/cgame/globals.h"
 #include "compat/coduo_native_x87.h"
@@ -533,7 +533,7 @@ void CG_EmitPlayerFlameChunks(vec3_t viewAngles, centity_t *cent, vec3_t flashOr
              * st0 result takes FMUL 0.0f then FADD 1.0f, with a single FSTP float
              * to the alpha slot at 0x300245bc -- powl keeps the base (operand
              * widened) and result 80-bit, and the lone (float) narrows once. */
-            alpha = (float)(coduomp_math_powl(((long double)n + 1.0f) * 0.5f, 0.5L)
+            alpha = (float)(cgame_compat_native_powl(((long double)n + 1.0f) * 0.5f, 0.5L)
                             * 0.0f + 1.0f);
         }
     }
@@ -763,7 +763,7 @@ void CG_EmitPlayerFlameChunks(vec3_t viewAngles, centity_t *cent, vec3_t flashOr
          * the raw result takes FMUL 0.5f and one FSTP float to [0x60] -- powl
          * keeps base+result 80-bit, (float) narrows once, rand() feeds FILD
          * directly (no (float) round). */
-        const float half = (float)(coduomp_math_powl(
+        const float half = (float)(cgame_compat_native_powl(
             (long double)coduo_crt_rand() *
                 (long double)3.0517578125e-05f,
             1.0L) * (long double)0.5f); /* [0x60] temp (0x3007bce8) */

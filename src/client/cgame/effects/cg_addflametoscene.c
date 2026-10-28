@@ -5,7 +5,7 @@
 // The same-module CG_AddFlameSpriteToScene name describes this routine too; the
 // shorter name is retained because its reconstructed caller already uses it.
 
-#include "compat/libm/coduo_wide_math.h"
+#include "client/cgame/common/native_power.h"
 #include "../client_recovered.h"
 #include "../globals.h"
 
@@ -108,7 +108,7 @@ void CG_AddFlameToScene(flameChunk_t *chunk, float animationFraction,
      * base (operand widened) and the result 80-bit; a (float)/double pow would
      * round where the DLL does not. */
     const int32_t colorLevel = coduo_fp_to_i32_extended(
-        coduomp_math_powl(1.0f - (long double)lateLife * 2.0f, 1.0L) * 80.0f + 20.0f);
+        cgame_compat_native_powl(1.0f - (long double)lateLife * 2.0f, 1.0L) * 80.0f + 20.0f);
 
     uint8_t rgba[4];
     if (chunk->kind == FLAME_KIND_SMOKE) {
@@ -369,7 +369,7 @@ void CG_AddFlameToScene(flameChunk_t *chunk, float animationFraction,
          * widens the base OPERAND and keeps the result 80-bit (a double pow
          * base/return would round where the DLL does not). */
         const long double smokeDensity =
-            coduomp_math_powl((long double)chunk->smokeDensityRate * 0.0071428572f, 1.0L) + 0.5;
+            cgame_compat_native_powl((long double)chunk->smokeDensityRate * 0.0071428572f, 1.0L) + 0.5;
         /* 0x300271a3..0x30027237: the lift is recomputed for every vertex as
          * ONE unstored chain whose only rounding is the verts[i].z store:
          * (clamped * 2.5f) FMULP (early * 6.6666665f), then *halfExtent,

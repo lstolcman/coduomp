@@ -68,7 +68,7 @@
 // returns [0,32767], so rand()/32768.0f is a uniform [0,1) fraction; the idiom
 // `2*(rand/32768) - 1` maps it to [-1,1).  The m32 constant at c0d8 is 900.0f.
 
-#include "compat/libm/coduo_wide_math.h"
+#include "client/cgame/common/native_power.h"
 #include <math.h>       /* fabs: direct C form of the inline x87 FABS (d9 e1) in the jitter block */
 #include "client/cgame/globals.h"
 #include "client/cgame/client_recovered.h"
@@ -221,7 +221,7 @@ void CG_FireFlameChunks(void)
                      * DOUBLE (double)0.8f (0x3007c3e0=0x3FE99999A0000000); (long double)0.8f
                      * preserves exactly that value (0.8f widens exact). Result IS rounded to
                      * float (FSTP m32 @0x30027ed3), so the single (float) narrowing stays. */
-                    float curve = (float)coduomp_math_powl(curveBase, (long double)0.8f);
+                    float curve = (float)cgame_compat_native_powl(curveBase, (long double)0.8f);
                     /* 0x30027ed3..0x30027ee9: t = curve + (1.0f - field_e8), single. */
                     float t = curve + (1.0f - cur->lifeFraction);
                     /* 0x30027eed..0x30027f1c: field_148 = clamp01(t) with the two-sided
@@ -363,7 +363,7 @@ void CG_FireFlameChunks(void)
                                             float rf_ = (float)coduo_crt_rand();                                  \
                                             long double a_ = (2.0f * (rf_ / FLAME_RAND_DIVISOR)         \
                                                               - 1.0f) * 0.15f;                          \
-                                            long double p_ = coduomp_math_powl(1.0L - cur->lifeFraction, 3.0L); \
+                                            long double p_ = cgame_compat_native_powl(1.0L - cur->lifeFraction, 3.0L); \
                                             (dst) = (a_ + p_ * 1.5L                                      \
                                                      - ((long double)cur->driftSpeed / 900.0f) * 0.0f)   \
                                                     * (long double)(double)0.3f; /* c3d8 */               \
@@ -512,7 +512,7 @@ void CG_FireFlameChunks(void)
                                              * slot (FSTP/FLD m32 @0x30028488) before the
                                              * multiply — the float temp is load-bearing. */
                                             {
-                                                float powF = (float)coduomp_math_powl(
+                                                float powF = (float)cgame_compat_native_powl(
                                                     1.0L - cur->lifeFraction, 0.75L);
                                                 child->spawnScale = powF * 0.5f + 0.1f;
                                             }
@@ -550,7 +550,7 @@ void CG_FireFlameChunks(void)
                                              * slot (FSTP/FLD m32 @0x30028597) before the add —
                                              * the float temp is load-bearing. */
                                             {
-                                                float powF = (float)coduomp_math_powl(
+                                                float powF = (float)cgame_compat_native_powl(
                                                     1.0L - cur->lifeFraction, 0.75L);
                                                 child->spawnScale = (powF + 1.0f) * 0.5f;
                                             }
@@ -648,9 +648,9 @@ void CG_FireFlameChunks(void)
                                          * (no store), so each statement is ONE rounding — a
                                          * double temp would insert a rounding the DLL lacks. */
                                         child->spawnTime = child->spawnTime
-                                            - (coduomp_math_powl((long double)cur->lifeFraction, 0.5L) + 1.0) * sizeDelta; /* 0x30028884; base FLD m32 @0x30028869, result raw (FADD @0x3002887a) */
+                                            - (cgame_compat_native_powl((long double)cur->lifeFraction, 0.5L) + 1.0) * sizeDelta; /* 0x30028884; base FLD m32 @0x30028869, result raw (FADD @0x3002887a) */
                                         child->endTime = child->endTime
-                                            - (coduomp_math_powl((long double)cur->lifeFraction, 0.5L) + 1.0) * sizeDelta; /* 0x300288a5; base FLD m32 @0x3002888a, result raw (FADD @0x3002889b) */
+                                            - (cgame_compat_native_powl((long double)cur->lifeFraction, 0.5L) + 1.0) * sizeDelta; /* 0x300288a5; base FLD m32 @0x3002888a, result raw (FADD @0x3002889b) */
                                     }
                                 }
 
@@ -695,13 +695,13 @@ void CG_FireFlameChunks(void)
                                          * FADDP/FADDP/FMULP/FMUL run on to the single
                                          * FSTP float [EBP+0xa8] @0x30028a45 — ONE rounding.
                                          * All operands are `float ptr`, incl. -2.25f (c380). */
-                                        float pInv = (1.0f - (float)coduomp_math_powl(
+                                        float pInv = (1.0f - (float)cgame_compat_native_powl(
                                                           (long double)cur->driftSpeed / 900.0f, 2.0L)
                                                           + 1.0f) * 0.0f;                     /* [esp+0x14] */
                                         float rf = (float)coduo_crt_rand();
-                                        float radiusPow = (float)coduomp_math_powl(
+                                        float radiusPow = (float)cgame_compat_native_powl(
                                             (long double)child->radius / 290.0f, 2.0L);
-                                        float lifePow = (float)coduomp_math_powl(
+                                        float lifePow = (float)cgame_compat_native_powl(
                                             (long double)cur->lifeFraction, 1.0L);
                                         long double acc =
                                             (long double)rf / FLAME_RAND_DIVISOR * 3.0f + pInv;
@@ -724,7 +724,7 @@ void CG_FireFlameChunks(void)
                                          * built in st(0), and FMULP @0x30028aae feeds the single
                                          * FSTP float [EBP+0x60] @0x30028ab0 — ONE rounding for the lot. */
                                         float rf = (float)coduo_crt_rand();
-                                        float powF = (float)coduomp_math_powl(
+                                        float powF = (float)cgame_compat_native_powl(
                                             1.0L - cur->lifeFraction, 5.0L);
                                         long double left =
                                             ((long double)rf / FLAME_RAND_DIVISOR) * 0.0
@@ -748,7 +748,7 @@ void CG_FireFlameChunks(void)
                                              * @0x30028ae4/ae8) — a double `g` would round twice.
                                              * After the reload it is ONE chain to the single
                                              * FSTP float [EBP+0xe4] @0x30028afe. */
-                                            float g = (float)coduomp_math_powl(1.0L - cur->lifeFraction, 4.0L);
+                                            float g = (float)cgame_compat_native_powl(1.0L - cur->lifeFraction, 4.0L);
                                             child->radius = (1.0f - g) * 20.0f      /* be04 */
                                                               + child->radius;
                                         }
@@ -778,7 +778,7 @@ void CG_FireFlameChunks(void)
                                     /* 0x30028b80..0x30028bab: field_148 =
                                      *   pow(1.0f-parent->lifeFraction, 2.0(bde8))*0.65f(c1fc) + 0.35f(c0e4). */
                                     {
-                                        float powF = (float)coduomp_math_powl(
+                                        float powF = (float)cgame_compat_native_powl(
                                             1.0L - cur->lifeFraction, 2.0L);
                                         child->spawnScale = (float)(
                                             (long double)powF * 0.65f + 0.35f);
@@ -816,7 +816,7 @@ void CG_FireFlameChunks(void)
                                     float gateRand = (float)coduo_crt_rand();
                                     long double gateThreshold =
                                         (long double)gateRand / FLAME_RAND_DIVISOR;
-                                    float gate = (float)coduomp_math_powl(
+                                    float gate = (float)cgame_compat_native_powl(
                                         (long double)cur->driftSpeed / 900.0f, 2.0L);
                                     if ((long double)gate * w3c * w4c > gateThreshold) {
                                         int32_t smokeSeed = coduo_crt_rand() % 6;   /* 0x30028cb7 idiv 6 -> [esp+0x18] */

@@ -155,8 +155,8 @@ widen an expression computed entirely from narrower operands; existing casts
 and explicit arithmetic boundaries determine which operations are extended.
 
 The shared C math layer (`src/compat/libm/coduo_wide_math.h`) reconstructs
-arithmetic cores from the original x87 instructions and the shared CRT power
-provider. Water log/exp and flame power callers use it on every compiler.
+arithmetic cores from the original x87 instructions and exposes the shared CRT
+power provider. Water log/exp callers use it on every compiler.
 C expresses the arithmetic, domain
 checks, exponent splitting, and power sign handling; the portability header
 contains only hardware instruction and control-word adapters. The clang-cl
@@ -173,9 +173,16 @@ reproduce the complete original CRT's exception handling.
 Windows APIs and dependencies keep their normal Microsoft ABI; the SDK is
 not a general 80-bit long-double runtime.
 
-Power uses `src/compat/crt/pow_compat.c`, including in `RoundFloat` and vehicle
-calculations. On hosts with a native x87 core, SSE2-capable CPUs select the
-table algorithm except for AuthenticAMD effective family 15. Selection also
+CG_ flame and vehicle-owner-icon power calls use the native host library through
+`src/client/cgame/common/native_power.h`: `powl` on native long-double ABIs and
+`pow` on the Microsoft CRT's binary64 ABI, including clang-cl. This intentional
+master customization accepts host power results and error behavior, including
+in flame simulation that feeds damage checks. Surrounding wide expressions,
+explicit float/double stores, and integer conversions remain in place.
+
+Shared power in `RoundFloat` and server vehicle calculations uses
+`src/compat/crt/pow_compat.c`. On hosts with a native x87 core, SSE2-capable CPUs
+select the table algorithm except for AuthenticAMD effective family 15. Selection also
 requires all MXCSR and x87 exceptions to be masked. The supported x86 operating
 systems provide SSE state management. The table route stores both inputs and
 the result as binary64, preserves each arithmetic rounding boundary, and uses
