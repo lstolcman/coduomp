@@ -11,11 +11,13 @@ Supported fixes:
     retrieval   Re-arm a RETRIEVAL objective when it is used before the match
                 starts. The stock script returns from retrieval_think(), which
                 permanently disables the objective after one early use.
+    polish      Replace the invalid Polish key token [{+aktywacja}] with the
+                engine command [{+activate}] in the shipped localization.
 
 Usage:
 
     tools/patch-coduo-game-data.py --game-root /path/to/coduo
-    tools/patch-coduo-game-data.py --game-root /path/to/coduo --fix retrieval --apply
+    tools/patch-coduo-game-data.py --game-root /path/to/coduo --apply --backup
 
 The game root is the directory that contains Main/ and uo/. Downloaded server
 data below server-cache/ is intentionally left untouched.
@@ -36,7 +38,16 @@ RETRIEVAL_NEW = (
     b'\t\t\twait 0.5;\r\n\t\t\tcontinue;\r\n\t\t}'
 )
 
-FIX_NAMES = ("retrieval",)
+POLISH_BAD = b"[{+aktywacja}]"
+POLISH_GOOD = b"[{+activate}]"
+POLISH_ENTRY_COUNTS = {
+    "re.str": 2,
+    "gmi_bas.str": 2,
+    "gmi_game.str": 2,
+    "gmi_vehicle.str": 10,
+}
+
+FIX_NAMES = ("retrieval", "polish")
 SKIP_DIRECTORIES = {"server-cache"}
 
 
@@ -58,47 +69,84 @@ def iter_archives(game_root: str):
                 yield os.path.join(dirpath, filename)
 
 
-def scan_archive(path: str):
-    """Return (entry names, target entry states)."""
-    targets = []
-    with zipfile.ZipFile(path, "r") as archive:
-        names = archive.namelist()
-        for info in archive.infolist():
-            if info.is_dir():
-                continue
-            if not info.filename.lower().endswith("gametypes/re.gsc"):
-                continue
-            data = archive.read(info)
-            old_count = data.count(RETRIEVAL_OLD)
-            new_count = data.count(RETRIEVAL_NEW)
-            targets.append((info.filename, old_count, new_count))
-    return names, targets
-
-
-def patch_archive(path: str, apply: bool, backup: bool):
-    """Patch one archive. Returns 'patched', 'planned', or None."""
-    names, targets = scan_archive(path)
-    if not targets:
-        return None
-
-    rel = path
-    pending = []
-    for entry, old_count, new_count in targets:
+def plan_retrieval(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        if info.is_dir() or not info.filename.lower().endswith(
+            "gametypes/re.gsc"
+        ):
+            continue
+        data = archive.read(info)
+        old_count = data.count(RETRIEVAL_OLD)
+        new_count = data.count(RETRIEVAL_NEW)
         if new_count == 1 and old_count == 0:
-            print(f"  {rel}: {entry}: already patched")
             continue
         if old_count != 1:
             raise ValueError(
-                f"{rel}: {entry}: expected exactly one RETRIEVAL guard, "
-                f"found {old_count} (already patched: {new_count})"
+                f"{label}: {info.filename}: expected exactly one RETRIEVAL "
+                f"guard, found {old_count} (already patched: {new_count})"
             )
-        pending.append(entry)
-        print(f"  {rel}: {entry}: will replace the early-return guard")
+        replacements[info.filename] = data.replace(
+            RETRIEVAL_OLD, RETRIEVAL_NEW, 1
+        )
+    return replacements
 
-    if not pending:
+
+def plan_polish(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        lower = info.filename.lower()
+        if info.is_dir() or not lower.startswith("localizedstrings/polish/"):
+            continue
+        if not lower.endswith(".str"):
+            continue
+        data = archive.read(info)
+        bad_count = data.count(POLISH_BAD)
+        if bad_count == 0:
+            continue
+
+        base = lower.rsplit("/", 1)[-1]
+        expected = POLISH_ENTRY_COUNTS.get(base)
+        if expected is None:
+            raise ValueError(
+                f"{label}: {info.filename}: unexpected file with the invalid "
+                f"Polish key token ({bad_count} occurrences)"
+            )
+        if bad_count != expected:
+            raise ValueError(
+                f"{label}: {info.filename}: expected {expected} invalid "
+                f"Polish key tokens, found {bad_count}"
+            )
+        replacements[info.filename] = data.replace(POLISH_BAD, POLISH_GOOD)
+    return replacements
+
+
+PLANNERS = {
+    "retrieval": (
+        "RETRIEVAL guard fix",
+        plan_retrieval,
+    ),
+    "polish": (
+        "Polish use-key token fix",
+        plan_polish,
+    ),
+}
+
+
+def patch_archive(path: str, fix: str, apply: bool, backup: bool):
+    """Apply one fix to one archive. Returns 'patched', 'planned', or None."""
+    _, planner = PLANNERS[fix]
+    with zipfile.ZipFile(path, "r") as archive:
+        replacements = planner(archive, path)
+        names = archive.namelist()
+
+    if not replacements:
         return None
+
+    for entry in sorted(replacements):
+        print(f"  {path}: {entry}: will patch")
     if not apply:
-        print(f"  {rel}: dry run, not written")
+        print(f"  {path}: dry run, not written")
         return "planned"
 
     before = sha256_file(path)
@@ -106,7 +154,7 @@ def patch_archive(path: str, apply: bool, backup: bool):
         backup_path = path + ".bugfix-backup"
         if not os.path.exists(backup_path):
             shutil.copy2(path, backup_path)
-            print(f"  {rel}: backup {backup_path}")
+            print(f"  {path}: backup {backup_path}")
 
     temporary = path + ".bugfix-tmp"
     try:
@@ -123,35 +171,22 @@ def patch_archive(path: str, apply: bool, backup: bool):
 
                 if info.is_dir():
                     destination.writestr(new_info, b"")
-                    continue
-                if info.filename not in pending:
+                elif info.filename in replacements:
+                    destination.writestr(new_info, replacements[info.filename])
+                else:
                     with source.open(info, "r") as src, destination.open(
                         new_info, "w"
                     ) as dst:
                         shutil.copyfileobj(src, dst, 1 << 20)
-                    continue
-
-                data = source.read(info)
-                if data.count(RETRIEVAL_OLD) != 1:
-                    raise ValueError(
-                        f"{rel}: {info.filename}: guard changed during rewrite"
-                    )
-                destination.writestr(
-                    new_info, data.replace(RETRIEVAL_OLD, RETRIEVAL_NEW, 1)
-                )
 
         with zipfile.ZipFile(temporary, "r") as check:
             bad = check.testzip()
             if bad is not None:
-                raise ValueError(f"{rel}: CRC failure in {bad}")
-            for entry in pending:
-                data = check.read(entry)
-                if data.count(RETRIEVAL_NEW) != 1 or RETRIEVAL_OLD in data:
-                    raise ValueError(
-                        f"{rel}: {entry}: post-write verification failed"
-                    )
+                raise ValueError(f"{path}: CRC failure in {bad}")
             if check.namelist() != names:
-                raise ValueError(f"{rel}: entry list changed during rewrite")
+                raise ValueError(f"{path}: entry list changed during rewrite")
+            if planner(check, path):
+                raise ValueError(f"{path}: post-write verification failed")
 
         os.replace(temporary, path)
     finally:
@@ -159,7 +194,7 @@ def patch_archive(path: str, apply: bool, backup: bool):
             os.remove(temporary)
 
     after = sha256_file(path)
-    print(f"  {rel}: patched")
+    print(f"  {path}: patched")
     print(f"    sha256 before: {before}")
     print(f"    sha256 after:  {after}")
     return "patched"
@@ -198,29 +233,33 @@ def main() -> int:
         parser.error(f"{game_root} does not contain a Main/ directory")
 
     requested = tuple(args.fix) if args.fix else FIX_NAMES
-    if requested != ("retrieval",):
-        parser.error("only the retrieval fix is implemented by this revision")
+    archives = list(iter_archives(game_root))
 
-    print("RETRIEVAL guard fix")
-    patched = 0
-    planned = 0
-    for archive in iter_archives(game_root):
-        try:
-            result = patch_archive(archive, args.apply, args.backup)
-            if result == "patched":
-                patched += 1
-            elif result == "planned":
-                planned += 1
-        except (OSError, ValueError, zipfile.BadZipFile) as error:
-            print(f"error: {error}", file=sys.stderr)
-            return 1
+    exit_code = 0
+    for fix in requested:
+        title, _ = PLANNERS[fix]
+        print(title)
+        patched = 0
+        planned = 0
+        for archive in archives:
+            try:
+                result = patch_archive(archive, fix, args.apply, args.backup)
+                if result == "patched":
+                    patched += 1
+                elif result == "planned":
+                    planned += 1
+            except (OSError, ValueError, zipfile.BadZipFile) as error:
+                print(f"error: {error}", file=sys.stderr)
+                exit_code = 1
 
-    if planned != 0:
-        print(f"{planned} archive(s) would be changed; rerun with --apply")
-    elif patched == 0:
-        print("no archive needed a change")
-    else:
-        print(f"{patched} archive(s) patched")
+        if planned != 0:
+            print(f"{planned} archive(s) would be changed; rerun with --apply")
+        elif patched == 0:
+            print("no archive needed a change")
+        else:
+            print(f"{patched} archive(s) patched")
+        if exit_code != 0:
+            return exit_code
     return 0
 
 
