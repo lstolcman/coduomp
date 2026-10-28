@@ -33,6 +33,13 @@ Supported fixes:
                 shellshock parameter files. The name is not one of the 27
                 cg_shock_* parameters the loader accepts, so every load warns
                 that the cvar is unknown and the value is discarded.
+    rconmenuload
+                Restore the menus that the bundled rcon addon's replacement
+                ui_mp/menus.txt drops: the UO multiplayer shoot menu, the
+                PunkBuster popup menus, and the five UO game-type settings
+                menus. Without them the Controls tab loses the UO weapon
+                slots, the PunkBuster join and start prompts never appear, and
+                the Game Type Settings tab does nothing for the UO game types.
 
 Usage:
 
@@ -238,6 +245,35 @@ SHOCK_FIXES = (
     ("scripts/stop.shock", (b'cg_shock_viewKickFadeTime "0"\r\n',)),
 )
 
+# The bundled rcon addon ships a complete replacement of ui_mp/menus.txt. It
+# was written against an older menu list, so it enables the single-player shoot
+# menu instead of the UO multiplayer one and drops three stock groups: the UO
+# multiplayer shoot menu (which adds the smoke grenade, satchel, and binocular
+# weapon slots), the PunkBuster popup menus used by the join and start paths,
+# and five UO game-type settings menus. Every menu named below is present in
+# the retail tree; only the addon's loader list omits it.
+RCON_LOAD_SHOOT_SP = b'\tloadMenu { "ui/options_shoot.menu" }\r\n'
+RCON_LOAD_SHOOT_MP = b'\tloadMenu { "ui_mp/options_shoot.menu" }\r\n'
+RCON_LOAD_SHOOT_SP_OFF = b'//\tloadMenu { "ui/options_shoot.menu" }\r\n'
+RCON_LOAD_MULTI = b'\tloadMenu { "ui_mp/options_multi.menu" }\r\n'
+RCON_LOAD_JOIN = b' \tloadMenu { "ui_mp/joinserver.menu" }\r\n'
+RCON_LOAD_PB = b'\tloadMenu { "ui_mp/pb_popmenus.menu" }\r\n'
+RCON_LOAD_BEL = b'\tloadMenu { "ui_mp/settings_bel.menu" }\t//TEMP\r\n'
+RCON_LOAD_SETTINGS = (
+    b'\tloadMenu { "ui_mp/settings_hq.menu" }\r\n'
+    b'\tloadMenu { "ui_mp/settings_ttdm.menu" }\r\n'
+    b'\tloadMenu { "ui_mp/settings_dom.menu" }\r\n'
+    b'\tloadMenu { "ui_mp/settings_bas.menu" }\r\n'
+    b'\tloadMenu { "ui_mp/settings_ctf.menu" }\r\n'
+)
+RCON_LOAD_SETTINGS_MENUS = (
+    b'\tloadMenu { "ui_mp/settings_hq.menu" }\r\n',
+    b'\tloadMenu { "ui_mp/settings_ttdm.menu" }\r\n',
+    b'\tloadMenu { "ui_mp/settings_dom.menu" }\r\n',
+    b'\tloadMenu { "ui_mp/settings_bas.menu" }\r\n',
+    b'\tloadMenu { "ui_mp/settings_ctf.menu" }\r\n',
+)
+
 FIX_NAMES = (
     "retrieval",
     "polish",
@@ -246,6 +282,7 @@ FIX_NAMES = (
     "polishformat",
     "percentfix",
     "shockcvar",
+    "rconmenuload",
 )
 
 SKIP_DIRECTORIES = {"server-cache"}
@@ -462,6 +499,66 @@ def plan_shock(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
     return replacements
 
 
+def plan_rconmenuload(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        if info.is_dir() or not info.filename.lower().endswith(
+            "ui_mp/menus.txt"
+        ):
+            continue
+        data = archive.read(info)
+        # Only the bundled addon replaces the whole list. The stock files and
+        # the CoD1 patch already load every menu restored here.
+        if b'"ui_mp/scriptmenus/rconmenu.menu"' not in data:
+            continue
+
+        required = (
+            RCON_LOAD_PB,
+            RCON_LOAD_SHOOT_MP,
+            RCON_LOAD_SHOOT_SP_OFF,
+        ) + RCON_LOAD_SETTINGS_MENUS
+        if all(data.count(token) == 1 for token in required):
+            continue
+
+        anchors = (
+            RCON_LOAD_SHOOT_SP,
+            RCON_LOAD_MULTI,
+            RCON_LOAD_JOIN,
+            RCON_LOAD_BEL,
+        )
+        counts = [data.count(anchor) for anchor in anchors]
+        if counts != [1, 1, 1, 1]:
+            raise ValueError(
+                f"{label}: {info.filename}: expected one copy of each rcon "
+                f"menu anchor, found {counts}"
+            )
+        if any(data.count(token) != 0 for token in required):
+            raise ValueError(
+                f"{label}: {info.filename}: rcon menu list is partially "
+                f"patched"
+            )
+
+        data = data.replace(
+            RCON_LOAD_SHOOT_SP, RCON_LOAD_SHOOT_SP_OFF, 1
+        )
+        data = data.replace(
+            RCON_LOAD_MULTI, RCON_LOAD_MULTI + RCON_LOAD_SHOOT_MP, 1
+        )
+        data = data.replace(
+            RCON_LOAD_JOIN, RCON_LOAD_JOIN + RCON_LOAD_PB, 1
+        )
+        data = data.replace(
+            RCON_LOAD_BEL, RCON_LOAD_BEL + RCON_LOAD_SETTINGS, 1
+        )
+        if not all(data.count(token) == 1 for token in required):
+            raise ValueError(
+                f"{label}: {info.filename}: restored menu list does not "
+                f"contain every required entry"
+            )
+        replacements[info.filename] = data
+    return replacements
+
+
 PLANNERS = {
     "retrieval": (
         "RETRIEVAL guard fix",
@@ -490,6 +587,10 @@ PLANNERS = {
     "shockcvar": (
         "dead shellshock view-kick fade entry fix",
         plan_shock,
+    ),
+    "rconmenuload": (
+        "rcon addon menu list fix",
+        plan_rconmenuload,
     ),
 }
 
