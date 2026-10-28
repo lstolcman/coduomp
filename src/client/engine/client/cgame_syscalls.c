@@ -737,18 +737,20 @@ intptr_t CL_CgameSystemCalls(intptr_t *arguments)
         return (intptr_t)strncpy(CG_PTR(char, 1), CG_STRING(2),
                                  CG_SIZE(3));
     case CG_SIN:
-        return FloatAsInt(sinf(
-            CL_CgameSyscallFloatArgument(CG_ARG(1))));
+        /* CoDUOMP.exe RVAs 0x368f..0x3711: inline x87 math consumes
+         * float VM operands and stores the result once as float. */
+        return FloatAsInt((float)coduo_x87_sinl(
+            (long double)CL_CgameSyscallFloatArgument(CG_ARG(1))));
     case CG_COS:
-        return FloatAsInt(cosf(
-            CL_CgameSyscallFloatArgument(CG_ARG(1))));
+        return FloatAsInt((float)coduo_x87_cosl(
+            (long double)CL_CgameSyscallFloatArgument(CG_ARG(1))));
     case CG_ATAN2:
-        return FloatAsInt(atan2f(
-            CL_CgameSyscallFloatArgument(CG_ARG(1)),
-            CL_CgameSyscallFloatArgument(CG_ARG(2))));
+        return FloatAsInt((float)coduo_x87_atan2l(
+            (long double)CL_CgameSyscallFloatArgument(CG_ARG(1)),
+            (long double)CL_CgameSyscallFloatArgument(CG_ARG(2))));
     case CG_SQRT:
-        return FloatAsInt(sqrtf(
-            CL_CgameSyscallFloatArgument(CG_ARG(1))));
+        return FloatAsInt((float)coduo_x87_sqrtl(
+            (long double)CL_CgameSyscallFloatArgument(CG_ARG(1))));
     case CG_FLOOR:
         return FloatAsInt((float)floor(
             (double)CL_CgameSyscallFloatArgument(CG_ARG(1))));

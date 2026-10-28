@@ -1,6 +1,7 @@
 #include "server_game_syscalls.h"
 
 #include "collision/collision_area.h"
+#include "compat/coduo_native_x87.h"
 #include "qcommon/q_bits.h"
 #include "server_game_bridge.h"
 #include "server_game_lifecycle.h"
@@ -589,18 +590,21 @@ intptr_t SV_GameSystemCalls(intptr_t *arguments)
         return (intptr_t)strncpy(SV_PTR(char, 1), SV_STRING(2),
                                  (size_t)(uint32_t)SV_ARG(3));
     case SYSCALL_SIN:
-        return FloatAsInt((float)sin(
-            (double)server_compat_game_syscall_float_argument(SV_ARG(1))));
+        /* CoDUOMP.exe RVAs 0x5df8b..0x5dfd5: float VM operands feed
+         * FSIN/FCOS/FPATAN/FSQRT directly, then one float result store.
+         * These are inline instruction boundaries, not CRT calls. */
+        return FloatAsInt((float)coduo_x87_sinl(
+            (long double)server_compat_game_syscall_float_argument(SV_ARG(1))));
     case SYSCALL_COS:
-        return FloatAsInt((float)cos(
-            (double)server_compat_game_syscall_float_argument(SV_ARG(1))));
+        return FloatAsInt((float)coduo_x87_cosl(
+            (long double)server_compat_game_syscall_float_argument(SV_ARG(1))));
     case SYSCALL_ATAN2:
-        return FloatAsInt((float)atan2(
-            (double)server_compat_game_syscall_float_argument(SV_ARG(1)),
-            (double)server_compat_game_syscall_float_argument(SV_ARG(2))));
+        return FloatAsInt((float)coduo_x87_atan2l(
+            (long double)server_compat_game_syscall_float_argument(SV_ARG(1)),
+            (long double)server_compat_game_syscall_float_argument(SV_ARG(2))));
     case SYSCALL_SQRT:
-        return FloatAsInt((float)sqrt(
-            (double)server_compat_game_syscall_float_argument(SV_ARG(1))));
+        return FloatAsInt((float)coduo_x87_sqrtl(
+            (long double)server_compat_game_syscall_float_argument(SV_ARG(1))));
     case SYSCALL_MATRIX_MULTIPLY:
         MatrixMultiply(SV_PTR(vec3_t, 1), SV_PTR(vec3_t, 2),
                        SV_PTR(vec3_t, 3));
