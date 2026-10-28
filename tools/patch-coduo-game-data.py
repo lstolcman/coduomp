@@ -29,6 +29,10 @@ Supported fixes:
                 Taiwanese vote, timeout, and server-restart messages. A bare
                 percent is not a format marker, so the value is appended after
                 the sentence and the percent sign is displayed.
+    shockcvar   Drop the cg_shock_viewKickFadeTime assignments from the
+                shellshock parameter files. The name is not one of the 27
+                cg_shock_* parameters the loader accepts, so every load warns
+                that the cvar is unknown and the value is discarded.
 
 Usage:
 
@@ -208,6 +212,32 @@ PERCENT_FIXES = (
     ),
 )
 
+# CG_ShellShockLoad parses a .shock file through Com_LoadCvarsFromBuffer,
+# which matches every name against the 27-entry cg_shockParamNames table. A
+# name outside the table is skipped with an "unknown cvar" warning and never
+# takes effect. cg_shock_viewKickFadeTime is absent from the table (the view
+# kick only has cg_shock_viewKickPeriod and cg_shock_viewKickRadius), so the
+# shipped assignment is dead data. Each tuple is (file suffix, lines to remove);
+# a suffix may list a commented mirror of the default block as well.
+SHOCK_FIXES = (
+    ("scripts/default_mp.shock", (b'cg_shock_viewKickFadeTime "3"\r\n',)),
+    ("scripts/death.shock", (b'cg_shock_viewKickFadeTime "0"\r\n',)),
+    ("scripts/default.shock", (b'cg_shock_viewKickFadeTime "3"\r\n',)),
+    (
+        "scripts/default_nomusic.shock",
+        (b'cg_shock_viewKickFadeTime "3"\r\n',),
+    ),
+    (
+        "scripts/groggy.shock",
+        (
+            b'//cg_shock_viewKickFadeTime "3"\r\n',
+            b'cg_shock_viewKickFadeTime "3"\r\n',
+        ),
+    ),
+    ("scripts/pain.shock", (b'cg_shock_viewKickFadeTime "0.3"\r\n',)),
+    ("scripts/stop.shock", (b'cg_shock_viewKickFadeTime "0"\r\n',)),
+)
+
 FIX_NAMES = (
     "retrieval",
     "polish",
@@ -215,6 +245,7 @@ FIX_NAMES = (
     "polishquotes",
     "polishformat",
     "percentfix",
+    "shockcvar",
 )
 
 SKIP_DIRECTORIES = {"server-cache"}
@@ -394,6 +425,43 @@ def plan_percentfix(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
     return replacements
 
 
+def plan_shock(archive: zipfile.ZipFile, label: str) -> dict[str, bytes]:
+    replacements = {}
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        lower = info.filename.lower()
+        group = [
+            lines for suffix, lines in SHOCK_FIXES if lower.endswith(suffix)
+        ]
+        if not group:
+            continue
+        if len(group) != 1:
+            raise ValueError(
+                f"{label}: {info.filename}: matches several .shock entries"
+            )
+        data = archive.read(info)
+        if not any(line in data for line in group[0]):
+            continue
+        for line in group[0]:
+            count = data.count(line)
+            if count == 0:
+                continue
+            if count != 1:
+                raise ValueError(
+                    f"{label}: {info.filename}: expected one occurrence of "
+                    f"{line!r}, found {count}"
+                )
+            data = data.replace(line, b"", 1)
+        if b"cg_shock_viewKickFadeTime" in data:
+            raise ValueError(
+                f"{label}: {info.filename}: unexpected "
+                f"cg_shock_viewKickFadeTime line remains"
+            )
+        replacements[info.filename] = data
+    return replacements
+
+
 PLANNERS = {
     "retrieval": (
         "RETRIEVAL guard fix",
@@ -418,6 +486,10 @@ PLANNERS = {
     "percentfix": (
         "Korean and Taiwanese format marker fix",
         plan_percentfix,
+    ),
+    "shockcvar": (
+        "dead shellshock view-kick fade entry fix",
+        plan_shock,
     ),
 }
 
