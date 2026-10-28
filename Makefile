@@ -85,7 +85,7 @@ LINUX64_PACKAGE_OUTPUT ?= $(BUILD_DIR)/linux/opencoduo-linux-x86_64-$(shell prin
 	client-windows-x86_64-package \
 	server server64 server32 server-engine64 server-engine32 \
 	server-game64 server-game32 server-windows server-windows-i386 \
-	server-windows-i686 check-linux-host check-macos-host \
+	server-windows-i686 server-windows-x86_64 check-linux-host check-macos-host \
 	macos-app macos-package-check macos-zip clean help
 
 all: client
@@ -342,13 +342,13 @@ server-game32: check-linux-host
 	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk \
 		I386_SHARED_BUILD_DIR="$(BUILD_DIR)/game/linux-i386" shared-i386
 
-server-windows: server-windows-i686
+server-windows: server-windows-i686 server-windows-x86_64
 
 server-windows-i386:
 	$(MAKE) $(MAKE_JOBS) -f build-mk/server.mk \
 		CODUO_DISABLE_SERVER_AUTH=$(AUTH_DISABLE) \
 		MINGW32_CC="$(MINGW32_CC)" MINGW32_CXX="$(MINGW32_CXX)" \
-		WINDOWS_DEP_PREFIX="$(WINDOWS_DEP_PREFIX)" \
+		WINDOWS_DEP_PREFIX="$(if $(WINDOWS_DEP_PREFIX),$(WINDOWS_DEP_PREFIX),$(MINGW32_DEP_PREFIX))" \
 		WINDOWS_I386_BUILD_DIR="$(BUILD_DIR)/server/windows-i386" windows-i386
 	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk \
 		MINGW32_CC="$(MINGW32_CC)" \
@@ -358,11 +358,21 @@ server-windows-i686:
 	$(MAKE) $(MAKE_JOBS) -f build-mk/server.mk \
 		CODUO_DISABLE_SERVER_AUTH=$(AUTH_DISABLE) \
 		MINGW32_CC="$(MINGW32_CC)" MINGW32_CXX="$(MINGW32_CXX)" \
-		WINDOWS_DEP_PREFIX="$(WINDOWS_DEP_PREFIX)" \
+		WINDOWS_DEP_PREFIX="$(if $(WINDOWS_DEP_PREFIX),$(WINDOWS_DEP_PREFIX),$(MINGW32_DEP_PREFIX))" \
 		WINDOWS_I686_BUILD_DIR="$(BUILD_DIR)/server/windows-i686" windows-i686
 	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk \
 		MINGW32_CC="$(MINGW32_CC)" \
 		WINDOWS_I686_BUILD_DIR="$(BUILD_DIR)/game/windows-i686" windows-i686
+
+server-windows-x86_64:
+	$(MAKE) $(MAKE_JOBS) -f build-mk/server.mk \
+		CODUO_DISABLE_SERVER_AUTH=$(AUTH_DISABLE) \
+		MINGW64_CC="$(MINGW64_CC)" MINGW64_CXX="$(MINGW64_CXX)" \
+		WINDOWS64_DEP_PREFIX="$(MINGW64_DEP_PREFIX)" \
+		WINDOWS_X86_64_BUILD_DIR="$(BUILD_DIR)/server/windows-x86_64" windows-x86_64
+	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk \
+		MINGW64_CC="$(MINGW64_CC)" \
+		WINDOWS_X86_64_BUILD_DIR="$(BUILD_DIR)/game/windows-x86_64" windows-x86_64
 
 clean:
 	@case "$(abspath $(BUILD_DIR))" in \
@@ -393,7 +403,8 @@ help:
 	  'macOS distribution targets:' \
 	  '  macos-app macos-package-check macos-zip' \
 	  'Server targets:' \
-	  '  server server64 server32 server-windows-i386 server-windows-i686' \
+	  '  server server64 server32 server-windows' \
+	  '  server-windows-i386 server-windows-i686 server-windows-x86_64' \
 	  '  server-engine64 server-engine32 server-game64 server-game32' \
 	  'Options:' \
 	  '  WORKBENCH_DIR=path BUILD_DIR=path JOBS=N AUTH=1|0' \

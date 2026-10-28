@@ -52,7 +52,8 @@ typedef int coduo_socket_receive_count_t;
 #define CODUO_SOCKET_ERROR_RESULT SOCKET_ERROR
 #define CODUO_SOCKET_LAST_ERROR() WSAGetLastError()
 #define CODUO_SOCKET_WOULD_BLOCK WSAEWOULDBLOCK
-#define CODUO_SOCKET_CONNECTION_REFUSED WSAECONNREFUSED
+/* CoDUOMP.exe RVA 0x6cf44..0x6cf54 skips would-block and reset only. */
+#define CODUO_SOCKET_RECEIVE_QUIET_ERROR WSAECONNRESET
 #define CODUO_CLOSE_SOCKET(socketHandle) closesocket((SOCKET)(socketHandle))
 #else
 typedef int32_t coduo_socket_handle_t;
@@ -61,7 +62,7 @@ typedef ssize_t coduo_socket_receive_count_t;
 #define CODUO_SOCKET_ERROR_RESULT (-1)
 #define CODUO_SOCKET_LAST_ERROR() errno
 #define CODUO_SOCKET_WOULD_BLOCK EAGAIN
-#define CODUO_SOCKET_CONNECTION_REFUSED ECONNREFUSED
+#define CODUO_SOCKET_RECEIVE_QUIET_ERROR ECONNREFUSED
 #define CODUO_CLOSE_SOCKET(socketHandle) close(socketHandle)
 #endif
 
@@ -191,7 +192,7 @@ qboolean Sys_GetPacket(netadr_t *from, msg_t *msg)
             int socketError = CODUO_SOCKET_LAST_ERROR();
 
             if (socketError != CODUO_SOCKET_WOULD_BLOCK &&
-                socketError != CODUO_SOCKET_CONNECTION_REFUSED) {
+                socketError != CODUO_SOCKET_RECEIVE_QUIET_ERROR) {
                 /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
                 Com_Printf("NET_GetPacket: %s\n", NET_ErrorString());
             }
