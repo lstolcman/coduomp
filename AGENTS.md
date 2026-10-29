@@ -32,7 +32,16 @@
 - `master` descends from `stock` and owns the improved product's intentional
   non-stock behavior: ordinary original-game bug fixes, features, changed
   defaults or limits, presentation changes, optional compatibility, and general
-  optimizations.
+  runtime optimizations.
+- Build tooling must be kept the same on `stock` and `master`: Make/CMake
+  mechanisms, parallelism and other build defaults, toolchain and dependency
+  handling, packaging, build metadata, and documentation for shared build
+  behavior. Build-performance improvements belong in both branches. Preserve
+  each branch's intended product settings and source membership when sharing
+  tooling. Implement, validate, and commit tooling changes on `stock` first,
+  then merge `stock` forward into `master` and validate both in the same work
+  cycle. Tooling work is incomplete while present on only one branch; it is
+  not covered by the master-only runtime optimization rule.
 - Make changes in the correct concrete branch. Never add `STRICT_STOCK` or an
   equivalent compile-time or runtime selector that recombines the branches.
 - For transcription bug fixes proven against the original binary, implement,
