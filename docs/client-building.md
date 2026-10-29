@@ -115,7 +115,7 @@ We accept the resulting narrowing; MSVC builds do not promise extended-precision
 fidelity, even with `/arch:IA32` or optimization disabled.
 
 Use Visual Studio 2022 17.9 or newer with the C++ desktop workload, a Windows
-SDK, and CMake 4.4 or newer. Select the SDK in Visual Studio Installer's
+SDK, and CMake 3.24 or newer. Select the SDK in Visual Studio Installer's
 Individual Components tab.
 The CMake build reads the Makefile source manifests and builds the executable,
 all three modules, and the dedicated server. The dedicated server uses

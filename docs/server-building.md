@@ -170,7 +170,7 @@ The Windows SDK requirements and warning policy are shared with the client; see
 [Windows compiler requirements](client-building.md#windows-with-clang-cl-or-msvc).
 
 CMake is supported only for native Windows builds with MSVC or clang-cl.
-Use CMake 4.4+ and MSVC 19.39+ or clang-cl 22+. The server target builds the
+Use CMake 3.24+ and MSVC 19.39+ or clang-cl 22+. The server target builds the
 dedicated engine and matching game DLL for the configurations below:
 
 | Preset | Architecture | Compiler |
