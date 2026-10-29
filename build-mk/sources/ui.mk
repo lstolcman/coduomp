@@ -7,6 +7,7 @@ UI_C_SOURCES := \
 	src/client/ui/browser/ui_add_server_to_favorites.c \
 	src/client/ui/browser/ui_build_server_display_list.c \
 	src/client/ui/browser/ui_clear_displayed_servers.c \
+	src/client/ui/browser/ui_compat_filter_menu.c \
 	src/client/ui/browser/ui_display_server_list.c \
 	src/client/ui/browser/ui_pending_pings.c \
 	src/client/ui/browser/ui_server_refresh_start.c \
