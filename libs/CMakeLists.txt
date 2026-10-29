@@ -1,15 +1,17 @@
 #-----------------------------------------------------------------
 # Bundled third-party libraries
 #
-# Build the dependencies needed by the Windows client. Each library is pinned to a release commit and fetched
+# Build the dependencies needed by the Windows client. Each library is pinned to a release-tag commit and fetched
 # from its GitHub archive on the first configure; later configures reuse the
 # download cache under the build directory, so a populated build works offline.
+# No branch, tag ref, or moving snapshot is downloaded: the URL names the
+# commit and the SHA-256 verifies the exact archive bytes.
 #
-#   zlib       https://github.com/madler/zlib
+#   zlib       https://github.com/madler/zlib (v1.3.2)
 #   minizip    built from zlib/contrib/minizip
-#   sdl2       https://github.com/libsdl-org/SDL (SDL2 branch)
-#   jpeg-turbo https://github.com/libjpeg-turbo/libjpeg-turbo
-#   curl       https://github.com/curl/curl
+#   sdl2       https://github.com/libsdl-org/SDL (release-2.30.9)
+#   jpeg-turbo https://github.com/libjpeg-turbo/libjpeg-turbo (3.1.4)
+#   curl       https://github.com/curl/curl (curl-8_19_0)
 #
 # Targets exposed to the rest of the build:
 #   ZLIB::ZLIBSTATIC, coduomp_minizip, SDL2::SDL2-static, coduomp_jpeg, libcurl
@@ -52,7 +54,7 @@ endfunction()
 #-----------------------------------------------------------------
 # zlib
 #-----------------------------------------------------------------
-# zlib v1.3.2
+# zlib 1.3.2 (release tag v1.3.2)
 coduomp_bundled_fetch(zlib
 	"https://github.com/madler/zlib/archive/da607da739fa6047df13e66a2af6b8bec7c2a498.zip"
 	"21DE001766ABB1F5BFDFB3C23AA42D30A6BBD7EDDD37131D5E7FE89C5EC068F8")
@@ -105,7 +107,7 @@ set(SDL_TESTS OFF CACHE BOOL "Build SDL2 tests" FORCE)
 # unused 2D renderers, including the Direct3D MatrixMultiply symbol that
 # collides with the engine's recovered math symbol.
 set(SDL_RENDER OFF CACHE BOOL "Build the SDL 2D renderer subsystem" FORCE)
-# SDL2 2.30.9
+# SDL2 2.30.9 (release tag release-2.30.9)
 coduomp_bundled_fetch(sdl2
 	"https://github.com/libsdl-org/SDL/archive/c98c4fbff6d8f3016a3ce6685bf8f43433c3efcc.zip"
 	"516E788F6BCD74247AA392D656B1EF89B8A416DD66549AC6825993AC9B1068FA")
@@ -120,7 +122,7 @@ add_subdirectory(
 # Upstream refuses add_subdirectory() by design and asks downstream builds to
 # use ExternalProject_Add(), so build it as the standalone project it expects.
 #-----------------------------------------------------------------
-# libjpeg-turbo 3.1.4
+# libjpeg-turbo 3.1.4 (release tag 3.1.4)
 coduomp_bundled_fetch(jpeg_turbo
 	"https://github.com/libjpeg-turbo/libjpeg-turbo/archive/e352b02f794f701407b39af08576035ba3360d60.zip"
 	"BAC5A0E60BB5D7C33F197911576250D20EFA90F66520B9F0401C81242329D6F8")
@@ -238,7 +240,9 @@ set(BUILD_EXAMPLES OFF CACHE BOOL "Build curl examples" FORCE)
 set(BUILD_LIBCURL_DOCS OFF CACHE BOOL "Build libcurl man pages" FORCE)
 set(BUILD_MISC_DOCS OFF CACHE BOOL "Build misc man pages" FORCE)
 set(ENABLE_CURL_MANUAL OFF CACHE BOOL "Build the curl manual" FORCE)
-# curl 8.19.0 development snapshot
+# curl 8.19.0 (release tag curl-8_19_0). The in-tree version header reports
+# 8.19.0-DEV because upstream does not rewrite it in the release commit; the
+# pinned commit is the tag's commit.
 coduomp_bundled_fetch(curl
 	"https://github.com/curl/curl/archive/8c908d2d0a6d32abdedda2c52e90bd56ec76c24d.zip"
 	"084E07B0F62FEDB97D5D8E569F4ECC36B025D69657C0C400B89E71C0E24FE753")
