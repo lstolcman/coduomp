@@ -23,6 +23,7 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Per-map `<map>_<gametype>.cfg` files load by the visible map name even when the map asset name contains color escapes.
 - **Server configuration:** add `set g_allowGlobalChat 0` to the server config or enter it in the server console to disable player general chat while preserving team, squad, private, scripted, and server-console messages. Set it to `1` to enable general chat again; `1` is the default.
 - Dedicated and listen servers skip external CD-key authorization by default.
+- The dedicated server mounts every supported localized pak, so a non-English installation finds `default_mp.cfg` instead of failing at startup.
 
 ### Platforms and display
 
