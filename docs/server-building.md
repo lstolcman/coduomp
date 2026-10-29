@@ -38,24 +38,41 @@ its original authorization defaults.
 - `make`
 - C and C++ compilers such as `cc`, `c++`, `clang`, or `gcc`
 - `ar`
+- For Linux builds, GCC/G++ and zlib development files; 32-bit builds also
+  require the multilib toolchain and 32-bit zlib development library
 - For Windows cross-builds, an architecture-matched MinGW compiler,
   `i686-w64-mingw32-gcc` or `x86_64-w64-mingw32-gcc`, and its matching `g++`
 - MinGW-compatible zlib headers and library for the Windows engine
 - For native Windows builds, CMake 4.4+ and MSVC 19.39+ or clang-cl 22+
 
-## Compile Checks
+## Linux dedicated server (Make)
+
+Run these commands from the repository root on Linux. For a complete 64-bit
+dedicated server and its matching game module:
 
 ```sh
-make -f build-mk/game.mk check CODUO_FP_FAITHFUL=relaxed
-make -f build-mk/server.mk objects CODUO_FP_FAITHFUL=relaxed
+make server64
 ```
 
-The game-module check compiles source into a static archive. The
-dedicated-engine check compiles maintained engine code into a static archive.
+For the 32-bit engine and module, with a multilib toolchain and 32-bit zlib
+development library installed:
 
-## Shared Module Builds
+```sh
+make server32
+```
 
-For server deployment, build the 32-bit Linux module:
+Each target builds both components. The engine and module must have matching
+architectures; keep the module from the same build with the executable when
+deploying. The component output paths are listed below. See the
+[Linux dependency instructions](../README.md#debian-or-ubuntu-linux-x86-64)
+for Debian/Ubuntu setup.
+
+### Build individual Linux components
+
+Use these targets when building components separately. The full server
+targets above already build both the engine and the game module.
+
+To build only the 32-bit Linux game module:
 
 ```sh
 make server-game32
@@ -70,7 +87,7 @@ Output:
 This target uses `-m32`, so it requires a Linux toolchain with 32-bit compiler
 and library support installed.
 
-For local shared-object experiments using the host toolchain:
+To build only the 64-bit Linux game module:
 
 ```sh
 make server-game64
@@ -82,13 +99,7 @@ Output:
 .workbench/build/game/linux-x86_64/game.mp.uo.x86_64.so
 ```
 
-For a local dedicated-engine shared-object link check, use the target Makefile:
-
-```sh
-make -f build-mk/server.mk shared-check-link CODUO_FP_FAITHFUL=relaxed
-```
-
-For a native dedicated-server executable:
+To build only the 64-bit Linux dedicated-server executable:
 
 ```sh
 make server-engine64
@@ -99,6 +110,25 @@ Output:
 ```text
 .workbench/build/server/linux-x86_64-noauth/coduo_lnxded_recovered
 ```
+
+Use `make server-engine32` for the 32-bit executable. Its engine output
+directory is `linux-i386-<auth-mode>`. For either architecture, the suffix is
+`auth` when `AUTH=1` and `noauth` when `AUTH=0`.
+
+## Compile Checks
+
+These developer checks compile archives or check shared-library linking.
+Use `make server32` or `make server64` above to build a complete Linux server.
+
+```sh
+make -f build-mk/game.mk check CODUO_FP_FAITHFUL=relaxed
+make -f build-mk/server.mk objects CODUO_FP_FAITHFUL=relaxed
+make -f build-mk/server.mk shared-check-link CODUO_FP_FAITHFUL=relaxed
+```
+
+The game-module check and dedicated-engine object target compile maintained
+source into static archives. The shared link check produces a shared library,
+not a runnable dedicated-server executable.
 
 ## Windows with MSVC or clang-cl
 
@@ -145,13 +175,13 @@ Its default preserves the branch's Makefile authorization setting. The Windows
 CMake server uses the disabled PunkBuster provider; the recovered dynamic
 PunkBuster loader currently requires POSIX services.
 
-Both engine build systems reserve 8 MiB of stack with a 4 KiB initial commit.
+Both Windows engine build systems reserve 8 MiB of stack with a 4 KiB initial commit.
 MSVC's binary64 `long double` limits and clang-cl's explicit extended-arithmetic
 profile also apply to the server; see [client build limits](client-building.md#windows-with-clang-cl-or-msvc).
 
-## Windows Dedicated Server
+## Windows dedicated server with MinGW (Make)
 
-The top-level Windows targets build the engine and matching game DLL.
+The top-level MinGW Make targets build the engine and matching game DLL.
 `server-windows` builds both 32-bit and 64-bit products:
 
 ```sh

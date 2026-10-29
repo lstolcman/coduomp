@@ -270,9 +270,11 @@ Do not add `-ffp-eval-method=extended` or disable SSE to this profile. Tested
 Clang 19.1.7 and 22.1.8 global extended evaluation mispasses variadic doubles
 and rejects ordinary C++ float initializer lists; disabling SSE breaks the
 Windows x64 argument convention. Source-type evaluation avoids those failures.
-This profile has been built with the native Linux clang-cl driver and
-Microsoft SDK/linker through Wine; native Visual Studio IDE execution and
-runtime arithmetic parity remain unverified.
+This Windows-target profile has also been compile-validated from a Linux host
+using clang-cl and the Microsoft SDK/linker through Wine. That validation
+produced Windows executables and DLLs; it does not provide a native Linux
+CMake build. Native Visual Studio IDE execution and runtime arithmetic parity
+remain unverified.
 
 The presets keep separate build directories at `.workbench/build/<preset-name>`; never change the architecture of an existing
 build directory. Without presets, specify `-A Win32` or `-A x64` explicitly
