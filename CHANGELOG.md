@@ -19,6 +19,7 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Server names are stored in a 96-byte record and copied without splitting a `^` color code, so colored hostnames keep their full visible text instead of being cut at 31 raw bytes.
 - A server whose public address changes is dropped from the global list after three master responses no longer report the old address, instead of keeping it for the rest of the session.
 - A failed master lookup, an oversize master query, or a master that never answers no longer leaves the internet browser stuck on its waiting state; the wait is released and the cached list is shown.
+- The Filter Servers popup offers **All**, **No** and **Yes** for empty, full, password, no-password, pure and dedicated, matching the rows that already had an explicit All choice.
 
 ### Mods/Server
 

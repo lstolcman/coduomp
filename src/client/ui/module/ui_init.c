@@ -134,6 +134,7 @@ void UI_Init(void)
     ui_compat_extend_sound_menu();
     ui_compat_extend_misc_binding_menu();
     ui_compat_extend_advanced_menu();
+    ui_compat_extend_filter_menu();
     ui_compat_brand_main_menu_version();
     ui_compat_remove_single_player_menu_item();
     for (index = 0; index < menuCount; ++index) {

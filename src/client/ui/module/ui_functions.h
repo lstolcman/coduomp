@@ -57,6 +57,7 @@ void ui_compat_refresh_graphics_resolution(void);
 void ui_compat_extend_misc_binding_menu(void);
 void ui_compat_extend_advanced_menu(void);
 void ui_compat_brand_main_menu_version(void);
+void ui_compat_extend_filter_menu(void);
 void ui_compat_remove_single_player_menu_item(void);
 void UI_RunMenuScript(char **arguments);
 void UI_Shutdown(void);

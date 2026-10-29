@@ -113,11 +113,11 @@ void UI_BuildServerDisplayList(int32_t force)
                    coduo_crt_atoi(
                        Info_ValueForKey(serverInfo, "pswrd")) == 0) {
             filtered = qtrue;
-        } else if (ui_browserShowPure.integer &&
+        } else if (ui_browserShowPure.integer == 1 &&
                    coduo_crt_atoi(
                        Info_ValueForKey(serverInfo, "pure")) == 0) {
             filtered = qtrue;
-        } else if (ui_browserShowDedicated.integer) {
+        } else if (ui_browserShowDedicated.integer == 1) {
             int32_t hardware =
                 coduo_crt_atoi(Info_ValueForKey(serverInfo, "hw"));
             if (hardware != 1 && hardware != 2 && hardware != 3) {
