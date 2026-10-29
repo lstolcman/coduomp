@@ -32,6 +32,7 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Windows servers treat the `WSAECONNRESET` status from a departed client as a quiet receive, instead of logging a network error every frame until the client times out.
 - The MinGW server reserves the stock 8 MiB stack, so map start no longer overflows the default 2 MiB stack.
 - Inactivity kicks also treat mouse or joystick look as activity, so a player who only turns, aims or tracks a target is no longer dropped while the movement keys and fire button are idle.
+- `g_inactivityAction "spectate"` moves an inactive player to the spectator team instead of dropping the connection; the stock `g_inactivityspectator` timer can still remove an idle spectator. The default `"kick"` keeps the existing behavior.
 
 ### Platforms and display
 

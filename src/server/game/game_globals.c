@@ -109,6 +109,8 @@ vmCvar_t g_weaponAmmoPools;
 vmCvar_t g_maxDroppedWeapons;
 vmCvar_t g_inactivity;
 vmCvar_t g_inactivityspectator;
+/* NOT_FROM_ORIGINAL_SOURCE: general-inactivity disposition. */
+vmCvar_t g_inactivityAction;
 vmCvar_t g_debugMove;
 vmCvar_t g_debugProneCheck;
 vmCvar_t g_debugProneCheckDepthCheck;
@@ -256,6 +258,7 @@ game_cvar_table_t gameCvarTable[] = {
     { &g_maxDroppedWeapons, "g_maxDroppedWeapons", "16", 0, 0, 0 },
     { &g_inactivity, "g_inactivity", "0", 0, 0, 1 },
     { &g_inactivityspectator, "g_inactivityspectator", "0", 0, 0, 1 },
+    { &g_inactivityAction, "g_inactivityAction", "kick", 1, 0, 1 },
     { &g_debugMove, "g_debugMove", "0", 0, 0, 0 },
     { &g_debugProneCheck, "g_debugProneCheck", "0", 0, 0, 0 },
     { &g_debugProneCheckDepthCheck, "g_debugProneCheckDepthCheck", "1", 0, 0, 0 },
