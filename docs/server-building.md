@@ -7,6 +7,12 @@ The public tree contains two independently useful target families:
 - `build-mk/game.mk` builds the server game module from `src/server/game/` and
   its shared BG/qcommon/math dependencies.
 
+Top-level Make targets compile in parallel by default, with one job per
+detected processor. `make JOBS=N <target>` selects a budget and `JOBS=1`
+builds serially. An existing `make -jN` jobserver takes precedence over
+`JOBS` and is shared by recursive builds. Direct `make -f build-mk/...`
+invocations need an explicit `-jN` to compile in parallel.
+
 ## CD-key Authorization
 
 On `master`, dedicated and listen servers skip external CD-key authorization
@@ -106,6 +112,11 @@ default. Select any row's preset for both commands:
 cmake --preset msvc
 cmake --build --preset msvc --parallel 2
 ```
+
+The Visual Studio MSVC presets apply this budget to compiler processes within
+each project and build project references sequentially. `--parallel` without
+a number uses the processor count. See the [client build guide](client-building.md#windows-with-clang-cl-or-msvc)
+for serial builds, PDB coordination, and other generators/toolsets.
 
 For a server-only build, disable the client and its optional modules. The
 server still builds its required game DLL; only zlib is fetched as a dependency:
