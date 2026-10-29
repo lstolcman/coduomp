@@ -800,21 +800,17 @@ void LAN_LoadCachedServers(void)
                         sizeof(cls.globalServers[0]), CL_CompareAdrSigned);
 }
 
-/* Source: CoDUOMP.exe 0x0041a620..0x0041a73a.
- * Evidence: coduomp/mcode/CoDUOMP/FUN_0041a620_0041a73b.mcode.
- * Name: exact same-module Mac symbol LAN_SaveServersToCache. Before writing,
- * stale master responses and adjacent duplicate addresses are removed by
- * replacing each rejected slot with the current last record. The resulting
- * active prefix is then restored to address order. */
-void LAN_SaveServersToCache(void)
+/* NOT_FROM_ORIGINAL_SOURCE: drop global records that the master has not
+ * reported for LAN_SERVER_RECENT_MASTER_RESPONSE_AGE_LIMIT responses, plus
+ * adjacent duplicate addresses, from the live list. The record's age is reset
+ * to zero by CL_FindServerInfo whenever the master lists that address, so the
+ * age is a count of consecutive responses that omitted it. A server whose
+ * public address changed appears under its new address; its previous address
+ * is omitted from later responses and is removed here instead of lingering
+ * until the UI module writes the cache. Rejected slots are replaced with the
+ * current last record and the active prefix is restored to address order. */
+static void LAN_RemoveStaleServers(void)
 {
-    const int32_t fileHandle =
-        FS_SV_FOpenFileWrite(lan_serverCacheFileName);
-    int32_t cacheVersion = LAN_SERVER_CACHE_VERSION;
-    int32_t serializedArrayBytes = lan_serverCacheArrayBytes;
-
-    (void)FS_Write(&cacheVersion, (int32_t)sizeof(cacheVersion), fileHandle);
-
     for (int32_t serverIndex = cls.numGlobalServers - 1;
          serverIndex >= 0; --serverIndex) {
         lan_server_info_t *server = &cls.globalServers[serverIndex];
@@ -839,6 +835,24 @@ void LAN_SaveServersToCache(void)
 
     coduo_crt_qsort(cls.globalServers, (size_t)cls.numGlobalServers,
                         sizeof(cls.globalServers[0]), CL_CompareAdrSigned);
+}
+
+/* Source: CoDUOMP.exe 0x0041a620..0x0041a73a.
+ * Evidence: coduomp/mcode/CoDUOMP/FUN_0041a620_0041a73b.mcode.
+ * Name: exact same-module Mac symbol LAN_SaveServersToCache. Before writing,
+ * stale master responses and adjacent duplicate addresses are removed by
+ * replacing each rejected slot with the current last record. The resulting
+ * active prefix is then restored to address order. */
+void LAN_SaveServersToCache(void)
+{
+    const int32_t fileHandle =
+        FS_SV_FOpenFileWrite(lan_serverCacheFileName);
+    int32_t cacheVersion = LAN_SERVER_CACHE_VERSION;
+    int32_t serializedArrayBytes = lan_serverCacheArrayBytes;
+
+    (void)FS_Write(&cacheVersion, (int32_t)sizeof(cacheVersion), fileHandle);
+
+    LAN_RemoveStaleServers();
     (void)FS_Write(&cls.numGlobalServers,
                    (int32_t)sizeof(cls.numGlobalServers), fileHandle);
     (void)FS_Write(&cls.numFavoriteServers,
@@ -877,9 +891,26 @@ int32_t LAN_GetServerCount(lan_server_source_t source)
  * sources return false. */
 qboolean LAN_WaitServerResponse(lan_server_source_t source)
 {
+    enum { LAN_MASTER_RESPONSE_TIMEOUT_MSEC = 5000 };
+
     if (source != LAN_SERVER_SOURCE_GLOBAL)
         return qfalse;
-    return cls.waitingForMasterResponse;
+    if (cls.waitingForMasterResponse == qfalse)
+        return qfalse;
+
+    /* NOT_FROM_ORIGINAL_SOURCE: the latch is normally cleared by the first
+     * master response packet. Without a bound, a query that was never sent or
+     * a master that stopped answering leaves the global browser waiting
+     * forever and hides every cached server. The UI already stops honoring the
+     * wait after its five-second refresh window, so bound it to the same
+     * interval; a late response is still merged normally. */
+    const uint32_t elapsed =
+        Sys_Milliseconds() - cls.masterResponseRequestTime;
+    if (elapsed >= (uint32_t)LAN_MASTER_RESPONSE_TIMEOUT_MSEC) {
+        cls.waitingForMasterResponse = qfalse;
+        return qfalse;
+    }
+    return qtrue;
 }
 
 /* Source: CoDUOMP.exe 0x00416810..0x00416851.
@@ -1458,21 +1489,7 @@ void CL_GlobalServers_f(void)
         return;
     }
 
-    for (int32_t index = 0; index < cls.numGlobalServers; ++index) {
-        ++cls.globalServers[index].masterResponseAge;
-        if (cls.globalServers[index].masterResponseAge == 0)
-            cls.globalServers[index].masterResponseAge = UINT8_MAX;
-        cls.globalServers[index].clients = 0;
-    }
-
     Com_Printf("Requesting servers from the master...\n");
-
-    netadr_t masterAddress;
-    (void)NET_StringToAdr("coduomaster.activision.com", &masterAddress);
-    cls.waitingForMasterResponse = qtrue;
-    cls.pingUpdateSource = LAN_SERVER_SOURCE_GLOBAL;
-    cls.numGlobalServerAddresses = 0;
-    masterAddress.port = (uint16_t)BigShort(LAN_MASTER_PORT);
 
     char query[LAN_MASTER_QUERY_SIZE];
     /* NOT_FROM_ORIGINAL_SOURCE: validate this recovered engine boundary input and state before use. */
@@ -1481,6 +1498,7 @@ void CL_GlobalServers_f(void)
     if (queryLength < 0 || (size_t)queryLength >= sizeof(query)) {
         Com_Printf("globalservers: query exceeds %i bytes\n",
                    LAN_MASTER_QUERY_SIZE - 1);
+        cls.waitingForMasterResponse = qfalse;
         return;
     }
 
@@ -1491,6 +1509,7 @@ void CL_GlobalServers_f(void)
         if (appended < 0 || (size_t)appended >= remaining) {
             Com_Printf("globalservers: query exceeds %i bytes\n",
                        LAN_MASTER_QUERY_SIZE - 1);
+            cls.waitingForMasterResponse = qfalse;
             return;
         }
         queryLength += appended;
@@ -1506,9 +1525,44 @@ void CL_GlobalServers_f(void)
         if (appended < 0 || (size_t)appended >= remaining) {
             Com_Printf("globalservers: query exceeds %i bytes\n",
                        LAN_MASTER_QUERY_SIZE - 1);
+            cls.waitingForMasterResponse = qfalse;
             return;
         }
     }
+
+    netadr_t masterAddress;
+    /* NOT_FROM_ORIGINAL_SOURCE: a failed lookup leaves NA_BOT, and
+     * NET_SendPacket drops NA_BOT without sending anything. Report the lookup
+     * failure and release the response latch instead of waiting for a reply
+     * that no query can produce. */
+    if (NET_StringToAdr("coduomaster.activision.com", &masterAddress) == qfalse ||
+        masterAddress.type != NA_IP) {
+        Com_Printf("Couldn't resolve address: coduomaster.activision.com\n");
+        cls.waitingForMasterResponse = qfalse;
+        return;
+    }
+    masterAddress.port = (uint16_t)BigShort(LAN_MASTER_PORT);
+
+    /* NOT_FROM_ORIGINAL_SOURCE: the previous response set is complete by the
+     * time a new master query starts, so records that consecutive responses
+     * have omitted are removed before this request ages the survivors. The
+     * master can send more fragments after an EOT marker, so a response itself
+     * is not a reliable point to decide that an address is gone. Aging happens
+     * only once a sendable query exists, so repeated local failures cannot
+     * erase the list. */
+    LAN_RemoveStaleServers();
+
+    for (int32_t index = 0; index < cls.numGlobalServers; ++index) {
+        ++cls.globalServers[index].masterResponseAge;
+        if (cls.globalServers[index].masterResponseAge == 0)
+            cls.globalServers[index].masterResponseAge = UINT8_MAX;
+        cls.globalServers[index].clients = 0;
+    }
+
+    cls.waitingForMasterResponse = qtrue;
+    cls.masterResponseRequestTime = Sys_Milliseconds();
+    cls.pingUpdateSource = LAN_SERVER_SOURCE_GLOBAL;
+    cls.numGlobalServerAddresses = 0;
 
     /* NOT_FROM_ORIGINAL_SOURCE: validate this recovered engine boundary input and state before use. */
     NET_OutOfBandPrint(NS_SERVER, masterAddress, "%s", query);
