@@ -175,16 +175,14 @@ not a general 80-bit long-double runtime.
 
 Native-math performance exceptions are limited to isolated presentation work.
 Server math and client movement, prediction, physics, damage, collision, bullet
-tracing, world geometry, and camera/projection calculations retain the original
-Windows arithmetic contract. A `CG_` prefix or renderer location does not make
+tracing, world geometry, camera/projection, and HUD calculations retain the
+original Windows arithmetic contract. HUD behavior is included because mods may
+depend on precise marker placement, sizing, fading, and arithmetic. A `CG_` prefix or renderer location does not make
 an expression cosmetic. Shared state, random sequences, and visibility or edge
 placement must also be checked before introducing an exception.
 
-The vehicle-owner-icon fade uses native power through
-`src/client/cgame/common/native_power.h`: `powl` on native long-double ABIs and
-`pow` on the Microsoft CRT's binary64 ABI, including clang-cl. This master-only
-exception affects icon alpha. Flame power calculations use the shared CRT
-provider, including their presentation consumers: flame state and drawing gates
+Flame and vehicle-owner-icon power calculations use the shared CRT provider.
+There are no CG power performance exceptions. Flame state and drawing gates
 also feed damage checks. Surrounding wide expressions, explicit stores, and
 integer conversions remain in place.
 
@@ -220,12 +218,11 @@ its rounding-dependent zero sign. Non-x87 hosts use native binary64 arithmetic.
 Complete sticky-status parity, custom `matherr` callbacks, and OS exception
 dispatch remain outside this provider.
 
-Three HUD distance expressions in `CG_DrawCompassFriendlies`,
-`CG_DrawCompassTanks`, and `CG_DrawObjectivePointers` use the inline native
-`coduo_x87_sqrtl` primitive for marker placement, size, and alpha. This master
-customization accepts native results, rounding, and error behavior. Flame,
-camera, and tracer geometry use the recovered CRT provider. Shared math and BG
-functions retain their own boundaries even when called by HUD code.
+HUD distance calculations in `CG_DrawCompassFriendlies`,
+`CG_DrawCompassTanks`, and `CG_DrawObjectivePointers` use the recovered CRT
+square-root provider, as do flame, camera, and tracer geometry. There are no CG
+square-root performance exceptions. Shared math and BG functions retain their
+own boundaries even when called by HUD code.
 
 Other recovered CRT square-root callers use `src/compat/crt/sqrt_compat.c`. Native x87 keeps
 the live operand and result, reproduces the classification store, temporary

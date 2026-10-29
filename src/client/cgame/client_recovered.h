@@ -5364,7 +5364,7 @@ void VectorNormalizeFast(vec3_t v);
  * CG_AddFlameChunks (0x300272b0) call sites, which load base then push the exponent
  * constant last (ST0). Recovered callers use the shared CRT power provider,
  * which preserves the selected binary64 or native x87 arithmetic route.
- * The vehicle-owner-icon alpha expression alone uses native host power.
+ * HUD and icon arithmetic retain this same CRT contract.
  */
 
 /*

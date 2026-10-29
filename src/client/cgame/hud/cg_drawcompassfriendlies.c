@@ -6,6 +6,7 @@
 // entries around the animated compass ring. The former CG_Asset_Parse label was
 // a size-only match; this body is entirely snapshot/team/compass rendering work.
 
+#include "compat/crt/sqrt_compat.h"
 #include "client/cgame/client_recovered.h"
 #include "compat/coduo_native_x87.h"
 #include "client/cgame/globals.h"
@@ -187,7 +188,7 @@ void CG_DrawCompassFriendlies(const rectDef_t *rect, const vec4_t color)
                  (long double)cg_compassRefYaw) *
                 (long double)COMPASS_ANGLE2SHORT) & 0xffffu;
             bearingDeg = (float)(int32_t)packedBearing * COMPASS_SHORT2ANGLE;
-            distance = (float)coduo_x87_sqrtl(
+            distance = (float)coduomp_crt_sqrtl(
                 (long double)delta[1] * (long double)delta[1] +
                 (long double)delta[0] * (long double)delta[0]);
             float clamped = distance;

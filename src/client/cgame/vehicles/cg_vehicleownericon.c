@@ -47,7 +47,7 @@
 //  - 0x30021630: CG_AddHudHeadIconSprite(cent, material, yaw, 0, 180, (float)alphaScale)
 //    cdecl, 6 args, ADD ESP,0x18.
 
-#include "client/cgame/common/native_power.h"
+#include "compat/libm/coduo_wide_math.h"
 #include <math.h>
 #include <string.h>
 
@@ -131,10 +131,10 @@ void CG_VehicleOwnerIcon(centity_t *cent)
 
         /* alphaScale = pow(fade, 1.5): _CIpow leaves the selected CRT result in
          * ST(0), FSTP'd to float once at 0x30021601 (the sprite arg). fade is a
-         * float loaded FLD float into ST(1). Power now follows the native host
-         * library and ABI; the explicit float result store remains here.
-         * Exp 1.5 is the double at 0x3007c278. */
-        float alphaScale = (float)cgame_compat_native_powl((long double)fade, 1.5L);
+         * float loaded FLD float into ST(1); the provider applies the CRT's
+         * stores and dispatch, and its wide return avoids an extra binary64
+         * store on the x87 route. Exp 1.5 is the double at 0x3007c278. */
+        float alphaScale = (float)coduomp_math_powl((long double)fade, 1.5L);
 
         /* Yaw spin: rotate the icon by the phase-driven angle relative to its base
          * yaw. Both conversions use _ftol2 (0x3006be3c), truncating toward zero. */

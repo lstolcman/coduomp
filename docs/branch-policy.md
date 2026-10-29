@@ -76,14 +76,15 @@ Improved descends from stock and contains intentional product changes:
 
 Math performance exceptions on master are restricted to proven presentation
 expressions. Server code and client movement, prediction, physics, damage,
-bullet tracing, collision, world geometry, and camera/projection calculations
-retain fidelity. Preserve original inline instructions as well as CRT calls;
+bullet tracing, collision, world geometry, camera/projection, and HUD calculations
+retain fidelity. HUD position, size, fading, and other arithmetic remain part of
+the compatibility contract because mods may depend on precise behavior. Preserve original inline instructions as well as CRT calls;
 fidelity does not mean routing every operation through a CRT wrapper. Neither a
 `CG_` name nor a renderer directory grants an exemption. Rendering changes that
 can affect visible geometry, silhouettes, depth, occlusion, or apparent collision
 edges require fidelity too. Shared state and random-sequence dependencies must
-be checked before treating an expression as visual-only. Current bounded
-exceptions are documented in `docs/client-building.md`.
+be checked before treating an expression as visual-only. There are no CG power
+or square-root performance exceptions; see `docs/client-building.md`.
 
 The `stock..master` diff is the maintained description of customization.
 Do not recreate a mixed source tree with `STRICT_STOCK`, another preprocessor
