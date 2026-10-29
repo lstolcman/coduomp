@@ -2,7 +2,7 @@
 
 ## Changes from stock
 
-This is a feature-oriented summary of lasting, user-visible differences from the stock Call of Duty: United Offensive 1.51 multiplayer client and dedicated server. Silent security hardening, source-recovery work, build plumbing, and fixes that only restore stock behavior are intentionally omitted.
+This is a feature-oriented summary of lasting, user-visible differences from the stock Call of Duty: United Offensive 1.51 multiplayer client and dedicated server. Silent security hardening, source-recovery work, and fixes that only restore stock behavior are intentionally omitted.
 
 ### Client
 
@@ -71,6 +71,11 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Native Linux/macOS clients support Ctrl-V or Command-V clipboard paste.
 - Ctrl-W deletes the previous console word and treats underscores as word delimiters.
 - Console scrollback is four times larger.
+
+### Building from source
+
+- The `build-mk` Makefile targets compile in parallel by default with one compiler job per processor. `make JOBS=N` caps the budget and `JOBS=1` builds serially; an inherited jobserver from a parent `make -jN` is reused instead of being reset.
+- The native Visual Studio build follows the budget passed to the build command: `cmake --build --preset msvc --parallel N` gives each project an `N`-file compiler budget, projects build one after another, and the generated `Directory.Build.props` keeps concurrent writes to the shared program database valid.
 
 ### Optional renderer profiling
 

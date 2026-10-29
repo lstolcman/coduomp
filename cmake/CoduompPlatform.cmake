@@ -60,6 +60,29 @@ else()
 endif()
 message(STATUS "Whole-program floating-point parity remains unverified on these Windows CMake targets.")
 
+# C5105 fires inside the Windows SDK headers (winbase.h) on a macro expansion
+# containing `defined`; no project source controls that expansion, so it stays
+# suppressed for the SDK, the recovered sources, and the bundled libraries
+# alike. The remaining warning options are set per product target by
+# coduomp_apply_common().
+add_compile_options(/wd5105)
+
+# MSBuild imports Directory.Build.props from the directory above each generated
+# project. Generate one next to the solution so the compiler's /MP budget
+# follows the /m option the build command passes to MSBuild: no /m stays
+# sequential, /m uses every processor, and /m:<n> uses n compiler processes per
+# project. /FS keeps concurrent writes to the shared PDB valid. The client and
+# SDL contain far more files than the solution has projects, so /MP is what
+# shortens a full rebuild.
+configure_file(
+	"${CMAKE_CURRENT_LIST_DIR}/CoduompDirectory.Build.props"
+	"${CMAKE_BINARY_DIR}/Directory.Build.props" COPYONLY)
+
+add_compile_definitions(
+	_CRT_SECURE_NO_WARNINGS
+	_CRT_NONSTDC_NO_DEPRECATE
+	_WINSOCK_DEPRECATED_NO_WARNINGS)
+
 # System libraries required by the client executable. The static SDL2, libjpeg,
 # libcurl and minizip builds used by the Makefiles need these as well.
 set(CODUOMP_CLIENT_SYSTEM_LIBS

@@ -163,6 +163,21 @@ Build and package each platform with the targets below and in the
 [client build guide](docs/client-building.md). Official release orchestration
 and maintainer privacy checks are separate from these developer targets.
 
+### Parallel builds
+
+Make targets compile in parallel by default, with one compiler job per
+processor. `JOBS=N` caps the budget and `JOBS=1` builds serially:
+
+```sh
+make JOBS=4 client-windows-i686-package
+make JOBS=1 server64
+```
+
+This is the Makefile equivalent of `cmake --build --parallel` and
+`--parallel N`; see the [client build guide](docs/client-building.md). When the
+top-level `make` is started with `-jN`, that jobserver is kept and the automatic
+budget is skipped, so nested builds do not multiply the process count.
+
 ### Windows
 
 The Windows targets use GNU Make and GCC rather than Visual Studio. Install
@@ -200,6 +215,13 @@ make client-windows-i686-package \
   MSS32_DLL="/c/path/to/Call of Duty/mss32.dll" \
   MINGW32_DEP_PREFIX=/c/path/to/i686-prefix
 ```
+
+#### Native Visual Studio build
+
+A 32-bit MSVC solution for the client, its modules, and the dedicated server is
+available from `CMakeLists.txt`. See the [client build guide](docs/client-building.md)
+and the [server build guide](docs/server-building.md) for configuration,
+parallel builds, and output locations.
 
 ### Windows cross-builds from Debian or Ubuntu Linux
 
