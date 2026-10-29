@@ -1707,6 +1707,50 @@ static qboolean coduomp_compat_server_namespace_activate(
 
 /* NOT_FROM_ORIGINAL_SOURCE: activate an existing cache selected by cached-demo
  * discovery. The directory must already exist and may not be a link/reparse. */
+/* NOT_FROM_ORIGINAL_SOURCE: live caches are keyed by endpoint plus advertised
+ * name, so an offline demo recorded from that endpoint no longer matches the
+ * bare display name. Accept a unique cache whose directory ends with the
+ * sanitized advertised name; old display-name caches still resolve first. */
+static qboolean coduomp_namespace_activate_by_suffix(
+    const char *serverName)
+{
+    char cacheRoot[MAX_OSPATH];
+    char slug[CODUOMP_NAMESPACE_SLUG_LENGTH + 1];
+    char suffix[CODUOMP_NAMESPACE_SLUG_LENGTH + 2];
+    char chosen[CODUOMP_NAMESPACE_SLUG_LENGTH + 1];
+    int32_t namespaceCount = 0;
+
+    if (coduomp_namespace_build_cache_root(cacheRoot) == qfalse)
+        return qfalse;
+
+    coduomp_namespace_sanitize_name(serverName, slug);
+    if (slug[0] == '\0')
+        return qfalse;
+    Com_sprintf(suffix, sizeof(suffix), "-%s", slug);
+
+    char **const namespaces = Sys_ListFiles(
+        cacheRoot, NULL, NULL, &namespaceCount, qtrue);
+    chosen[0] = '\0';
+    for (int32_t index = 0; index < namespaceCount; ++index) {
+        const char *const name = namespaces[index];
+        if (coduomp_namespace_directory_name_is_safe(name) == qfalse)
+            continue;
+        const size_t nameLength = strlen(name);
+        const size_t suffixLength = strlen(suffix);
+        if (nameLength <= suffixLength ||
+            Q_stricmp(name + nameLength - suffixLength, suffix) != 0) {
+            continue;
+        }
+        if (chosen[0] == '\0' || Q_stricmp(name, chosen) < 0)
+            Q_strncpyz(chosen, name, sizeof(chosen));
+    }
+    Sys_FreeFileList(namespaces);
+
+    if (chosen[0] == '\0')
+        return qfalse;
+    return coduomp_namespace_activate_directory(chosen);
+}
+
 static qboolean coduomp_compat_server_namespace_activate_cached(
     const char *serverName)
 {
@@ -1717,13 +1761,15 @@ static qboolean coduomp_compat_server_namespace_activate_cached(
         coduomp_namespace_directory_name_is_safe(serverName) == qfalse ||
         coduomp_namespace_build_safe_child_path(
             cacheRoot, serverName, qtrue, serverPath) == qfalse) {
-        return qfalse;
+        return coduomp_namespace_activate_by_suffix(serverName);
     }
     if (coduomp_namespace_state.active != qfalse &&
         Q_stricmp(coduomp_namespace_state.serverName, serverName) == 0) {
         return qtrue;
     }
-    return coduomp_namespace_activate_directory(serverName);
+    if (coduomp_namespace_activate_directory(serverName) != qfalse)
+        return qtrue;
+    return coduomp_namespace_activate_by_suffix(serverName);
 }
 
 static qboolean coduomp_compat_server_namespace_deactivate(void)
