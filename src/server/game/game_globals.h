@@ -69,6 +69,9 @@ extern vmCvar_t g_weaponAmmoPools;
 extern vmCvar_t g_maxDroppedWeapons;
 extern vmCvar_t g_inactivity;
 extern vmCvar_t g_inactivityspectator;
+/* NOT_FROM_ORIGINAL_SOURCE: selects kick or spectate on the general
+ * inactivity deadline. */
+extern vmCvar_t g_inactivityAction;
 extern vmCvar_t g_debugMove;
 extern vmCvar_t g_debugProneCheck;
 extern vmCvar_t g_debugProneCheckDepthCheck;
