@@ -31,9 +31,7 @@ The executable supports Apple Silicon macOS and 32-bit or 64-bit x86 Linux
 and Windows.
 
 Use the maintained Make targets for Linux and macOS clients and their modules,
-and for Windows builds with MinGW. CMake exists only for native Windows builds
-with MSVC or clang-cl; the top-level CMake project and presets do not support
-Linux or macOS builds.
+and for Windows builds with MinGW.
 
 Top-level Make targets default to a job budget of one job per detected processor.
 Use `make JOBS=N <target>` to select a budget, or `make JOBS=1 <target>` for a
@@ -107,6 +105,8 @@ matched to the implementation used to build the executable: the two providers
 can use the same shared-library name with different public record layouts.
 
 ### Windows with clang-cl or MSVC
+
+CMake is supported only for native Windows builds with MSVC or clang-cl.
 
 Clang is the preferred Windows compiler. The `clang-cl-x64` preset supports
 80-bit `WIDE_FLOAT` storage and the existing native x87 arithmetic paths.
@@ -251,11 +251,8 @@ Do not add `-ffp-eval-method=extended` or disable SSE to this profile. Tested
 Clang 19.1.7 and 22.1.8 global extended evaluation mispasses variadic doubles
 and rejects ordinary C++ float initializer lists; disabling SSE breaks the
 Windows x64 argument convention. Source-type evaluation avoids those failures.
-This Windows-target profile has also been compile-validated from a Linux host
-using clang-cl and the Microsoft SDK/linker through Wine. That validation
-produced Windows executables and DLLs; it does not provide a native Linux
-CMake build. Native Visual Studio IDE execution and runtime arithmetic parity
-remain unverified.
+Native Visual Studio IDE execution and runtime arithmetic parity remain
+unverified.
 
 The presets keep separate build directories at `.workbench/build/<preset-name>`; never change the architecture of an existing
 build directory. Without presets, specify `-A Win32` or `-A x64` explicitly

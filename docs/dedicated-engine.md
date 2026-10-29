@@ -28,10 +28,9 @@ multilib toolchain and matching 32-bit zlib development library. See the
 [Linux server build guide](server-building.md#linux-dedicated-server-make)
 for requirements, component targets, and output paths under `.workbench/build/`.
 
-CMake exists only for native Windows builds with MSVC or clang-cl. For Windows,
-choose the [CMake instructions](server-building.md#windows-with-msvc-or-clang-cl)
+For Windows, follow the
+[MSVC/clang-cl CMake instructions](server-building.md#windows-with-msvc-or-clang-cl)
 or the [MinGW Make instructions](server-building.md#windows-dedicated-server-with-mingw-make).
-Linux builds use Make.
 
 Archive and shared-link checks are documented separately under
 [Compile Checks](server-building.md#compile-checks). They are developer
