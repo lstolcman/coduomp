@@ -72,15 +72,24 @@ endfunction()
 # Keep compiler policy on product targets; dependency projects own their flags.
 function(coduomp_apply_common target)
     target_compile_options(${target} PRIVATE
-        /W1 /utf-8 /wd5287 /Od
+        /W1 /utf-8 /Od
         # Script error propagation deliberately crosses extern "C" entries.
         $<$<COMPILE_LANGUAGE:CXX>:/EHsc->)
     if(CODUOMP_32BIT_X86)
         target_compile_options(${target} PRIVATE /arch:IA32)
     endif()
+    # These API choices preserve existing CRT ownership/error behavior and
+    # legacy address parsing. Replacing them with _s or newer Winsock APIs
+    # requires a compatibility audit, not a warning-only source rewrite.
     target_compile_definitions(${target} PRIVATE
-        _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE
-        _WINSOCK_DEPRECATED_NO_WARNINGS)
+        _CRT_SECURE_NO_WARNINGS _WINSOCK_DEPRECATED_NO_WARNINGS)
+    if(NOT CODUOMP_CLANG_CL)
+        foreach(_language C CXX)
+            if(NOT CODUOMP_${_language}_ENUM_CASTS_WARNING_CLEAN)
+                target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:${_language}>:/wd5287>")
+            endif()
+        endforeach()
+    endif()
     if(CODUOMP_CLANG_CL)
         foreach(_flag IN LISTS CODUOMP_EXTENDED_FLAGS)
             target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C,CXX>:${_flag}>")

@@ -129,6 +129,10 @@ not a runnable dedicated-server executable.
 
 ## Windows with MSVC or clang-cl
 
+Install Windows SDK 10.0.20348.0 or newer for the C11 preprocessor. The SDK
+checks and warning policy are shared with the client; see
+[Windows compiler requirements](client-building.md#windows-with-clang-cl-or-msvc).
+
 CMake is supported only for native Windows builds with MSVC or clang-cl.
 Use CMake 4.4+ and MSVC 19.39+ or clang-cl 22+. The server target builds the
 dedicated engine and matching game DLL for the configurations below:
