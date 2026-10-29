@@ -2,9 +2,7 @@
 
 Linux dedicated-server and game-module builds use the maintained Make targets.
 Use `make server32` or `make server64` to build both components for the selected
-architecture. Windows builds with MinGW also use Make. CMake exists only for
-native Windows builds with MSVC or clang-cl; the top-level CMake project and
-presets do not support Linux or macOS builds.
+architecture. Windows builds with MinGW also use Make.
 
 The public tree contains two independently useful target families:
 
@@ -43,7 +41,6 @@ its original authorization defaults.
 - For Windows cross-builds, an architecture-matched MinGW compiler,
   `i686-w64-mingw32-gcc` or `x86_64-w64-mingw32-gcc`, and its matching `g++`
 - MinGW-compatible zlib headers and library for the Windows engine
-- For native Windows builds, CMake 4.4+ and MSVC 19.39+ or clang-cl 22+
 
 ## Linux dedicated server (Make)
 
@@ -132,8 +129,9 @@ not a runnable dedicated-server executable.
 
 ## Windows with MSVC or clang-cl
 
-The same CMake target builds a dedicated engine and matching game DLL for
-all supported Windows compiler configurations:
+CMake is supported only for native Windows builds with MSVC or clang-cl.
+Use CMake 4.4+ and MSVC 19.39+ or clang-cl 22+. The server target builds the
+dedicated engine and matching game DLL for the configurations below:
 
 | Preset | Architecture | Compiler |
 | --- | --- | --- |

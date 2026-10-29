@@ -41,10 +41,8 @@ See [the branch policy](docs/branch-policy.md) for the exact boundary. Run
 
 ## Build
 
-CMake exists only for native Windows builds with MSVC or clang-cl. Make is
-the maintained, supported build system for Linux and macOS, and for Windows
-builds with MinGW. The top-level CMake project and presets do not support
-Linux or macOS builds.
+Select the supported build workflow for your host, target platform, and
+toolchain:
 
 | Build host | Target platform | Supported build system |
 | --- | --- | --- |
@@ -186,21 +184,21 @@ The budget parallelizes independent recipes; the existing cgame/UI rules
 that compile multiple files in one compiler invocation remain serial within
 that invocation.
 
-For Windows CMake builds, the Visual Studio MSVC presets use
-`cmake --build --preset msvc --parallel N` to select the compiler budget. See
-the [Windows client build guide](docs/client-building.md#windows-with-clang-cl-or-msvc)
-for MSVC scheduling and the other Windows CMake configurations.
-
 Package targets resolve `SOURCE_COMMIT` once per Make process. It defaults to
 the checkout's `HEAD`; pass `SOURCE_COMMIT=<revision>` when building an exported
 source archive without Git metadata.
 
 ### Windows with MSVC or clang-cl (CMake)
 
-For native Windows builds using Visual Studio, follow the
-[MSVC/clang-cl client guide](docs/client-building.md#windows-with-clang-cl-or-msvc)
+CMake is supported only for native Windows builds with MSVC or clang-cl.
+Follow the [MSVC/clang-cl client guide](docs/client-building.md#windows-with-clang-cl-or-msvc)
 or [dedicated-server guide](docs/server-building.md#windows-with-msvc-or-clang-cl).
 The CMake presets build Windows executables and DLLs.
+
+For Windows CMake builds, the Visual Studio MSVC presets use
+`cmake --build --preset msvc --parallel N` to select the compiler budget. See
+the [Windows client build guide](docs/client-building.md#windows-with-clang-cl-or-msvc)
+for MSVC scheduling and the other Windows CMake configurations.
 
 ### Windows with MinGW (Make)
 
