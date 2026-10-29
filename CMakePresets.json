@@ -1,8 +1,8 @@
 {
   "version": 5,
   "cmakeMinimumRequired": {
-    "major": 4,
-    "minor": 4,
+    "major": 3,
+    "minor": 24,
     "patch": 0
   },
   "configurePresets": [
@@ -28,6 +28,30 @@
       "inherits": "msvc",
       "architecture": "x64",
       "toolset": "ClangCL"
+    },
+    {
+      "name": "linux",
+      "displayName": "Linux native GCC (dedicated server)",
+      "description": "Native GCC build of the dedicated server and its game module. Requires GCC on x86 or x86-64; the faithful build uses native x87 arithmetic. The Makefile targets remain available for 32-bit builds.",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/.workbench/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUNDLED_LIBS": "ON",
+        "CODUOMP_BUILD_CLIENT": "OFF",
+        "CODUOMP_BUILD_MODULES": "OFF"
+      }
+    },
+    {
+      "name": "linux-clang",
+      "displayName": "Linux native Clang (dedicated server, relaxed float)",
+      "description": "Native Clang build of the dedicated server and its game module. Clang cannot generate the faithful x87 model architecture, so this preset selects the acknowledged relaxed floating-point policy.",
+      "inherits": "linux",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CODUO_FP_FAITHFUL": "relaxed"
+      }
     }
   ],
   "buildPresets": [
@@ -45,6 +69,14 @@
       "name": "clang-cl-x64",
       "configurePreset": "clang-cl-x64",
       "configuration": "Release"
+    },
+    {
+      "name": "linux",
+      "configurePreset": "linux"
+    },
+    {
+      "name": "linux-clang",
+      "configurePreset": "linux-clang"
     }
   ]
 }
