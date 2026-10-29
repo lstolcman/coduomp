@@ -1,38 +1,6 @@
-# C11 requires an SDK that supports the conforming preprocessor. Visual Studio
-# reports the selected SDK version; other generators check the actual headers.
-if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION AND
-   CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS "10.0.20348.0")
-    message(FATAL_ERROR
-        "C11 requires Windows SDK 10.0.20348.0 or newer; selected "
-        "${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}. Install and select a newer SDK.")
-endif()
-
 include(CheckCSourceCompiles)
 include(CheckCXXSourceCompiles)
 include(CMakePushCheckState)
-
-block(SCOPE_FOR VARIABLES)
-    cmake_push_check_state(RESET)
-    set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-    if(CODUOMP_CLANG_CL)
-        # SDK headers supplied through /imsvc are otherwise warning-silent.
-        set(CMAKE_REQUIRED_FLAGS "/clang:-Wsystem-headers /clang:-Werror=expansion-to-defined")
-    else()
-        set(CMAKE_REQUIRED_FLAGS "/we5105")
-    endif()
-    check_c_source_compiles([[
-        #define WIN32_LEAN_AND_MEAN
-        #include <winsock2.h>
-        #include <windows.h>
-        int main(void) { return 0; }
-    ]] CODUOMP_WINDOWS_SDK_C11_SUPPORTED)
-    cmake_pop_check_state()
-endblock()
-if(NOT CODUOMP_WINDOWS_SDK_C11_SUPPORTED)
-    message(FATAL_ERROR
-        "The Windows SDK headers failed the C11 preprocessor check. "
-        "Use Windows SDK 10.0.20348.0 or newer and check the CMake configure log.")
-endif()
 
 # Some MSVC releases report C5287 even after both enum operands are explicitly
 # converted to int. Keep the warning enabled for each language whose compiler

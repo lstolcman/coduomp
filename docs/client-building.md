@@ -114,10 +114,9 @@ MSVC remains supported, but its `long double` is binary64 on both x86 and x64.
 We accept the resulting narrowing; MSVC builds do not promise extended-precision
 fidelity, even with `/arch:IA32` or optimization disabled.
 
-Use Visual Studio 2022 17.9 or newer with the C++ desktop workload,
-Windows SDK 10.0.20348.0 or newer, and CMake 4.4 or newer. Select the SDK in
-Visual Studio Installer's Individual Components tab. CMake checks the selected
-SDK's C11 headers instead of suppressing the old SDK's C5105 diagnostic.
+Use Visual Studio 2022 17.9 or newer with the C++ desktop workload, a Windows
+SDK, and CMake 4.4 or newer. Select the SDK in Visual Studio Installer's
+Individual Components tab.
 The CMake build reads the Makefile source manifests and builds the executable,
 all three modules, and the dedicated server. The dedicated server uses
 `cmake/msvc-posix/` for the POSIX names the MinGW build gets from its C library;
@@ -144,6 +143,11 @@ Warning settings are shared by `stock` and `master`. There is no blanket
 POSIX-name deprecation exemption; host spellings belong in the compatibility
 headers. The standalone server leaves `fileno` to the shared compatibility
 header, which declares the CRT names before defining the alias.
+SDK 10.0.19041 is not rejected for C5105: MSVC documents that it evaluates
+the SDK's macro-expanded `defined` normally. The server's compatibility header
+suppresses that portability diagnostic only around its Windows SDK includes,
+then restores the warning for project code. See
+[Microsoft's C5105 explanation](https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/c5105).
 MSVC C5287 is disabled only for a language whose configure-time check reproduces
 the false positive on explicitly cast enum operands. The workaround is omitted
 for fixed MSVC toolsets and clang-cl.
