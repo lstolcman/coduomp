@@ -144,6 +144,10 @@ make server-windows-x86_64
 make server-windows-i386
 ```
 
+The top-level targets compile in parallel by default; `make JOBS=N` caps the
+budget and `JOBS=1` builds serially. Invoking `build-mk/server.mk` directly
+needs an explicit `make -j N -f build-mk/server.mk ...`.
+
 Outputs:
 
 ```text

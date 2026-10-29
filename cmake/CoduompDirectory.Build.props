@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- The build command owns the parallelism: MSBuild turns its /m option into
+       MSBuildNodeCount, so no /m stays sequential, /m uses every processor and
+       /m:<n> uses n. Projects build one after another, and each project gives
+       its translation units /MP<n>. The client and the bundled libraries hold
+       far more source files than the solution has projects, so the compiler
+       budget is what shortens a build; building projects concurrently as well
+       would multiply the two budgets into n*n compiler processes. /FS keeps
+       concurrent writes to the shared PDB valid. -->
+  <PropertyGroup Condition="'$(MSBuildNodeCount)' != '' and '$(MSBuildNodeCount)' &gt; '1'">
+    <BuildInParallel>false</BuildInParallel>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(MSBuildNodeCount)' != '' and '$(MSBuildNodeCount)' &gt; '1'">
+    <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ProcessorNumber>$(MSBuildNodeCount)</ProcessorNumber>
+      <AdditionalOptions>%(AdditionalOptions) /FS</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>
