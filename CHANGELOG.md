@@ -25,6 +25,7 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Dedicated and listen servers skip external CD-key authorization by default.
 - Redirect downloads join `sv_wwwBaseURL` and the pak path with one separator and normalize pak-path backslashes. Empty or oversized redirect URLs fall back to direct downloads.
 - The dedicated server mounts every supported localized pak, so a non-English installation finds `default_mp.cfg` instead of failing at startup.
+- Server configuration samples are available in `misc/`: complete per-gametype configs, a general server, and optional gameplay, weapons, physics and map-rotation includes.
 
 ### Platforms and display
 
