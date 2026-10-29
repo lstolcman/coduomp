@@ -1,6 +1,12 @@
 WORKBENCH_DIR ?= .workbench
 BUILD_DIR ?= $(WORKBENCH_DIR)/build
-JOBS ?=
+# Default recursive builds to one compiler job per processor. JOBS=N selects
+# a smaller budget; JOBS=1 (or an empty JOBS) keeps those builds serial.
+JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || printf '%s' "$${NUMBER_OF_PROCESSORS:-1}")
+_JOBS := $(strip $(JOBS))
+ifeq ($(_JOBS),)
+_JOBS := 1
+endif
 CC ?= cc
 CXX ?= c++
 PKG_CONFIG ?= pkg-config
@@ -19,7 +25,10 @@ MINGW64_DEP_PREFIX ?=
 WINDOWS_DEP_PREFIX ?=
 AUTH ?= 1
 
-MAKE_JOBS := $(if $(JOBS),-j $(JOBS),)
+# Preserve an inherited jobserver instead of resetting its shared budget.
+# Expand at recipe time, when MAKEFLAGS includes the command-line job options.
+# GNU Make 3.81 also represents unlimited -j in the leading short-option word.
+MAKE_JOBS = $(if $(or $(filter -j% --jobserver%,$(MAKEFLAGS)),$(if $(findstring =,$(firstword $(MAKEFLAGS))),,$(findstring j,$(firstword $(MAKEFLAGS))))),,-j$(_JOBS))
 HOST_OS := $(shell uname -s)
 HOST_MACHINE := $(shell uname -m)
 
@@ -68,7 +77,10 @@ MACOS_BUNDLE_BUILD ?= 1
 MACOS_SIGN_IDENTITY ?= -
 WINDOWS_GAME_OUTPUT ?= $(BUILD_DIR)/game/client-windows-i686/uo_game_mp_x86.dll
 WINDOWS64_GAME_OUTPUT ?= $(BUILD_DIR)/game/client-windows-x86_64/uo_game_mp_x86.dll
-SOURCE_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
+# Resolve the default revision once per make process, preserving caller overrides.
+ifeq ($(origin SOURCE_COMMIT),undefined)
+SOURCE_COMMIT := $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
+endif
 WINDOWS_PACKAGE_OUTPUT ?= $(BUILD_DIR)/windows/opencoduo-windows-i686-$(shell printf '%s' "$(SOURCE_COMMIT)" | cut -c1-9).zip
 WINDOWS64_PACKAGE_OUTPUT ?= $(BUILD_DIR)/windows/opencoduo-windows-x86_64-$(shell printf '%s' "$(SOURCE_COMMIT)" | cut -c1-9).zip
 LINUX32_CLIENT_DIR ?= $(BUILD_DIR)/client/linux-i686
@@ -107,13 +119,13 @@ client-engine:
 		coduomp-native-link
 
 client-cgame:
-	$(MAKE) -f build-mk/client-targets.mk \
+	$(MAKE) $(MAKE_JOBS) -f build-mk/client-targets.mk \
 		CC="$(CC)" \
 		CLIENT_NATIVE_LIBRARY="$(abspath $(CLIENT_CGAME_OUTPUT))" \
 		client-native-link
 
 client-ui:
-	$(MAKE) -f build-mk/ui.mk \
+	$(MAKE) $(MAKE_JOBS) -f build-mk/ui.mk \
 		CC="$(CC)" \
 		NATIVE_LIBRARY="$(abspath $(CLIENT_UI_OUTPUT))" \
 		native-link
@@ -211,7 +223,7 @@ client-linux32:
 		echo 'error: client-linux32 must be built on Linux' >&2; \
 		exit 2; \
 	fi
-	$(MAKE) client BUILD_DIR="$(BUILD_DIR)" \
+	$(MAKE) $(MAKE_JOBS) client BUILD_DIR="$(BUILD_DIR)" \
 		CLIENT_NATIVE_DIR="$(LINUX32_CLIENT_DIR)" \
 		CLIENT_NATIVE_ARCH=x86 CLIENT_NATIVE_EXT=so \
 		CC="$(LINUX32_CC) -m32 -msse" \
@@ -227,7 +239,7 @@ client-linux64:
 		echo 'error: client-linux64 must be built on Linux' >&2; \
 		exit 2; \
 	fi
-	$(MAKE) client BUILD_DIR="$(BUILD_DIR)" \
+	$(MAKE) $(MAKE_JOBS) client BUILD_DIR="$(BUILD_DIR)" \
 		CLIENT_NATIVE_DIR="$(LINUX64_CLIENT_DIR)" \
 		CLIENT_NATIVE_ARCH=x86_64 CLIENT_NATIVE_EXT=so \
 		CC="$(LINUX64_CC) -m64" CXX="$(LINUX64_CXX) -m64" \
@@ -269,10 +281,10 @@ client-windows-i686:
 		MINGW32_BUILD_DIR="$(abspath $(BUILD_DIR)/client/windows-i686)" \
 		MINGW32_OUTPUT="$(abspath $(BUILD_DIR)/client/windows-i686/CoDUOMP.exe)" \
 		MINGW32_DEP_PREFIX="$(MINGW32_DEP_PREFIX)"
-	$(MAKE) -f build-mk/client-targets.mk client-win32-abi-link \
+	$(MAKE) $(MAKE_JOBS) -f build-mk/client-targets.mk client-win32-abi-link \
 		CLIENT_WIN32_CC="$(MINGW32_CC)" \
 		CLIENT_WIN32_LIBRARY="$(abspath $(BUILD_DIR)/client/windows-i686/uo_cgame_mp_x86.dll)"
-	$(MAKE) -f build-mk/ui.mk win32-abi-link \
+	$(MAKE) $(MAKE_JOBS) -f build-mk/ui.mk win32-abi-link \
 		WIN32_CC="$(MINGW32_CC)" \
 		WIN32_LIBRARY="$(abspath $(BUILD_DIR)/client/windows-i686/uo_ui_mp_x86.dll)"
 	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk windows-i686 \
@@ -286,10 +298,10 @@ client-windows-x86_64:
 		MINGW64_BUILD_DIR="$(abspath $(BUILD_DIR)/client/windows-x86_64)" \
 		MINGW64_OUTPUT="$(abspath $(BUILD_DIR)/client/windows-x86_64/CoDUOMP.exe)" \
 		MINGW64_DEP_PREFIX="$(MINGW64_DEP_PREFIX)"
-	$(MAKE) -f build-mk/client-targets.mk client-windows-cross-link \
+	$(MAKE) $(MAKE_JOBS) -f build-mk/client-targets.mk client-windows-cross-link \
 		CLIENT_WINDOWS_CC="$(MINGW64_CC)" \
 		CLIENT_WINDOWS_LIBRARY="$(abspath $(BUILD_DIR)/client/windows-x86_64/uo_cgame_mp_x86.dll)"
-	$(MAKE) -f build-mk/ui.mk windows-cross-link \
+	$(MAKE) $(MAKE_JOBS) -f build-mk/ui.mk windows-cross-link \
 		WINDOWS_CC="$(MINGW64_CC)" \
 		WINDOWS_LIBRARY="$(abspath $(BUILD_DIR)/client/windows-x86_64/uo_ui_mp_x86.dll)"
 	$(MAKE) $(MAKE_JOBS) -f build-mk/game.mk windows-x86_64 \
@@ -407,7 +419,9 @@ help:
 	  '  server-windows-i386 server-windows-i686 server-windows-x86_64' \
 	  '  server-engine64 server-engine32 server-game64 server-game32' \
 	  'Options:' \
-	  '  WORKBENCH_DIR=path BUILD_DIR=path JOBS=N AUTH=1|0' \
+	  '  WORKBENCH_DIR=path BUILD_DIR=path AUTH=1|0' \
+	  '  JOBS=N sets recursive build jobs (default: processor count; 1 = serial)' \
+	  '  An existing make -jN jobserver takes precedence over JOBS.' \
 	  '  CODUO_FP_FAITHFUL=auto|strict|relaxed' \
 	  '  CLIENT_DATA_PATH=/path/to/retail/root CLIENT_ARGS=...' \
 	  '  CLIENT_TEST_WORK_DIR=path CLIENT_TEST_HOME_PATH=path' \

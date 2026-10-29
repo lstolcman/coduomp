@@ -60,6 +60,15 @@ else()
 endif()
 message(STATUS "Whole-program floating-point parity remains unverified on these Windows CMake targets.")
 
+# MSBuild imports this file for the generated projects, including bundled
+# dependencies. MSVC /MP follows the build command's job budget. Other
+# generators and clang-cl retain their own parallel compilation scheduling.
+if(CMAKE_GENERATOR MATCHES "^Visual Studio" AND NOT CODUOMP_CLANG_CL)
+    configure_file(
+        "${CMAKE_CURRENT_LIST_DIR}/CoduompDirectory.Build.props"
+        "${CMAKE_BINARY_DIR}/Directory.Build.props" COPYONLY)
+endif()
+
 # System libraries required by the client executable. The static SDL2, libjpeg,
 # libcurl and minizip builds used by the Makefiles need these as well.
 set(CODUOMP_CLIENT_SYSTEM_LIBS

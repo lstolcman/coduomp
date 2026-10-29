@@ -158,6 +158,25 @@ Build and package each platform with the targets below and in the
 [client build guide](docs/client-building.md). Official release orchestration
 and maintainer privacy checks are separate from these developer targets.
 
+### Parallel builds
+
+Top-level Make targets default to a job budget of one job per detected
+processor. Use `make JOBS=4 <target>` to choose a budget or
+`make JOBS=1 <target>` for a serial build. An existing `make -jN` jobserver
+takes precedence over `JOBS`; recursive builds share its budget. Direct
+`make -f build-mk/...` invocations still need an explicit `-jN`.
+The budget parallelizes independent recipes; the existing cgame/UI rules
+that compile multiple files in one compiler invocation remain serial within
+that invocation.
+
+The Visual Studio MSVC presets use `cmake --build --preset msvc --parallel N`
+to select the compiler budget. See the [client build guide](docs/client-building.md)
+for MSVC scheduling and the other supported CMake configurations.
+
+Package targets resolve `SOURCE_COMMIT` once per Make process. It defaults to
+the checkout's `HEAD`; pass `SOURCE_COMMIT=<revision>` when building an exported
+source archive without Git metadata.
+
 ### Windows
 
 The Windows targets use GNU Make and GCC rather than Visual Studio. Install

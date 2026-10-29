@@ -30,6 +30,17 @@ Offensive installation to run the resulting client.
 The executable supports Apple Silicon macOS and 32-bit or 64-bit x86 Linux
 and Windows.
 
+Top-level Make targets default to a job budget of one job per detected processor.
+Use `make JOBS=N <target>` to select a budget, or `make JOBS=1 <target>` for a
+serial build. An existing `make -jN` jobserver takes precedence over `JOBS` and
+is shared by recursive builds. Direct `make -f build-mk/...` invocations do
+not select a budget automatically; pass `-jN` explicitly.
+The cgame/UI link rules still compile their source lists in one compiler
+invocation, so Make cannot parallelize files within those rules. Use `JOBS=1`
+for portable serial builds: GNU Make 3.81 does not expose an explicit `-j1`
+through `MAKEFLAGS`, so the top-level Makefile cannot distinguish it from the
+default invocation on that version.
+
 ### Debian 12
 
 Install the compiler and development packages:
@@ -110,6 +121,16 @@ which uses `/arch:IA32` for compiler-generated x87 arithmetic:
 cmake --preset msvc
 cmake --build --preset msvc --parallel 2
 ```
+
+For the Visual Studio `msvc` and `msvc-x64` presets, `--parallel N` enables
+MSVC `/MPN` compilation within each project. Project references build
+sequentially to avoid multiplying that budget by the project count, and `/FS`
+coordinates concurrent compiler PDB writes. `--parallel` without a number
+uses the processor count; `--parallel 1` builds serially. Omitting the option
+also leaves compilation serial unless a parallel level is supplied through
+`CMAKE_BUILD_PARALLEL_LEVEL`. These settings are generated in the build
+directory's `Directory.Build.props`. The `clang-cl-x64` preset and other
+CMake generators retain their native build-tool scheduling.
 
 Every Windows build defaults to Miniaudio, regardless of compiler or
 architecture. Every Windows x86 build also includes optional Miles support;
