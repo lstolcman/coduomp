@@ -33,6 +33,8 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Server download caches are keyed by the server address and port plus its advertised name, so two servers that share the default `CoDHost` name no longer overwrite each other's cached files.
 - Redirect downloads insert exactly one separator after `sv_wwwBaseURL` and convert backslashes in the virtual pak path.
 - The MinGW server links zlib statically, so the package does not need an external `zlib1.dll`.
+- Windows servers treat the `WSAECONNRESET` status from a departed client as a quiet receive, instead of logging a network error every frame until the client times out.
+- The MinGW server reserves the stock 8 MiB stack, so map start no longer overflows the default 2 MiB stack.
 
 ### Platforms and display
 
