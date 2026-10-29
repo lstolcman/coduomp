@@ -60,7 +60,7 @@ typedef unsigned short mode_t;
 #define getcwd _getcwd
 #define rmdir _rmdir
 #define isatty _isatty
-#define fileno _fileno
+/* compat/coduo_posix.h maps fileno after stdio.h declares the CRT names. */
 #define getpid _getpid
 #define chmod _chmod
 #define stat _stat

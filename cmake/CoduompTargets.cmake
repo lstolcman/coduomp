@@ -173,9 +173,6 @@ if(CODUOMP_BUILD_SERVER)
 		${CODUOMP_ZLIB_INCLUDE_DIRS})
 
 	target_compile_options(coduo_dedicated_recovered PRIVATE
-		# Windows SDK 10.0.19041 winbase.h expands "defined" inside a macro,
-		# which MSVC C11 reports as C5105 for every translation unit.
-		/wd5105
 		"SHELL:/FI\"${CMAKE_SOURCE_DIR}/cmake/msvc-posix/coduomp_posix_compat.h\"")
 
 	target_link_libraries(coduo_dedicated_recovered PRIVATE
