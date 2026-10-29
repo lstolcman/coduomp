@@ -35,6 +35,7 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - The MinGW server links zlib statically, so the package does not need an external `zlib1.dll`.
 - Windows servers treat the `WSAECONNRESET` status from a departed client as a quiet receive, instead of logging a network error every frame until the client times out.
 - The MinGW server reserves the stock 8 MiB stack, so map start no longer overflows the default 2 MiB stack.
+- Inactivity kicks also treat mouse or joystick look as activity, so a player who only turns, aims or tracks a target is no longer dropped while the movement keys and fire button are idle.
 
 ### Platforms and display
 
