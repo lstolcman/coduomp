@@ -26,6 +26,7 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Redirect downloads join `sv_wwwBaseURL` and the pak path with one separator and normalize pak-path backslashes. Empty or oversized redirect URLs fall back to direct downloads.
 - The dedicated server mounts every supported localized pak, so a non-English installation finds `default_mp.cfg` instead of failing at startup.
 - Server configuration samples are available in `misc/`: complete per-gametype configs, a general server, and optional gameplay, weapons, physics and map-rotation includes.
+- Server download caches are keyed by the server address and port plus its advertised name, so two servers that share the default `CoDHost` name no longer overwrite each other's cached files.
 
 ### Platforms and display
 
