@@ -906,7 +906,7 @@ void ui_compat_brand_main_menu_version(void)
             Q_stricmp(item->window.name,
                       "background_version_display") == 0 &&
             Q_stricmp(item->cvar, "shortversion") == 0) {
-            item->text = String_Alloc(CODUOMP_DISPLAY_LABEL);
+            item->text = String_Alloc(CODUOMP_DISPLAY_FOOTER);
             item->textRect.w = 0.0f;
             item->textRect.h = 0.0f;
             break;
