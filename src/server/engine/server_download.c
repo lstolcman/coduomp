@@ -13,6 +13,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum {
     SERVER_DOWNLOAD_FAILURE_BLOCK = 0,
@@ -220,6 +221,34 @@ qboolean SV_CheckFallbackURL(void)
     return qtrue;
 }
 
+/* NOT_FROM_ORIGINAL_SOURCE: join the redirect base and virtual pak path with
+ * one separator, normalize pak backslashes, and reject empty or oversized URLs
+ * rather than publishing a partial path. The inputs and output must not overlap. */
+static qboolean coduomp_www_build_redirect_url(const char *baseUrl, const char *pakName, char *out, size_t outSize)
+{
+    if (outSize == 0)
+        return qfalse;
+    out[0] = '\0';
+
+    size_t baseLength = strlen(baseUrl);
+    while (baseLength > 0 && (baseUrl[baseLength - 1] == '/' || baseUrl[baseLength - 1] == '\\'))
+        --baseLength;
+    while (*pakName == '/' || *pakName == '\\')
+        ++pakName;
+
+    const size_t pakLength = strlen(pakName);
+    /* Reserve both the joining slash and the terminating NUL. */
+    if (baseLength == 0 || pakLength == 0 || baseLength >= outSize || pakLength >= outSize - baseLength - 1)
+        return qfalse;
+
+    memcpy(out, baseUrl, baseLength);
+    out[baseLength++] = '/';
+    for (size_t index = 0; index < pakLength; ++index)
+        out[baseLength + index] = pakName[index] == '\\' ? '/' : pakName[index];
+    out[baseLength + pakLength] = '\0';
+    return qtrue;
+}
+
 void SV_WriteDownloadToClient(client_t *client, msg_t *message)
 {
     char errorText[MAX_STRING_CHARS];
@@ -269,7 +298,12 @@ void SV_WriteDownloadToClient(client_t *client, msg_t *message)
         }
 
         if (sv_wwwDownload->integer != 0) {
-            if (client->download.redirectAllowedByClient == qfalse) {
+            /* NOT_FROM_ORIGINAL_SOURCE: an unusable redirect configuration
+             * must still permit the existing direct-download path. */
+            if (coduomp_www_build_redirect_url(sv_wwwBaseURL->string, client->download.fileName,
+                                              client->download.redirectUrl, sizeof(client->download.redirectUrl)) == qfalse) {
+                Com_Printf("Client '%s': empty or oversized download redirect URL; falling back to direct download\n", client->name);
+            } else if (client->download.redirectAllowedByClient == qfalse) {
                 if (SV_CheckFallbackURL() != qfalse) {
                     return;
                 }
@@ -282,10 +316,6 @@ void SV_WriteDownloadToClient(client_t *client, msg_t *message)
 
                 if (redirectSize != 0) {
                     FS_FCloseFile(redirectHandle);
-                    Q_strncpyz(client->download.redirectUrl,
-                               va("%s/%s", sv_wwwBaseURL->string,
-                                  client->download.fileName),
-                               sizeof(client->download.redirectUrl));
                     Com_DPrintf("Redirecting client '%s' to %s\n",
                                 client->name,
                                 client->download.redirectUrl);
