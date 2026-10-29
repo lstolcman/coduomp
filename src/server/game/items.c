@@ -1334,9 +1334,9 @@ void G_BounceItem(gentity_t *ent, trace_t *trace)
     const int second = 2, last = 1;
     dot = ((WIDE_FLOAT)velocity[0] * trace->normal[0] + (WIDE_FLOAT)velocity[second] * trace->normal[second])
           + (WIDE_FLOAT)velocity[last] * trace->normal[last];
-    /* The -2 scale is exact for the bounded, already-float dot. Its Windows
-     * float store cannot introduce another rounding difference. */
-    WIDE_FLOAT reflectionScale = (WIDE_FLOAT)dot * ITEM_BOUNCE_REFLECTION_SCALE;
+    /* The -2 scale is exact within float range for the already-float dot.
+     * Preserve its float store as well, including overflow, before reflection. */
+    WIDE_FLOAT reflectionScale = coduo_round_f32((WIDE_FLOAT)dot * ITEM_BOUNCE_REFLECTION_SCALE);
     delta[0] = (WIDE_FLOAT)reflectionScale * trace->normal[0] + velocity[0];
     delta[1] = (WIDE_FLOAT)reflectionScale * trace->normal[1] + velocity[1];
     delta[2] = (WIDE_FLOAT)reflectionScale * trace->normal[2] + velocity[2];
