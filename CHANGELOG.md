@@ -29,6 +29,7 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Server configuration samples are available in `misc/`: complete per-gametype configs, a general server, and optional gameplay, weapons, physics and map-rotation includes.
 - Server download caches are keyed by the server address and port plus its advertised name, so two servers that share the default `CoDHost` name no longer overwrite each other's cached files.
 - The MinGW server links zlib statically, so the package does not need an external `zlib1.dll`.
+- Inactivity kicks also treat mouse or joystick look as activity, so a player who only turns, aims or tracks a target is no longer dropped while the movement keys and fire button are idle.
 
 ### Platforms and display
 
