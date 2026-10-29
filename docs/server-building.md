@@ -29,7 +29,7 @@ its original authorization defaults.
 - For Windows cross-builds, an architecture-matched MinGW compiler,
   `i686-w64-mingw32-gcc` or `x86_64-w64-mingw32-gcc`, and its matching `g++`
 - MinGW-compatible zlib headers and library for the Windows engine
-- For native Windows builds, CMake 4.4+ and MSVC 19.39+ or clang-cl 22+
+- For native Windows builds, CMake 3.24+ and MSVC 19.39+ or clang-cl 22+
 
 ## Compile Checks
 
