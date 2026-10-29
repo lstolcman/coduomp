@@ -10,6 +10,7 @@
 #include "../networking/net_address.h"
 #include "../physics/cm_trace.h"
 #include "qcommon/fx_types.h"
+#include "qcommon/net_text.h"
 #include "qcommon/q_string.h"
 #include "../system_platform.h"
 
@@ -699,9 +700,20 @@ void CL_ParseGamestate(msg_t *message)
         advertisedName = Info_ValueForKey(serverInfo, "hostname");
     if (advertisedName[0] != '\0')
         serverDisplayName = advertisedName;
+
+    /* NOT_FROM_ORIGINAL_SOURCE: the server-cache namespace is mounted above
+     * the stock paks, so its directory must identify the endpoint, not only
+     * the advertised name. Two unrelated servers commonly share the default
+     * "CoDHost" name; keying by address prevents one server's cached paks and
+     * configs from leaking into another. Address first so a long hostname
+     * cannot truncate the unique part. */
+    char namespaceName[MAX_QPATH];
+    Com_sprintf(namespaceName, sizeof(namespaceName), "%s-%s",
+                NET_AdrToString(clc.serverAddress), serverDisplayName);
+
     const qboolean namespaceChanged =
         coduomp_server_namespace_activate(
-            serverDisplayName,
+            namespaceName,
             sv_running->integer == 0 &&
                     clc.demoPlayback == qfalse &&
                     cl_updateStarted == qfalse
