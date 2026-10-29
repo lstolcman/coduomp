@@ -175,6 +175,7 @@ EXE_I386_LD ?= $(EXE_I386_CXX)
 EXE_I386_LIBS ?= -ldl -lm -pthread -lstdc++ -lz
 MINGW32_CC ?= i686-w64-mingw32-gcc
 MINGW32_CXX ?= i686-w64-mingw32-g++
+MINGW32_OBJDUMP ?= i686-w64-mingw32-objdump
 MINGW64_CC ?= x86_64-w64-mingw32-gcc
 MINGW64_CXX ?= x86_64-w64-mingw32-g++
 WINDOWS64_DEP_PREFIX ?=
@@ -187,7 +188,11 @@ WINDOWS_COMMON_CPPFLAGS := -D_WIN32_WINNT=0x0601 \
 	$(WINDOWS_DEP_CPPFLAGS)
 WINDOWS_COMMON_FLOAT_FLAGS := -O0 -mfpmath=387 -fexcess-precision=fast
 WINDOWS_COMMON_LDFLAGS := -static-libgcc -static-libstdc++ -Xlinker --stack -Xlinker 8388608,4096
-WINDOWS_COMMON_LIBS ?= -lws2_32 -lz
+# The stock CoDUOMP.exe imports no zlib DLL, and the package ships no zlib1.dll,
+# so a dynamic import makes the server exit silently when the DLL is absent.
+# Select the static archive explicitly while other system libs stay dynamic.
+WINDOWS_STATIC_COMPRESSION_LIBS := -Wl,-Bstatic -lz -Wl,-Bdynamic
+WINDOWS_COMMON_LIBS ?= -lws2_32 $(WINDOWS_STATIC_COMPRESSION_LIBS)
 
 UNAME_S := $(shell uname -s)
 HOST_MACHINE := $(shell uname -m)
@@ -222,7 +227,8 @@ endif
 SHARED_TARGET := $(BUILD_DIR)/libcoduo_lnxded_recovered.$(SHARED_EXT)
 
 .PHONY: all check objects shared shared-check-link exe exe-i386 windows \
-	windows-i386 windows-i686 windows-x86_64 native64-check native64-shared native64-exe native-macos-exe \
+	windows-i386 windows-i686 windows-x86_64 windows-import-check \
+	native64-check native64-shared native64-exe native-macos-exe \
 	status clean help
 
 all: objects
@@ -243,9 +249,23 @@ windows: windows-i686 windows-x86_64
 
 windows-i386: $(WINDOWS_I386_TARGET)
 
-windows-i686: $(WINDOWS_I686_TARGET)
+windows-i686: $(WINDOWS_I686_TARGET) windows-import-check
 
 windows-x86_64: $(WINDOWS_X86_64_TARGET)
+
+# The package ships no MinGW runtime or zlib DLLs; the executable must be
+# self-contained for these.
+windows-import-check: $(WINDOWS_I686_TARGET)
+	@imports="$$($(MINGW32_OBJDUMP) -p "$<" | \
+		awk '$$0 ~ /DLL Name/ { print $$3 }' | sort -u)"; \
+	unexpected=$$(printf '%s\n' "$$imports" | \
+		grep -Ei '^(zlib1|libgcc|libstdc\+\+|libwinpthread|libssp)' || true); \
+	if test -n "$$unexpected"; then \
+		echo "error: executable imports unshipped runtime DLLs:" >&2; \
+		printf '  %s\n' $$unexpected >&2; \
+		echo "imports: $$imports" >&2; \
+		exit 2; \
+	fi
 
 native64-check: check
 
