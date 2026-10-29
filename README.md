@@ -41,6 +41,13 @@ the maintained, supported build system for Linux and macOS, and for Windows
 builds with MinGW. The top-level CMake project and presets do not support
 Linux or macOS builds.
 
+| Build host | Target platform | Supported build system |
+| --- | --- | --- |
+| Linux | Linux client or dedicated server | Make |
+| Apple Silicon macOS | macOS client | Make |
+| Windows | Windows client or dedicated server with MSVC/clang-cl | CMake |
+| Windows or Linux | Windows client or dedicated server with MinGW | Make |
+
 Choose the section for the platform where you are building. A legally owned
 Call of Duty: United Offensive installation is needed to run the client, but
 the retail game files are not part of the source build.
@@ -174,17 +181,25 @@ The budget parallelizes independent recipes; the existing cgame/UI rules
 that compile multiple files in one compiler invocation remain serial within
 that invocation.
 
-The Visual Studio MSVC presets use `cmake --build --preset msvc --parallel N`
-to select the compiler budget. See the [client build guide](docs/client-building.md)
-for MSVC scheduling and the other supported CMake configurations.
+For Windows CMake builds, the Visual Studio MSVC presets use
+`cmake --build --preset msvc --parallel N` to select the compiler budget. See
+the [Windows client build guide](docs/client-building.md#windows-with-clang-cl-or-msvc)
+for MSVC scheduling and the other Windows CMake configurations.
 
 Package targets resolve `SOURCE_COMMIT` once per Make process. It defaults to
 the checkout's `HEAD`; pass `SOURCE_COMMIT=<revision>` when building an exported
 source archive without Git metadata.
 
-### Windows
+### Windows with MSVC or clang-cl (CMake)
 
-The Windows targets use GNU Make and GCC rather than Visual Studio. Install
+For native Windows builds using Visual Studio, follow the
+[MSVC/clang-cl client guide](docs/client-building.md#windows-with-clang-cl-or-msvc)
+or [dedicated-server guide](docs/server-building.md#windows-with-msvc-or-clang-cl).
+The CMake presets build Windows executables and DLLs.
+
+### Windows with MinGW (Make)
+
+The MinGW targets use GNU Make and GCC. Install
 [MSYS2](https://www.msys2.org/), update it with `pacman -Syu`, and reopen the
 terminal if the update asks you to. Use the terminal matching the package you
 want to build.
