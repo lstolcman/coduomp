@@ -1533,6 +1533,60 @@ static qboolean ClientCommandChangedViewAngles(const usercmd_t *command,
            command->angles[2] != previous->angles[2] ? qtrue : qfalse;
 }
 
+/* Turret-state bits shared with ClientSpawn's cleanup gate. */
+#define INACTIVITY_SPECTATE_TURRET_FLAGS 0x00006000u
+
+/* NOT_FROM_ORIGINAL_SOURCE: general-inactivity disposition selected by
+ * g_inactivityAction. Unknown values keep the stock kick behavior. */
+static qboolean ClientInactivityMovesToSpectator(void)
+{
+    return Q_stricmp(g_inactivityAction.string, "spectate") == 0 ? qtrue
+                                                                 : qfalse;
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: move an inactive player to the spectator team
+ * instead of dropping the connection. This mirrors the gametype scripts'
+ * sessionteam/sessionstate assignment while releasing any turret or vehicle
+ * first, then leaves the stock spectator inactivity timer to decide whether an
+ * idle spectator is eventually dropped. */
+static void ClientMoveToSpectatorOnInactivity(gclient_t *client)
+{
+    gentity_t *ent = &g_entities[(int)(client - level.clients)];
+
+    if ((client->ps.playerStateFlags & PSF_ACTIVE_PLAYER) != 0 &&
+        (client->ps.entityStateFlags & INACTIVITY_SPECTATE_TURRET_FLAGS) != 0) {
+        G_ClientStopUsingTurret(
+            &level.gentities[client->ps.viewLockedEntityNum]);
+    }
+    if ((client->ps.playerStateFlags & PSF_ACTIVE_PLAYER) != 0 &&
+        (client->ps.entityStateFlags & EF_IN_VEHICLE) != 0) {
+        VEH_UnlinkPlayer(ent, 0);
+    }
+
+    client->clientState.team = TEAM_SPECTATOR;
+    client->sessionState = SESS_STATE_SPECTATOR;
+    client->followClient = ARCHIVE_CLIENT_NONE;
+    client->archiveClient = ARCHIVE_CLIENT_NONE;
+    client->archiveTime = 0;
+    client->spectatorActivityState = 0;
+    client->spectatorInactivityTime = -1;
+    client->spectatorInactivityWarning = 0;
+    client->inactivityWarningSent = 0;
+    client->lastUsercmdTime = level.time;
+    client->ps.entityStateFlags &= ~EF_VEHICLE_STATE_MASK;
+    client->ps.viewLocked = 0;
+    client->ps.viewLockedEntityNum = ENTITYNUM_NONE;
+    client->ps.playerStateFlags &= ~PSF_ACTIVE_PLAYER;
+
+    ent->scriptContents = 0;
+    ent->takeDamage = 0;
+    ent->s.eType = ET_INVISIBLE;
+    trap_UnlinkEntity(ent);
+
+    Com_Printf("Client %i moved to spectators for inactivity\n",
+               (int)(client - level.clients));
+}
+
 /* 0x4013c ClientInactivityTimer */
 /* VERIFIED_DECOMPILER(0x4013c, 5013c_ClientInactivityTimer.c, VERIFY-WAVE4-CLIENT-FRAME-LOCAL-2026-06-17): DATAFLOW_VERIFIED - inactivity cvar zero path, movement/button activity reset, no-kick gate, drop command, warning timing, and server-command arguments checked. */
 qboolean ClientInactivityTimer(gclient_t *client)
@@ -1560,7 +1614,12 @@ qboolean ClientInactivityTimer(gclient_t *client)
         client->inactivityWarningSent = 0;
     } else if (client->complaintDisabled == 0) {
         if (client->inactivityTime < level.time) {
-            trap_DropClient((int)(client - level.clients), "GAME_DROPPEDFORINACTIVITY");
+            if (ClientInactivityMovesToSpectator() != qfalse) {
+                ClientMoveToSpectatorOnInactivity(client);
+                return 0;
+            }
+            trap_DropClient((int)(client - level.clients),
+                            "GAME_DROPPEDFORINACTIVITY");
             return 0;
         }
 

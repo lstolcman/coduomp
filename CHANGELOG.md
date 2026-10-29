@@ -33,6 +33,7 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 
 - Attached models reload correctly when detached
 - Inactivity kicks also treat mouse or joystick look as activity, so a player who only turns, aims or tracks a target is no longer dropped while the movement keys and fire button are idle.
+- `g_inactivityAction "spectate"` moves an inactive player to the spectator team instead of dropping the connection; the stock `g_inactivityspectator` timer can still remove an idle spectator. The default `"kick"` keeps the existing behavior.
 - Per-map `<map>_<gametype>.cfg` files load by the visible map name even when the map asset name contains color escapes.
 - **Server configuration:** add `set g_allowGlobalChat 0` to the server config or enter it in the server console to disable player general chat while preserving team, squad, private, scripted, and server-console messages. Set it to `1` to enable general chat again; `1` is the default.
 - Dedicated and listen servers skip external CD-key authorization by default.
