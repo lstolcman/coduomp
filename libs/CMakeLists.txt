@@ -32,7 +32,9 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build third-party shared libraries" FORCE)
 set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1)
 # Scope deprecation suppression to this include and its third-party
 # subdirectories so the project's own diagnostics remain visible.
-cmake_diagnostic(SET CMD_DEPRECATED IGNORE)
+if(COMMAND cmake_diagnostic)
+	cmake_diagnostic(SET CMD_DEPRECATED IGNORE)
+endif()
 
 # coduomp_bundled_fetch(<name> <url> <sha256>)
 #
