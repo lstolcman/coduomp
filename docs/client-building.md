@@ -111,6 +111,14 @@ cmake --preset msvc
 cmake --build --preset msvc --parallel 2
 ```
 
+`--parallel 2` gives each project a two-file compiler budget (`/MP2`). Projects
+build one after another, so the number caps the whole build instead of
+multiplying with the project count. Change it to suit the host; `--parallel`
+without a number uses every processor, and removing it builds without
+parallelism. The generated `Directory.Build.props` derives the compiler's `/MP`
+budget from the MSBuild node count, keeps project builds sequential, and adds
+`/FS` so concurrent writes to the shared PDB stay valid.
+
 Every Windows build defaults to Miniaudio, regardless of compiler or
 architecture. Every Windows x86 build also includes optional Miles support;
 no audio build flags or retail
