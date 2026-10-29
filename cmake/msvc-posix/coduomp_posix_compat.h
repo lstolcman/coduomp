@@ -30,9 +30,20 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
+
+/* SDK 10.0.19041 expands defined through a macro in winbase.h. MSVC documents
+ * that it evaluates this normally; C5105 reports the ISO C portability issue.
+ * Silence only these SDK includes, leaving the warning enabled in our code. */
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(push)
+#pragma warning(disable: 5105)
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(pop)
+#endif
 
 #ifndef CODUOMP_MSVC_SSIZE_T
 #define CODUOMP_MSVC_SSIZE_T
