@@ -63,6 +63,20 @@ Keep unsupported formats, domains, and observable side effects explicit until
 verified against the identified original Windows implementation. Required CRT
 compatibility changes belong in stock and must be merged forward into master.
 
+## Shared build tooling
+
+Build tooling must be the same on `stock` and `master`. This includes
+Make/CMake mechanisms, parallelism and other build defaults, toolchain and
+dependency handling, packaging, build metadata, and documentation for shared
+build behavior. Build-performance improvements belong in both branches.
+Preserve each branch's intended product settings and source membership when
+sharing tooling.
+
+Implement, validate, and commit tooling changes on `stock` first, then merge
+`stock` forward into `master` and validate both in the same work cycle. Tooling
+work is incomplete while present on only one branch. The master-only
+optimization rule applies to runtime/product behavior, not build tooling.
+
 ## Improved boundary
 
 Improved descends from stock and contains intentional product changes:
@@ -72,7 +86,7 @@ Improved descends from stock and contains intentional product changes:
 - presentation, branding, UI, and usability changes;
 - changed defaults, limits, policies, or diagnostics;
 - optional compatibility behavior; and
-- general performance optimizations.
+- general runtime performance optimizations.
 
 Math performance exceptions on master are restricted to proven presentation
 expressions. Server code and client movement, prediction, physics, damage,
