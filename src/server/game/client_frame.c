@@ -1093,9 +1093,8 @@ qboolean StuckInClient(gentity_t *ent)
         }
 
         game_compat_stuck_apply_push(otherClient, dir, otherSpeed);
-        dir[0] = -dir[0];
-        dir[1] = -dir[1];
-        game_compat_stuck_apply_push(client, dir, entSpeed);
+        /* Negate the selected speed while preserving the direction's bits. */
+        game_compat_stuck_apply_push(client, dir, -(WIDE_FLOAT)entSpeed);
         return 1;
     }
 
