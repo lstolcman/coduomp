@@ -30,6 +30,11 @@ Offensive installation to run the resulting client.
 The executable supports Apple Silicon macOS and 32-bit or 64-bit x86 Linux
 and Windows.
 
+Use the maintained Make targets for Linux and macOS clients and their modules,
+and for Windows builds with MinGW. CMake exists only for native Windows builds
+with MSVC or clang-cl; the top-level CMake project and presets do not support
+Linux or macOS builds.
+
 Top-level Make targets default to a job budget of one job per detected processor.
 Use `make JOBS=N <target>` to select a budget, or `make JOBS=1 <target>` for a
 serial build. An existing `make -jN` jobserver takes precedence over `JOBS` and

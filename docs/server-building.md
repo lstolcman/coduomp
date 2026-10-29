@@ -1,5 +1,11 @@
 # Building
 
+Linux dedicated-server and game-module builds use the maintained Make targets.
+Use `make server32` or `make server64` to build both components for the selected
+architecture. Windows builds with MinGW also use Make. CMake exists only for
+native Windows builds with MSVC or clang-cl; the top-level CMake project and
+presets do not support Linux or macOS builds.
+
 The public tree contains two independently useful target families:
 
 - `build-mk/server.mk` builds the standalone server from

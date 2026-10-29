@@ -36,6 +36,11 @@ See [the branch policy](docs/branch-policy.md) for the exact boundary. Run
 
 ## Build
 
+CMake exists only for native Windows builds with MSVC or clang-cl. Make is
+the maintained, supported build system for Linux and macOS, and for Windows
+builds with MinGW. The top-level CMake project and presets do not support
+Linux or macOS builds.
+
 Choose the section for the platform where you are building. A legally owned
 Call of Duty: United Offensive installation is needed to run the client, but
 the retail game files are not part of the source build.
