@@ -384,6 +384,10 @@ typedef struct clientStatic_s {
     int32_t *debugLineDurations;
     qboolean wwwDownloadDisconnected;
     clientStaticDownload_t staticDownload;
+    /* NOT_FROM_ORIGINAL_SOURCE: monotonic time of the outstanding master
+     * query, used to bound waitingForMasterResponse when the master never
+     * answers. Appended so the original-layout offsets above stay pinned. */
+    uint32_t masterResponseRequestTime;
 } clientStatic_t;
 
 #if UINTPTR_MAX == UINT32_MAX
@@ -423,7 +427,7 @@ _Static_assert(offsetof(clientStatic_t, wwwDownloadDisconnected) == 0x42cea4,
                "client-static disconnected WWW-download flag offset");
 _Static_assert(offsetof(clientStatic_t, staticDownload) == 0x42cea8,
                "client-static download state offset");
-_Static_assert(sizeof(clientStatic_t) == 0x42d0ec,
+_Static_assert(sizeof(clientStatic_t) == 0x42d0f0,
                "client-static clear extent");
 #endif
 
