@@ -108,10 +108,15 @@
 #define SPECTATOR_PM_FLAGS_ALLOWED 400
 #define SPECTATOR_PMOVE_TRACEMASK 0x800011
 #define SERVER_COMMAND_UNRELIABLE 0
+#define SERVER_COMMAND_RELIABLE 1
 #define INACTIVITY_GRACE_MS 60000
 #define INACTIVITY_WARNING_MS 10000
 #define INACTIVITY_SECONDS_TO_MS 1000
 #define INACTIVITY_INPUT_BUTTON_MASK 0x01u
+#define INACTIVITY_TEAM_MENU_PREFIX "team_"
+#define INACTIVITY_TEAM_MENU_PREFIX_LENGTH 5
+#define INACTIVITY_SPECTATOR_MENU_RESPONSE "spectator"
+#define INACTIVITY_CLOSE_MENU_COMMAND "u"
 #define CLIENT_EVENTS_RING_MASK 0x03u
 #define CLIENT_EVENTS_MAX_BACKLOG 4
 #define CLIENT_EVENTS_DAMAGE_MIN 116
@@ -1532,6 +1537,34 @@ static qboolean ClientCommandChangedViewAngles(const usercmd_t *command,
            command->angles[2] != previous->angles[2] ? qtrue : qfalse;
 }
 
+/* NOT_FROM_ORIGINAL_SOURCE: send the gametype team-menu response a player
+ * produces by choosing spectators, instead of applying that transition in C. */
+static qboolean game_compat_inactivity_move_to_spectators(gentity_t *ent)
+{
+    char menu[MAX_STRING_CHARS];
+    char teamMenu[MAX_STRING_CHARS];
+
+    for (int index = 0; index < CS_SCRIPTMENUS_COUNT; index++) {
+        trap_GetConfigstring(CS_SCRIPTMENUS + index, menu, sizeof(menu));
+        if (Q_stricmpn(menu, INACTIVITY_TEAM_MENU_PREFIX,
+                       INACTIVITY_TEAM_MENU_PREFIX_LENGTH) != 0) {
+            continue;
+        }
+
+        Q_strncpyz(teamMenu, menu, sizeof(teamMenu));
+        /* A manual menu response also closes the open script menu. */
+        trap_SendServerCommand((int)(ent - g_entities), SERVER_COMMAND_RELIABLE,
+                               INACTIVITY_CLOSE_MENU_COMMAND);
+        /* Cmd_MenuResponse_f pushes the response first, then the menu name. */
+        Scr_AddString(INACTIVITY_SPECTATOR_MENU_RESPONSE);
+        Scr_AddString(teamMenu);
+        Scr_Notify(ent, scr_const_menuresponse, 2);
+        return qtrue;
+    }
+
+    return qfalse;
+}
+
 /* 0x4013c ClientInactivityTimer */
 /* VERIFIED_DECOMPILER(0x4013c, 5013c_ClientInactivityTimer.c, VERIFY-WAVE4-CLIENT-FRAME-LOCAL-2026-06-17): DATAFLOW_VERIFIED - inactivity cvar zero path, movement/button activity reset, no-kick gate, drop command, warning timing, and server-command arguments checked. */
 qboolean ClientInactivityTimer(gclient_t *client)
@@ -1559,6 +1592,23 @@ qboolean ClientInactivityTimer(gclient_t *client)
         client->inactivityWarningSent = 0;
     } else if (client->complaintDisabled == 0) {
         if (client->inactivityTime < level.time) {
+            if (g_inactivityMoveToSpectators.integer != 0 &&
+                game_compat_inactivity_move_to_spectators(
+                    &g_entities[(int)(client - level.clients)]) != 0) {
+                Com_Printf("Client %i switching to spectators for "
+                           "inactivity\n",
+                           (int)(client - level.clients));
+                /* The gametype script owns the transition and its spawn resets
+                 * the inactivity deadline; reset here as well so a gametype
+                 * that declines the response cannot retrigger every frame. */
+                client->inactivityTime = coduo_int32_from_bits(
+                    (uint32_t)level.time +
+                    (uint32_t)g_inactivity.integer *
+                        (uint32_t)INACTIVITY_SECONDS_TO_MS);
+                client->inactivityWarningSent = 0;
+                return 0;
+            }
+
             trap_DropClient((int)(client - level.clients), "GAME_DROPPEDFORINACTIVITY");
             return 0;
         }
