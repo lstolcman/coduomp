@@ -23,6 +23,7 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 - Attached models reload correctly when detached
 - Per-map `<map>_<gametype>.cfg` files load by the visible map name even when the map asset name contains color escapes.
 - **Server configuration:** add `set g_allowGlobalChat 0` to the server config or enter it in the server console to disable player general chat while preserving team, squad, private, scripted, and server-console messages. Set it to `1` to enable general chat again; `1` is the default.
+- **Idle-player handling:** `g_inactivityMoveToSpectators 1` changes an expired `g_inactivity` deadline from disconnecting the client to moving the player to spectators through the gametype's own team-menu spectator response. The default `0` keeps the stock disconnect behavior; `g_inactivityspectator` still controls when an idle spectator is dropped.
 - Dedicated and listen servers skip external CD-key authorization by default.
 - The dedicated server mounts every supported localized pak, so a non-English installation finds `default_mp.cfg` instead of failing at startup.
 - Server configuration samples are available in `misc/`: complete per-gametype configs, a general server, and optional gameplay, weapons, physics and map-rotation includes.

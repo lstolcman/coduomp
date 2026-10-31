@@ -192,23 +192,39 @@ static qboolean CL_CgameIsMenuOpen(const char *menuName)
  * helper inlined into the Win32 dispatcher at 0x00403b42..0x00403bab. */
 static void CL_CgameClosePopup(const char *menuName)
 {
+    int32_t menuScreen;
+
     if (VM_Call(coduo_uiVm, CG_UI_GET_ACTIVE_MENU,
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) !=
         CG_UI_ACTIVE_MENU_NONE) {
         return;
     }
 
-    if ((Q_stricmp(menuName, "UIMENU_SCRIPT_POPUP_NO_MOUSE") == 0 &&
-         VM_Call(coduo_uiVm, CG_UI_GET_MENU_SCREEN,
-                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) ==
-             CG_UI_ACTIVE_MENU_SCRIPT_POPUP) ||
-        (Q_stricmp(menuName, "UIMENU_SCRIPT_POPUP") == 0 &&
-         VM_Call(coduo_uiVm, CG_UI_GET_MENU_SCREEN,
-                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) ==
-             CG_UI_ACTIVE_MENU_SCRIPT_POPUP)) {
+    menuScreen = (int32_t)VM_Call(
+        coduo_uiVm, CG_UI_GET_MENU_SCREEN,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+    if ((Q_stricmp(menuName, "UIMENU_SCRIPT_POPUP_NO_MOUSE") == 0 ||
+         Q_stricmp(menuName, "UIMENU_SCRIPT_POPUP") == 0) &&
+        menuScreen == CG_UI_ACTIVE_MENU_SCRIPT_POPUP) {
         (void)VM_Call(coduo_uiVm, CG_UI_KEY_EVENT,
                       CG_UI_ESCAPE_KEY, qtrue,
                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        return;
+    }
+
+    /* NOT_FROM_ORIGINAL_SOURCE: the recovered helper above only dismisses a
+     * script popup. A server close-menu request ('u') must also dismiss the
+     * open ingame menu (the team, weapon, or map screen), or a client moved to
+     * spectators by g_inactivityMoveToSpectators is left inside the stale
+     * menu. Setting the UI's active menu to none closes the whole menu stack
+     * and releases the UI key catcher, matching a manual return to the game;
+     * the call also clears ui_activeMenu so the second popup close request in
+     * CG_CloseScriptMenu sees no open menu. Fullscreen menus keep the stock
+     * early return above. */
+    if (menuScreen != CG_UI_ACTIVE_MENU_NONE) {
+        (void)VM_Call(coduo_uiVm, CG_UI_SET_ACTIVE_MENU, UI_MENU_NONE,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 }
 

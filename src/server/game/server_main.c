@@ -291,6 +291,11 @@ void G_RegisterCvars(void)
      * voting; otherwise both game-type vote commands use this allowlist. */
     trap_Cvar_Register(&g_voteGameTypes, "g_voteGameTypes", "", CVAR_ARCHIVE);
 
+    /* NOT_FROM_ORIGINAL_SOURCE: idle players drop by default; opt in to moving
+     * them to spectators through the gametype's team-menu response. */
+    trap_Cvar_Register(&g_inactivityMoveToSpectators,
+                       "g_inactivityMoveToSpectators", "0", 0);
+
     if (Scr_IsValidGameType(g_gametype.string) == 0) {
         G_Printf("g_gametype %s is not a valid gametype, defaulting to dm\n",
                  g_gametype.string);
@@ -332,6 +337,9 @@ void G_UpdateCvars(void)
 
     /* NOT_FROM_ORIGINAL_SOURCE: allow vote policy changes without a map restart. */
     trap_Cvar_Update(&g_voteGameTypes);
+
+    /* NOT_FROM_ORIGINAL_SOURCE: apply idle-spectator redirect changes immediately. */
+    trap_Cvar_Update(&g_inactivityMoveToSpectators);
 }
 
 /* ------------------------------------------------------------------ */

@@ -108,6 +108,21 @@ vmCvar_t g_weaponRespawn;
 vmCvar_t g_weaponAmmoPools;
 vmCvar_t g_maxDroppedWeapons;
 vmCvar_t g_inactivity;
+/* NOT_FROM_ORIGINAL_SOURCE: master-only idle-player redirect option.
+ * g_inactivity sets the no-input deadline in seconds; 0 disables it. When
+ * g_inactivityMoveToSpectators is 0 (the default), an expired deadline drops
+ * the client with GAME_DROPPEDFORINACTIVITY, exactly as stock does. A
+ * non-zero value instead routes the expired deadline through the gametype's
+ * own team-menu spectator response: the server finds the precached team_
+ * script menu and delivers the same menuresponse a manual spectator pick
+ * produces, so the gametype script performs its own spectator join and
+ * spawn. Gametype scripts without a team_ menu keep the stock drop, the stock
+ * g_inactivityspectator timer still drops an idle spectator, and the value is
+ * reread on every server frame so it applies without a map restart. The
+ * matching client closes whichever UI menu is open when the server requests
+ * the menu close; stock clients still move to spectators through the same
+ * response but can keep their menu open until they dismiss it. */
+vmCvar_t g_inactivityMoveToSpectators;
 vmCvar_t g_inactivityspectator;
 vmCvar_t g_debugMove;
 vmCvar_t g_debugProneCheck;
