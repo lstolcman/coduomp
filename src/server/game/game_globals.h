@@ -68,6 +68,7 @@ extern vmCvar_t g_weaponRespawn;
 extern vmCvar_t g_weaponAmmoPools;
 extern vmCvar_t g_maxDroppedWeapons;
 extern vmCvar_t g_inactivity;
+extern vmCvar_t g_inactivityMoveToSpectators;
 extern vmCvar_t g_inactivityspectator;
 extern vmCvar_t g_debugMove;
 extern vmCvar_t g_debugProneCheck;
