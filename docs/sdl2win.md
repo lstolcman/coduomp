@@ -262,6 +262,7 @@ game window and performs the equivalent transitions through SDL.
 | Swap interval | `wglSwapIntervalEXT` | `SDL_GL_SetSwapInterval` |
 | Gamma | display ramp + software LUT fallback | same through SDL |
 | Gamma on focus loss | desktop ramp restored | same |
+| Display mode on focus loss | desktop fullscreen stays; exclusive restores and minimizes | same (SDL policy) |
 | Mouse capture | Raw Input or recentering | relative mode or recentering |
 | `in_rawInput` / `in_rawInputActive` | live Raw Input registration | live SDL capture selection |
 | Wheel / buttons / keys / text | Win32 messages | SDL events |
@@ -315,9 +316,6 @@ These differences are intentional and follow from SDL owning the native window:
   button where the original `WS_CAPTION|WS_SYSMENU` window did not.
 * The splash window is borderless instead of `WS_POPUP|WS_BORDER|WS_SYSMENU`,
   and it is centered on the primary display.
-* SDL minimizes fullscreen windows on focus loss by default. The original
-  minimized only the exclusive mode. Desktop fullscreen returns to the same
-  display mode when refocused.
 * The developer console remains a Win32 control window; its exact chrome is
   unchanged from the Win32 build.
 * Log-only differences: the SDL build prints `...using native swap control`
