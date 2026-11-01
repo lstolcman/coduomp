@@ -1,7 +1,5 @@
 #include "sdl_platform.h"
 
-#if !defined(_WIN32)
-
 #include "../client/console.h"
 #include "../system_console.h"
 #include "../system_event.h"
@@ -11,9 +9,7 @@
 #include "client/common/client_video_settings.h"
 
 #include <SDL.h>
-#if defined(__linux__)
 #include <SDL_syswm.h>
-#endif
 
 #if defined(__APPLE__)
 #include <CoreGraphics/CoreGraphics.h>
@@ -107,6 +103,11 @@ qboolean CoduoSDL_Init(void)
 
     coduoSdlInitialized = qtrue;
     SDL_StartTextInput();
+    /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): the original window
+     * procedure calls SetThreadExecutionState(ES_DISPLAY_REQUIRED) for every
+     * message and Sys_PumpEvents repeats it once per frame. SDL's screen-saver
+     * inhibition is the portable equivalent of that display-power request. */
+    (void)SDL_DisableScreenSaver();
     return qtrue;
 }
 
@@ -124,8 +125,8 @@ void CoduoSDL_Shutdown(void)
     coduoSdlInitialized = qfalse;
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: SDL owns the native clipboard integration on
- * macOS and Unix. Copy its temporary allocation into the malloc-owned domain
+/* NOT_FROM_ORIGINAL_SOURCE: SDL owns the native clipboard integration on every
+ * supported host. Copy its temporary allocation into the malloc-owned domain
  * expected by Sys_GetClipboardData and the recovered field/UI callers. */
 char *coduomp_sdl_get_clipboard_text_compat(void)
 {
@@ -141,8 +142,7 @@ char *coduomp_sdl_get_clipboard_text_compat(void)
 /* NOT_FROM_ORIGINAL_SOURCE: native equivalent of the Win32 window, pixel
  * format, and WGL-context setup in GLW_CreateWindow/GLW_InitDriver. A legacy
  * compatibility context is required because the original renderer uses the
- * OpenGL fixed-function pipeline. The stock source uses only the original
- * boolean window-mode domain, leaving the added window modes unreachable. */
+ * OpenGL fixed-function pipeline. Every supported host uses this boundary. */
 qboolean CoduoSDL_CreateOpenGLWindow(int32_t width, int32_t height,
                                      int32_t colorBits, int32_t depthBits,
                                      int32_t stencilBits,
@@ -258,6 +258,37 @@ qboolean CoduoSDL_CreateOpenGLWindow(int32_t width, int32_t height,
 #endif
     }
 
+    if (windowMode == CODUOMP_WINDOW_MODE_WINDOWED) {
+        SDL_Rect displayBounds;
+
+        /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): the recovered
+         * GLW_CreateWindow positions a windowed game at the selected display's
+         * origin plus the archived vid_xpos/vid_ypos offsets and clamps it so
+         * the complete window stays on that display. SDL positions the client
+         * area, so the stored offset is applied to the client origin. */
+        if (SDL_GetDisplayBounds(displayIndex, &displayBounds) == 0) {
+            const cvar_t *const xPosition =
+                Cvar_Get("vid_xpos", "0", CVAR_NONE);
+            const cvar_t *const yPosition =
+                Cvar_Get("vid_ypos", "0", CVAR_NONE);
+
+            windowX = displayBounds.x + xPosition->integer;
+            windowY = displayBounds.y + yPosition->integer;
+            if (windowX < displayBounds.x)
+                windowX = displayBounds.x;
+            if (windowY < displayBounds.y)
+                windowY = displayBounds.y;
+            if (width < displayBounds.w &&
+                windowX + width > displayBounds.x + displayBounds.w) {
+                windowX = displayBounds.x + displayBounds.w - width;
+            }
+            if (height < displayBounds.h &&
+                windowY + height > displayBounds.y + displayBounds.h) {
+                windowY = displayBounds.y + displayBounds.h - height;
+            }
+        }
+    }
+
     coduoSdlWindow = SDL_CreateWindow(
         windowTitle, windowX, windowY,
         width, height, flags);
@@ -344,7 +375,7 @@ int32_t coduomp_sdl_get_display_count_compat(void)
 
 void CoduoSDL_GetDesktopMode(int32_t displayIndex,
                              int32_t *width, int32_t *height,
-                             int32_t *refreshRate)
+                             int32_t *refreshRate, int32_t *colorBits)
 {
     SDL_DisplayMode mode;
 
@@ -354,12 +385,18 @@ void CoduoSDL_GetDesktopMode(int32_t displayIndex,
         *width = 0;
         *height = 0;
         *refreshRate = 0;
+        *colorBits = 0;
         return;
     }
 
     *width = mode.w;
     *height = mode.h;
     *refreshRate = mode.refresh_rate;
+    /* NOT_FROM_ORIGINAL_SOURCE: the original Win32 mode probe reports
+     * dmBitsPerPel for the selected device. SDL's packed-format bit count
+     * describes the channel payload (24 for XRGB8888), so convert the stored
+     * pixel stride instead to report the same 32-bit desktop value. */
+    *colorBits = SDL_BYTESPERPIXEL(mode.format) * 8;
 }
 
 #if defined(__APPLE__)
@@ -684,6 +721,20 @@ void coduomp_sdl_get_window_size_compat(int32_t *width, int32_t *height)
     SDL_GetWindowSize(coduoSdlWindow, width, height);
 }
 
+/* NOT_FROM_ORIGINAL_SOURCE: the original WM_MOVE handler stores the game
+ * window's client origin in vid_xpos/vid_ypos. SDL reports the same client
+ * origin through its window position query. */
+qboolean coduomp_sdl_get_window_position_compat(int32_t *x, int32_t *y)
+{
+    if (coduoSdlWindow == NULL) {
+        *x = 0;
+        *y = 0;
+        return qfalse;
+    }
+    SDL_GetWindowPosition(coduoSdlWindow, x, y);
+    return qtrue;
+}
+
 /* NOT_FROM_ORIGINAL_SOURCE: native display-gamma boundary used by the
  * recovered renderer's existing 256-entry RGB ramp. SDL selects the display
  * containing this window and maps the operation to the host window system. */
@@ -768,7 +819,19 @@ void CoduoSDL_GetOpenGLFormat(int32_t *colorBits, int32_t *depthBits,
     (void)SDL_GL_GetAttribute(SDL_GL_ALPHA_SIZE, &alphaBits);
     (void)SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE, depthBits);
     (void)SDL_GL_GetAttribute(SDL_GL_STENCIL_SIZE, stencilBits);
+#if defined(_WIN32)
+    /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): the original Windows
+     * pixel-format descriptor reports cColorBits, which counts the padded
+     * 32-bit desktop pixel. An 8/8/8/0 context is reported as 32 bits, and
+     * PickInternalFormat selects the same four-channel color-depth texture
+     * as the recovered Win32 build. */
+    {
+        const int32_t totalBits = redBits + greenBits + blueBits + alphaBits;
+        *colorBits = totalBits >= 24 ? 32 : (totalBits > 16 ? 24 : 16);
+    }
+#else
     *colorBits = redBits + greenBits + blueBits + alphaBits;
+#endif
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: confines SDL's object-pointer carrier for OpenGL
@@ -802,8 +865,54 @@ void CoduoSDL_SetRelativeMouse(qboolean active)
 
     (void)SDL_SetRelativeMouseMode(
         active != qfalse ? SDL_TRUE : SDL_FALSE);
+    if (active != qfalse)
+        SDL_SetWindowGrab(coduoSdlWindow, SDL_TRUE);
+}
+
+void CoduoSDL_SetWindowGrab(qboolean active)
+{
+    if (coduoSdlWindow == NULL)
+        return;
     SDL_SetWindowGrab(
         coduoSdlWindow, active != qfalse ? SDL_TRUE : SDL_FALSE);
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: global desktop center of the game window's client
+ * area, used by the archived non-raw recentering mouse path. */
+void CoduoSDL_GetWindowCenter(int32_t *x, int32_t *y)
+{
+    int32_t windowX = 0;
+    int32_t windowY = 0;
+    int32_t width = 0;
+    int32_t height = 0;
+
+    (void)coduomp_sdl_get_window_position_compat(&windowX, &windowY);
+    coduomp_sdl_get_window_size_compat(&width, &height);
+    *x = windowX + width / 2;
+    *y = windowY + height / 2;
+}
+
+void CoduoSDL_WarpMouseToWindowCenter(void)
+{
+    int32_t width = 0;
+    int32_t height = 0;
+
+    if (coduoSdlWindow == NULL)
+        return;
+    coduomp_sdl_get_window_size_compat(&width, &height);
+    SDL_WarpMouseInWindow(
+        coduoSdlWindow, (float)(width / 2), (float)(height / 2));
+}
+
+qboolean CoduoSDL_GetGlobalMousePosition(int32_t *x, int32_t *y)
+{
+    int globalX = 0;
+    int globalY = 0;
+
+    SDL_GetGlobalMouseState(&globalX, &globalY);
+    *x = globalX;
+    *y = globalY;
+    return qtrue;
 }
 
 qboolean CoduoSDL_HasOpenGLWindow(void)
@@ -819,8 +928,120 @@ void CoduoSDL_ShowErrorDialog(const char *message, const char *title)
         SDL_MESSAGEBOX_ERROR, title, message, coduoSdlWindow);
 }
 
+/* NOT_FROM_ORIGINAL_SOURCE: portable equivalent of the original modal
+ * MessageBoxA question used when archived hardware information changes. */
+int32_t coduomp_sdl_show_message_box_compat(
+    const char *title, const char *body, coduomp_sdl_dialog_style_t style)
+{
+    SDL_MessageBoxData data;
+    SDL_MessageBoxButtonData buttons[2];
+    int32_t selectedButton = 1;
+
+    memset(&data, 0, sizeof(data));
+    data.flags = SDL_MESSAGEBOX_INFORMATION;
+    data.window = coduoSdlWindow;
+    data.title = title;
+    data.message = body;
+    buttons[0].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
+    buttons[0].buttonid = 0;
+    buttons[0].text = style == CODUOMP_SDL_DIALOG_YES_NO ? "Yes" : "OK";
+    if (style == CODUOMP_SDL_DIALOG_OK) {
+        data.numbuttons = 1;
+    } else {
+        buttons[1].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT;
+        buttons[1].buttonid = 1;
+        buttons[1].text = style == CODUOMP_SDL_DIALOG_YES_NO ? "No" : "Cancel";
+        data.numbuttons = 2;
+    }
+    data.buttons = buttons;
+    if (SDL_ShowMessageBox(&data, &selectedButton) != 0)
+        return style == CODUOMP_SDL_DIALOG_OK ? 1 : 0;
+
+    return selectedButton == 0 ? 1 : 0;
+}
+
+/* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): Miles' DirectSound provider
+ * receives the game window handle in the original WM_CREATE path. The SDL
+ * window owns the only native game-window handle on Windows now. */
+void *coduomp_sdl_native_window_handle_compat(void)
+{
+#if defined(_WIN32)
+    SDL_SysWMinfo info;
+
+    if (coduoSdlWindow == NULL)
+        return NULL;
+    SDL_VERSION(&info.version);
+    if (SDL_GetWindowWMInfo(coduoSdlWindow, &info) != SDL_TRUE ||
+        info.subsystem != SDL_SYSWM_WINDOWS) {
+        return NULL;
+    }
+    return (void *)info.info.win.window;
+#else
+    return NULL;
+#endif
+}
+
+/* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): the recovered Win32 video
+ * memory probe reads GL_RENDERER from a temporary WGL context and matches it
+ * against the shipped renderer table. Use a hidden SDL OpenGL window instead
+ * so the same hardware identification runs through the portable context
+ * boundary before the renderer creates its own window. */
+qboolean coduomp_sdl_probe_renderer_string_compat(char *buffer,
+                                                  size_t bufferSize)
+{
+    typedef const unsigned char *(SDLCALL *coduomp_gl_get_string_fn)(unsigned int);
+    enum { CODUOMP_GL_RENDERER = 0x1f01 };
+    SDL_Window *probeWindow;
+    SDL_GLContext probeContext;
+    coduomp_gl_get_string_fn getString;
+    const unsigned char *renderer;
+    qboolean found = qfalse;
+
+    if (buffer == NULL || bufferSize == 0)
+        return qfalse;
+    buffer[0] = '\0';
+    if (coduoSdlInitialized == qfalse)
+        return qfalse;
+
+    probeWindow = SDL_CreateWindow(
+        "CoDUOMP hardware probe", SDL_WINDOWPOS_UNDEFINED,
+        SDL_WINDOWPOS_UNDEFINED, 1, 1,
+        SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+    if (probeWindow == NULL)
+        return qfalse;
+
+    probeContext = SDL_GL_CreateContext(probeWindow);
+    if (probeContext == NULL) {
+        SDL_DestroyWindow(probeWindow);
+        return qfalse;
+    }
+    if (SDL_GL_MakeCurrent(probeWindow, probeContext) == 0) {
+        getString = (coduomp_gl_get_string_fn)(uintptr_t)
+            SDL_GL_GetProcAddress("glGetString");
+        if (getString != NULL) {
+            renderer = getString(CODUOMP_GL_RENDERER);
+            if (renderer != NULL) {
+                strncpy(buffer, (const char *)renderer, bufferSize - 1);
+                buffer[bufferSize - 1] = '\0';
+                found = buffer[0] != '\0' ? qtrue : qfalse;
+            }
+        }
+    }
+    SDL_GL_DeleteContext(probeContext);
+    SDL_DestroyWindow(probeWindow);
+    return found;
+}
+
 static int32_t CoduoSDL_MapKey(SDL_Keycode key)
 {
+#if defined(_WIN32)
+    /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): the recovered Win32
+     * MapKey returns '~' for the physical grave/tilde scan code regardless of
+     * the Shift state. Both '~' and '`' remain bound to toggleconsole in the
+     * shipped configuration. */
+    if (key == SDLK_BACKQUOTE)
+        return '~';
+#endif
     if (key >= SDLK_SPACE && key <= SDLK_z)
         return (int32_t)key;
 
@@ -879,8 +1100,9 @@ static int32_t CoduoSDL_MapKey(SDL_Keycode key)
     case SDLK_NUMLOCKCLEAR: return K_KP_NUMLOCK;
     case SDLK_KP_MULTIPLY: return K_KP_STAR;
     case SDLK_KP_EQUALS: return K_KP_EQUALS;
-    default: return 0;
+    default: break;
     }
+    return coduomp_sdl_engine_key_from_unicode_compat(key);
 }
 
 static int32_t CoduoSDL_MapMouseButton(uint8_t button)
@@ -893,6 +1115,56 @@ static int32_t CoduoSDL_MapMouseButton(uint8_t button)
     case SDL_BUTTON_X2: return K_MOUSE5;
     default: return 0;
     }
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: the recovered engine consumes one ANSI byte per
+ * character. Windows' WM_CHAR delivered the active ANSI code page, so convert
+ * Unicode input through CP_ACP on Windows; other hosts retain their existing
+ * Latin-1 domain. */
+static int32_t coduomp_sdl_engine_char_from_codepoint_compat(
+    uint32_t codepoint)
+{
+    if (codepoint < 0x20U)
+        return 0;
+
+#if defined(_WIN32)
+    {
+        WCHAR wide[2];
+        char narrow[8];
+        int32_t wideCount = 1;
+        int32_t narrowCount;
+
+        if (codepoint <= 0xffffU) {
+            wide[0] = (WCHAR)codepoint;
+        } else if (codepoint <= 0x10ffffU) {
+            const uint32_t adjusted = codepoint - 0x10000U;
+            wide[0] = (WCHAR)(0xd800U + (adjusted >> 10));
+            wide[1] = (WCHAR)(0xdc00U + (adjusted & 0x3ffU));
+            wideCount = 2;
+        } else {
+            return 0;
+        }
+
+        narrowCount = WideCharToMultiByte(
+            CP_ACP, 0, wide, wideCount, narrow, sizeof(narrow), NULL, NULL);
+        if (narrowCount == 1)
+            return (int32_t)(uint8_t)narrow[0];
+    }
+#else
+    if (codepoint <= 0xffU)
+        return (int32_t)codepoint;
+#endif
+    return 0;
+}
+
+/* NOT_FROM_ORIGINAL_SOURCE: SDL keycodes outside the ASCII range are Unicode
+ * values. Map them back to the ANSI byte the original Win32 key table used. */
+static int32_t coduomp_sdl_engine_key_from_unicode_compat(
+    SDL_Keycode key)
+{
+    if (key <= 0 || (uint32_t)key >= (uint32_t)SDLK_SCANCODE_MASK)
+        return 0;
+    return coduomp_sdl_engine_char_from_codepoint_compat((uint32_t)key);
 }
 
 #if defined(__APPLE__)
@@ -1034,11 +1306,49 @@ void CoduoSDL_PumpEvents(void)
                 coduomp_gamma_window_focus_changed(qfalse);
                 AppActivate(qfalse, qfalse);
                 IN_ClearStates();
+            } else if (event.window.event == SDL_WINDOWEVENT_MINIMIZED) {
+                /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): the original
+                 * WM_SIZE handler restores the desktop gamma while the game
+                 * window is minimized and rebuilds it when visible again. */
+                coduomp_gamma_window_focus_changed(qfalse);
+                AppActivate(qfalse, qtrue);
+            } else if (event.window.event == SDL_WINDOWEVENT_RESTORED) {
+                coduomp_gamma_window_focus_changed(qtrue);
+                if (coduoSdlWindow != NULL &&
+                    (SDL_GetWindowFlags(coduoSdlWindow) &
+                     SDL_WINDOW_INPUT_FOCUS) != 0) {
+                    AppActivate(qtrue, qfalse);
+                }
+            } else if (event.window.event == SDL_WINDOWEVENT_MOVED) {
+                /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): the original
+                 * WM_MOVE handler archives the windowed client origin so the
+                 * next video restart restores it. */
+                cvar_t *const fullscreen = Cvar_FindVar("r_fullscreen");
+                if (fullscreen != NULL && fullscreen->integer == 0) {
+                    (void)Cvar_Set2("vid_xpos", va("%d", event.window.data1), qfalse);
+                    (void)Cvar_Set2("vid_ypos", va("%d", event.window.data2), qfalse);
+                }
             }
             break;
 
         case SDL_KEYDOWN:
         case SDL_KEYUP: {
+            /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): the original
+             * WM_SYSKEYDOWN handler toggles r_fullscreen and restarts the
+             * video subsystem on Alt+Enter. SDL reports the same chord as a
+             * Return key event with an Alt modifier. */
+            if (event.type == SDL_KEYDOWN &&
+                event.key.keysym.sym == SDLK_RETURN &&
+                (event.key.keysym.mod & (KMOD_LALT | KMOD_RALT)) != 0 &&
+                cls.state != CA_LOADING) {
+                cvar_t *const fullscreen = Cvar_FindVar("r_fullscreen");
+                if (fullscreen != NULL) {
+                    Cvar_SetValue("r_fullscreen",
+                                  fullscreen->integer == 0 ? 1.0f : 0.0f);
+                    Cbuf_AddText("vid_restart");
+                }
+                break;
+            }
             const int32_t key = CoduoSDL_MapKey(event.key.keysym.sym);
             if (key != 0) {
                 Sys_QueEvent(
@@ -1070,16 +1380,55 @@ void CoduoSDL_PumpEvents(void)
             break;
         }
 
-        case SDL_TEXTINPUT:
-            for (const uint8_t *text =
-                     (const uint8_t *)event.text.text;
-                 *text != '\0'; ++text) {
+        case SDL_TEXTINPUT: {
+            /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): the original
+             * WM_CHAR pump forwards one ANSI byte per character. SDL reports
+             * UTF-8, so translate Latin-1-representable code points back to
+             * single bytes and continue to ignore characters the recovered
+             * byte-oriented text path cannot represent. */
+            const uint8_t *text = (const uint8_t *)event.text.text;
+
+            while (*text != '\0') {
+                uint32_t codepoint;
+                int32_t continuationCount;
+
                 if (*text < 0x80U) {
-                    Sys_QueEvent(
-                        sysMsgTime, SE_CHAR, *text, 0, 0, NULL);
+                    codepoint = *text;
+                    continuationCount = 0;
+                } else if ((*text & 0xe0U) == 0xc0U) {
+                    codepoint = *text & 0x1fU;
+                    continuationCount = 1;
+                } else if ((*text & 0xf0U) == 0xe0U) {
+                    codepoint = *text & 0x0fU;
+                    continuationCount = 2;
+                } else if ((*text & 0xf8U) == 0xf0U) {
+                    codepoint = *text & 0x07U;
+                    continuationCount = 3;
+                } else {
+                    ++text;
+                    continue;
+                }
+
+                int32_t offset = 1;
+                while (offset <= continuationCount &&
+                       (text[offset] & 0xc0U) == 0x80U) {
+                    codepoint = (codepoint << 6) | (text[offset] & 0x3fU);
+                    ++offset;
+                }
+                text += offset;
+
+                if (offset == continuationCount + 1) {
+                    const int32_t engineChar =
+                        coduomp_sdl_engine_char_from_codepoint_compat(
+                            codepoint);
+                    if (engineChar != 0) {
+                        Sys_QueEvent(
+                            sysMsgTime, SE_CHAR, engineChar, 0, 0, NULL);
+                    }
                 }
             }
             break;
+        }
 
         case SDL_MOUSEMOTION:
             /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): SDL can report
@@ -1088,6 +1437,11 @@ void CoduoSDL_PumpEvents(void)
              * messages in that state. Preserve that boundary so inactive
              * motion cannot reach UI hover handling or gameplay input. */
             if (sysInputAppActive == qfalse)
+                break;
+            /* NOT_FROM_ORIGINAL_SOURCE: the archived in_rawInput=0 path polls
+             * and recenters the cursor in IN_MouseMove; do not also translate
+             * the absolute SDL report. */
+            if (coduomp_input_absolute_capture_active() != qfalse)
                 break;
             if (event.motion.xrel != 0 || event.motion.yrel != 0) {
                 Sys_QueEvent(
@@ -1161,5 +1515,3 @@ void CoduoSDL_PumpEvents(void)
         coduomp_sdl_reconcile_mouse_buttons_compat();
 #endif
 }
-
-#endif

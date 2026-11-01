@@ -3,10 +3,8 @@
 
 #include "../q_shared.h"
 
-#if defined(_WIN32)
-/* NOT_FROM_ORIGINAL_SOURCE: release and reacquire the exclusive display mode
- * when the native game window loses or gains focus. */
-void coduomp_glw_exclusive_focus_changed_compat(qboolean active);
-#endif
+/* NOT_FROM_ORIGINAL_SOURCE: display-mode ownership belongs to the SDL window
+ * boundary. Exclusive fullscreen restoration on focus loss is performed by
+ * SDL itself, so no Win32 display callback remains in the client. */
 
 #endif

@@ -7,6 +7,7 @@
 #include "client/cgame.h"
 #include "client/console.h"
 #include "platform/crt_boundary.h"
+#include "platform/sdl_platform.h"
 #include "renderer/renderer_cvars.h"
 #include "renderer/platform_display.h"
 #include "renderer/platform_gamma.h"
@@ -69,6 +70,11 @@ static qboolean winAltTabDisabled; /* original 0x009d5fa8 */
  * The returned buffer remains valid until the next nonempty input poll. */
 static char sysConsoleInputLine[SYS_CONSOLE_INPUT_CAPACITY];
 static char sysConsoleReturnedLine[SYS_CONSOLE_INPUT_CAPACITY];
+/* Windowed placement and Alt-Tab policy are owned by the SDL game window and
+ * remain shared by every host. */
+static cvar_t *vid_xpos;             /* original 0x0489bc38 */
+static cvar_t *vid_ypos;             /* original 0x0489bc30 */
+static cvar_t *win_allowAltTab;      /* original 0x0489bc34 */
 #if defined(_WIN32)
 static console_input_field_t
     sysConsoleHistory[SYS_CONSOLE_HISTORY_COUNT]; /* original 0x009d0920 */
@@ -104,13 +110,21 @@ static WNDPROC
 static qboolean sysConsoleErrorFlash; /* original 0x009d5f9c */
 static int32_t
     sysConsoleCompletionPrefixLength; /* original 0x009d5fa0 */
-static cvar_t *vid_xpos;             /* original 0x0489bc38 */
-static cvar_t *vid_ypos;             /* original 0x0489bc30 */
-static cvar_t *win_allowAltTab;      /* original 0x0489bc34 */
-static UINT registeredMouseWheelMessage; /* original 0x009d5fa4 */
 #endif
 
 #if defined(_WIN32)
+/* NOT_FROM_ORIGINAL_SOURCE: the SDL application shell owns the process message
+ * loop, so the recovered console window's quit requests use the engine's own
+ * quit command. The WM_QUIT remains posted for the fatal-error loop, which
+ * reads native messages directly after the renderer is gone. */
+static void Sys_RequestConsoleQuit(void)
+{
+    char *const command = CopyStringInternal("quit");
+    Sys_QueEvent(0, SE_CONSOLE, 0, 0,
+                 (int32_t)strlen(command) + 1, command);
+    PostQuitMessage(0);
+}
+
 /* Source: CoDUOMP.exe 0x0046e4f0..0x0046e918.
  * Evidence: repaired function record
  * coduomp/mcode/CoDUOMP/FUN_0046e4f0_0046e919.mcode, the original switch
@@ -209,13 +223,11 @@ LRESULT CALLBACK ConWndProc(HWND window, UINT message,
 
     case WM_CLOSE:
         if (dedicated != NULL && dedicated->integer != 0) {
-            char *const command = CopyStringInternal("quit");
-            Sys_QueEvent(0, SE_CONSOLE, 0, 0,
-                         (int32_t)strlen(command) + 1, command);
+            Sys_RequestConsoleQuit();
             return 0;
         }
         if (sysConsoleQuitOnClose != qfalse) {
-            PostQuitMessage(0);
+            Sys_RequestConsoleQuit();
             return 0;
         }
 
@@ -269,13 +281,7 @@ LRESULT CALLBACK ConWndProc(HWND window, UINT message,
             break;
 
         case SYS_CONSOLE_QUIT_BUTTON_ID:
-            if (sysConsoleQuitOnClose != qfalse) {
-                PostQuitMessage(0);
-            } else {
-                char *const command = CopyStringInternal("quit");
-                Sys_QueEvent(0, SE_CONSOLE, 0, 0,
-                             (int32_t)strlen(command) + 1, command);
-            }
+            Sys_RequestConsoleQuit();
             break;
 
         case SYS_CONSOLE_CLEAR_BUTTON_ID:
@@ -1081,321 +1087,42 @@ void AppActivate(qboolean active, qboolean minimized)
     IN_DeactivateMouse();
 }
 
-/* Source: CoDUOMP.exe 0x0046fae0..0x0046fb4c.
- * Evidence: coduomp/mcode/CoDUOMP/FUN_0046fae0_0046fb4d.mcode and the original
- * byte tables at 0x005ca528 and 0x005ca64c.
- * Name: established id-engine Win32 keyboard boundary. keyData is the low
- * 32-bit Win32 key-message lParam; its scan code and extended-key bit choose
- * between the original two translation-table columns. */
-#if defined(_WIN32)
-static int32_t MapKey(uint32_t virtualKey, uint32_t keyData)
+/* NOT_FROM_ORIGINAL_SOURCE: run the recovered window-creation policies that
+ * the retired Win32 WM_CREATE/WM_DESTROY handlers performed. The SDL game
+ * window is the only native game window on every host. */
+void Sys_GameWindowCreated(void)
 {
-    enum {
-        WIN32_SCAN_CODE_SHIFT = 16,
-        WIN32_SCAN_CODE_MASK = 255,
-        WIN32_GRAVE_SCAN_CODE = 41,
-        WIN32_EXTENDED_KEY_SHIFT = 24,
-        WIN32_MAP_VIRTUAL_KEY_TO_CHARACTER = 2,
-        WIN32_ASCII_LIMIT = 127
-    };
-    typedef struct win32_foreign_key_s {
-        uint8_t windowsCharacter;
-        uint8_t engineCharacter;
-    } win32_foreign_key_t;
-#if UINTPTR_MAX == UINT32_MAX
-    _Static_assert(_Alignof(win32_foreign_key_t) == 1,
-                   "Win32 foreign-key pair alignment changed");
-    _Static_assert(offsetof(win32_foreign_key_t, windowsCharacter) == 0x00,
-                   "Win32 foreign-key input byte moved");
-    _Static_assert(offsetof(win32_foreign_key_t, engineCharacter) == 0x01,
-                   "Win32 foreign-key output byte moved");
-    _Static_assert(sizeof(win32_foreign_key_t) == 0x02,
-                   "Win32 foreign-key pair stride changed");
-#endif
-    static const win32_foreign_key_t foreignKeys[] = {
-        {181, 128}, {191, 129}, {223, 130}, {224, 131}, {225, 132},
-        {228, 133}, {229, 134}, {230, 135}, {231, 136}, {232, 137},
-        {233, 138}, {236, 139}, {241, 140}, {242, 141}, {243, 142},
-        {246, 143}, {248, 144}, {249, 145}, {250, 146}, {252, 147}
-    };
-    const qboolean extended =
-        (qboolean)((keyData >> WIN32_EXTENDED_KEY_SHIFT) & 1u);
+    vid_xpos = Cvar_Get("vid_xpos", "3", CVAR_ARCHIVE);
+    vid_ypos = Cvar_Get("vid_ypos", "22", CVAR_ARCHIVE);
+    r_fullscreen = Cvar_Get(
+        "r_fullscreen", "1", CVAR_ARCHIVE | CVAR_LATCH);
+    win_allowAltTab = Cvar_Get(
+        "win_allowalttab", CODUOMP_WIN_ALLOW_ALT_TAB_DEFAULT,
+        CVAR_ARCHIVE | CVAR_LATCH);
 
-    if (((keyData >> WIN32_SCAN_CODE_SHIFT) & WIN32_SCAN_CODE_MASK) ==
-        WIN32_GRAVE_SCAN_CODE) {
-        return '~';
+    /* The original WM_CREATE path passes the game-window handle to Miles once
+     * the digital driver exists. */
+    MSS_SetWindowHandle(coduomp_sdl_native_window_handle_compat());
+
+    if ((r_fullscreen->integer == CODUOMP_WINDOW_MODE_FULLSCREEN ||
+         r_fullscreen->integer == CODUOMP_WINDOW_MODE_EXCLUSIVE) &&
+        win_allowAltTab->integer == 0) {
+        WIN_DisableAltTab();
+    } else {
+        WIN_EnableAltTab();
     }
-
-    switch (virtualKey) {
-    case VK_LBUTTON: return K_MOUSE1;
-    case VK_RBUTTON: return K_MOUSE2;
-    case VK_MBUTTON: return K_MOUSE3;
-    case VK_XBUTTON1: return K_MOUSE4;
-    case VK_XBUTTON2: return K_MOUSE5;
-    case VK_BACK: return K_BACKSPACE;
-    case VK_TAB: return K_TAB;
-    case VK_CLEAR: return extended != qfalse ? 0 : K_KP_5;
-    case VK_RETURN: return extended != qfalse ? K_KP_ENTER : K_ENTER;
-    case VK_SHIFT: return K_SHIFT;
-    case VK_CONTROL: return K_CTRL;
-    case VK_MENU: return K_ALT;
-    case VK_PAUSE: return K_PAUSE;
-    case VK_CAPITAL: return K_CAPSLOCK;
-    case VK_ESCAPE: return K_ESCAPE;
-    case VK_SPACE: return K_SPACE;
-    case VK_PRIOR: return extended != qfalse ? K_PGUP : K_KP_PGUP;
-    case VK_NEXT: return extended != qfalse ? K_PGDN : K_KP_PGDN;
-    case VK_END: return extended != qfalse ? K_END : K_KP_END;
-    case VK_HOME: return extended != qfalse ? K_HOME : K_KP_HOME;
-    case VK_LEFT: return extended != qfalse ? K_LEFTARROW : K_KP_LEFTARROW;
-    case VK_UP: return extended != qfalse ? K_UPARROW : K_KP_UPARROW;
-    case VK_RIGHT:
-        return extended != qfalse ? K_RIGHTARROW : K_KP_RIGHTARROW;
-    case VK_DOWN: return extended != qfalse ? K_DOWNARROW : K_KP_DOWNARROW;
-    case VK_INSERT: return extended != qfalse ? K_INS : K_KP_INS;
-    case VK_DELETE: return extended != qfalse ? K_DEL : K_KP_DEL;
-    case VK_NUMPAD0: return K_KP_INS;
-    case VK_NUMPAD1: return K_KP_END;
-    case VK_NUMPAD2: return K_KP_DOWNARROW;
-    case VK_NUMPAD3: return K_KP_PGDN;
-    case VK_NUMPAD4: return K_KP_LEFTARROW;
-    case VK_NUMPAD5: return K_KP_5;
-    case VK_NUMPAD6: return K_KP_RIGHTARROW;
-    case VK_NUMPAD7: return K_KP_HOME;
-    case VK_NUMPAD8: return K_KP_UPARROW;
-    case VK_NUMPAD9: return K_KP_PGUP;
-    case VK_MULTIPLY: return K_KP_STAR;
-    case VK_ADD: return K_KP_PLUS;
-    case VK_SUBTRACT: return K_KP_MINUS;
-    case VK_DECIMAL: return K_KP_DEL;
-    case VK_DIVIDE: return K_KP_SLASH;
-    case VK_NUMLOCK: return K_KP_NUMLOCK;
-    default:
-        break;
-    }
-
-    if (virtualKey >= '0' && virtualKey <= '9')
-        return (int32_t)virtualKey;
-    if (virtualKey >= 'A' && virtualKey <= 'Z') {
-        return (int32_t)(extended != qfalse
-            ? virtualKey
-            : virtualKey + ('a' - 'A'));
-    }
-    if (virtualKey >= VK_F1 && virtualKey <= VK_F12)
-        return K_F1 + (int32_t)(virtualKey - VK_F1);
-
-    int32_t key =
-        (int32_t)(MapVirtualKeyA(virtualKey,
-                                 WIN32_MAP_VIRTUAL_KEY_TO_CHARACTER) &
-                  WIN32_SCAN_CODE_MASK);
-    if (key <= WIN32_ASCII_LIMIT)
-        return key;
-
-    for (size_t index = 0;
-         index < sizeof(foreignKeys) / sizeof(foreignKeys[0]);
-         ++index) {
-        if (key == foreignKeys[index].windowsCharacter)
-            return foreignKeys[index].engineCharacter;
-    }
-    return key;
 }
 
-/* Source: CoDUOMP.exe 0x0046fb50..0x0046ffb5.
- * Evidence: coduomp/mcode/CoDUOMP/FUN_0046fb50_0046ffb6.mcode, its original
- * jump tables at 0x0046ffb8..0x00470102, and PE imports identifying every
- * Win32 call target.
- * Name: established id-engine Win32 window callback. The source keeps
- * DefWindowProcA as the common tail because the original forwards every
- * handled message except Alt-Enter, blocked screensaver commands, and the two
- * denied suspend-query messages. */
-LRESULT CALLBACK MainWndProc(HWND window, UINT message,
-                             WPARAM wParam, LPARAM lParam)
+/* NOT_FROM_ORIGINAL_SOURCE: inverse of Sys_GameWindowCreated, matching the
+ * retired WM_DESTROY Alt-Tab restoration. */
+void Sys_GameWindowDestroyed(void)
 {
-    enum {
-        WIN_POWER_QUERY_SUSPEND = 0,
-        WIN_POWER_QUERY_STANDBY = 1
-    };
-    static const LRESULT broadcastQueryDeny = (LRESULT)0x424d5144u;
-
-    (void)SetThreadExecutionState(ES_DISPLAY_REQUIRED);
-
-    if (message == registeredMouseWheelMessage) {
-        const int32_t key =
-            (int32_t)wParam > 0 ? K_MWHEELUP : K_MWHEELDOWN;
-        Sys_QueEvent(sysMsgTime, SE_KEY, key, qtrue, 0, NULL);
-        Sys_QueEvent(sysMsgTime, SE_KEY, key, qfalse, 0, NULL);
-        return DefWindowProcA(window, message, wParam, lParam);
+    if (r_fullscreen != NULL &&
+        (r_fullscreen->integer == CODUOMP_WINDOW_MODE_FULLSCREEN ||
+         r_fullscreen->integer == CODUOMP_WINDOW_MODE_EXCLUSIVE)) {
+        WIN_EnableAltTab();
     }
-
-    switch (message) {
-    case WM_CREATE:
-        win32MainWindow = window;
-        coduomp_win32_raw_input_window_created();
-        MSS_SetWindowHandle(window);
-        vid_xpos = Cvar_Get("vid_xpos", "3", CVAR_ARCHIVE);
-        vid_ypos = Cvar_Get("vid_ypos", "22", CVAR_ARCHIVE);
-        r_fullscreen = Cvar_Get(
-            "r_fullscreen", "1", CVAR_ARCHIVE | CVAR_LATCH);
-        win_allowAltTab = Cvar_Get(
-            "win_allowalttab", CODUOMP_WIN_ALLOW_ALT_TAB_DEFAULT,
-            CVAR_ARCHIVE | CVAR_LATCH);
-        registeredMouseWheelMessage =
-            RegisterWindowMessageA("MSWHEEL_ROLLMSG");
-
-        if ((r_fullscreen->integer == CODUOMP_WINDOW_MODE_FULLSCREEN ||
-             r_fullscreen->integer == CODUOMP_WINDOW_MODE_EXCLUSIVE) &&
-            win_allowAltTab->integer == 0) {
-            WIN_DisableAltTab();
-        } else {
-            WIN_EnableAltTab();
-        }
-        break;
-
-    case WM_DESTROY:
-        coduomp_win32_raw_input_window_destroyed();
-        win32MainWindow = NULL;
-        if (r_fullscreen->integer == CODUOMP_WINDOW_MODE_FULLSCREEN ||
-            r_fullscreen->integer == CODUOMP_WINDOW_MODE_EXCLUSIVE)
-            WIN_EnableAltTab();
-        break;
-
-    case WM_INPUT:
-        coduomp_win32_raw_input_event((HRAWINPUT)lParam);
-        break;
-
-    case WM_MOVE:
-        if (r_fullscreen->integer == 0) {
-            RECT border = {0, 0, 1, 1};
-            const LONG style = GetWindowLongA(window, GWL_STYLE);
-            (void)AdjustWindowRect(&border, (DWORD)style, FALSE);
-
-            const int32_t x =
-                (int32_t)(int16_t)LOWORD((DWORD_PTR)lParam) + border.left;
-            const int32_t y =
-                (int32_t)(int16_t)HIWORD((DWORD_PTR)lParam) + border.top;
-            Cvar_SetValue("vid_xpos", (float)x);
-            Cvar_SetValue("vid_ypos", (float)y);
-            vid_xpos->modified = qfalse;
-            vid_ypos->modified = qfalse;
-
-            if (sysWindowActive != qfalse)
-                sysInputAppActive = qtrue;
-        }
-        break;
-
-    case WM_SIZE:
-        /* NOT_FROM_ORIGINAL_SOURCE: Windows keeps a display-wide gamma ramp;
-         * restore the desktop mapping as soon as the game window is minimized
-         * and rebuild the game mapping when it becomes visible again. */
-        if (wParam == SIZE_MINIMIZED)
-            coduomp_gamma_focus_changed_compat(qfalse);
-        else if (wParam == SIZE_RESTORED || wParam == SIZE_MAXIMIZED)
-            coduomp_gamma_focus_changed_compat(qtrue);
-        break;
-
-    case WM_ACTIVATE:
-        AppActivate(
-            LOWORD((DWORD_PTR)wParam) != WA_INACTIVE ? qtrue : qfalse,
-            (qboolean)HIWORD((DWORD_PTR)wParam));
-        /* NOT_FROM_ORIGINAL_SOURCE: preserve desktop access when switching
-         * away from the optional exclusive display mode. */
-        coduomp_glw_exclusive_focus_changed_compat(sysWindowActive);
-        /* NOT_FROM_ORIGINAL_SOURCE: Windows gamma is display-wide; restore the
-         * desktop ramp while inactive and rebuild the game ramp on return. */
-        coduomp_gamma_focus_changed_compat(sysWindowActive);
-        break;
-
-    case WM_CLOSE:
-        Cbuf_AddText("quit");
-        break;
-
-    case WM_KEYDOWN:
-    {
-        const int32_t key = MapKey((uint32_t)wParam, (uint32_t)lParam);
-        if (key != 0)
-            Sys_QueEvent(sysMsgTime, SE_KEY, key, qtrue, 0, NULL);
-        break;
-    }
-
-    case WM_KEYUP:
-    case WM_SYSKEYUP:
-    {
-        const int32_t key = MapKey((uint32_t)wParam, (uint32_t)lParam);
-        if (key != 0)
-            Sys_QueEvent(sysMsgTime, SE_KEY, key, qfalse, 0, NULL);
-        break;
-    }
-
-    case WM_CHAR:
-        Sys_QueEvent(sysMsgTime, SE_CHAR, (int32_t)wParam, 0, 0, NULL);
-        break;
-
-    case WM_SYSKEYDOWN:
-        if (wParam == VK_RETURN) {
-            if (cls.state != CA_LOADING && r_fullscreen != NULL) {
-                Cvar_SetValue(
-                    "r_fullscreen",
-                    r_fullscreen->integer == 0 ? 1.0f : 0.0f);
-                Cbuf_AddText("vid_restart");
-            }
-            return 0;
-        }
-        {
-            const int32_t key = MapKey((uint32_t)wParam, (uint32_t)lParam);
-            if (key != 0)
-                Sys_QueEvent(sysMsgTime, SE_KEY, key, qtrue, 0, NULL);
-        }
-        break;
-
-    case WM_SYSCOMMAND:
-        if (wParam == SC_SCREENSAVE)
-            return 0;
-        break;
-
-    case WM_MOUSEMOVE:
-    case WM_LBUTTONDOWN:
-    case WM_LBUTTONUP:
-    case WM_RBUTTONDOWN:
-    case WM_RBUTTONUP:
-    case WM_MBUTTONDOWN:
-    case WM_MBUTTONUP:
-    {
-        int32_t buttonMask = 0;
-        if ((wParam & MK_LBUTTON) != 0)
-            buttonMask |= 1;
-        if ((wParam & MK_RBUTTON) != 0)
-            buttonMask |= 2;
-        if ((wParam & MK_MBUTTON) != 0)
-            buttonMask |= 4;
-        IN_MouseEvent(buttonMask);
-        break;
-    }
-
-    case WM_MOUSEWHEEL:
-    {
-        const int32_t key =
-            (int16_t)HIWORD((DWORD_PTR)wParam) > 0
-                ? K_MWHEELUP
-                : K_MWHEELDOWN;
-        Sys_QueEvent(sysMsgTime, SE_KEY, key, qtrue, 0, NULL);
-        Sys_QueEvent(sysMsgTime, SE_KEY, key, qfalse, 0, NULL);
-        break;
-    }
-
-    case WM_POWERBROADCAST:
-        if (wParam == WIN_POWER_QUERY_SUSPEND ||
-            wParam == WIN_POWER_QUERY_STANDBY) {
-            return broadcastQueryDeny;
-        }
-        break;
-
-    default:
-        break;
-    }
-
-    return DefWindowProcA(window, message, wParam, lParam);
 }
-#endif
 
 /* Source: CoDUOMP.exe 0x0046f8f0..0x0046f99f.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0046f8f0_0046f9a0.mcode.
@@ -1423,8 +1150,11 @@ void Sys_SetErrorText(const char *text)
     SetWindowTextA((HWND)sysConsoleErrorWindow, sysConsoleErrorText);
     DestroyWindow((HWND)sysConsoleInputWindow);
     sysConsoleInputWindow = NULL;
-    MessageBoxA(NULL, text, Sys_LocalizeString("WIN_ERROR"),
-                SYS_ERROR_DIALOG_TYPE);
+    /* NOT_FROM_ORIGINAL_SOURCE: the original MessageBoxA boundary now uses the
+     * SDL application-shell dialog so a failed renderer window cannot leave a
+     * stray Win32 dialog implementation in the fatal path. */
+    (void)coduomp_sdl_show_message_box_compat(
+        Sys_LocalizeString("WIN_ERROR"), text, CODUOMP_SDL_DIALOG_OK);
 #else
     /* NOT_FROM_ORIGINAL_SOURCE: native application-shell error presentation
      * is intentionally separate from the terminal Sys_Print boundary. */

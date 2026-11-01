@@ -5,8 +5,10 @@
 
 #include <stddef.h>
 
-#if !defined(_WIN32)
-
+/* NOT_FROM_ORIGINAL_SOURCE: the native application shell is SDL on every
+ * supported host. Window creation, display modes, the OpenGL context,
+ * presentation, gamma, clipboard, dialogs, and translated input all cross
+ * this boundary; no Win32 window or WGL context exists in the client. */
 typedef struct coduomp_sdl_display_info_s {
     int32_t logicalWidth;
     int32_t logicalHeight;
@@ -32,7 +34,7 @@ qboolean coduomp_sdl_get_display_info_compat(
     int32_t displayIndex, coduomp_sdl_display_info_t *displayInfo);
 void CoduoSDL_GetDesktopMode(int32_t displayIndex,
                              int32_t *width, int32_t *height,
-                             int32_t *refreshRate);
+                             int32_t *refreshRate, int32_t *colorBits);
 qboolean coduomp_sdl_get_native_display_mode_compat(int32_t displayIndex,
                                                      int32_t *width,
                                                      int32_t *height,
@@ -45,6 +47,7 @@ void coduomp_sdl_window_size_for_drawable_compat(int32_t displayIndex,
                                                   int32_t *height);
 void CoduoSDL_GetFramebufferSize(int32_t *width, int32_t *height);
 void coduomp_sdl_get_window_size_compat(int32_t *width, int32_t *height);
+qboolean coduomp_sdl_get_window_position_compat(int32_t *x, int32_t *y);
 qboolean coduomp_sdl_get_window_gamma_ramp(uint16_t red[256],
                                            uint16_t green[256],
                                            uint16_t blue[256]);
@@ -65,10 +68,22 @@ void CoduoSDL_SwapWindow(void);
 void CoduoSDL_SetSwapInterval(int32_t interval);
 void CoduoSDL_PumpEvents(void);
 void CoduoSDL_SetRelativeMouse(qboolean active);
+void CoduoSDL_SetWindowGrab(qboolean active);
+void CoduoSDL_GetWindowCenter(int32_t *x, int32_t *y);
+void CoduoSDL_WarpMouseToWindowCenter(void);
+qboolean CoduoSDL_GetGlobalMousePosition(int32_t *x, int32_t *y);
 qboolean CoduoSDL_HasOpenGLWindow(void);
 void CoduoSDL_ShowErrorDialog(const char *message, const char *title);
+typedef enum coduomp_sdl_dialog_style_e {
+    CODUOMP_SDL_DIALOG_OK = 0,
+    CODUOMP_SDL_DIALOG_OK_CANCEL = 1,
+    CODUOMP_SDL_DIALOG_YES_NO = 2
+} coduomp_sdl_dialog_style_t;
+int32_t coduomp_sdl_show_message_box_compat(
+    const char *title, const char *body, coduomp_sdl_dialog_style_t style);
 char *coduomp_sdl_get_clipboard_text_compat(void);
-
-#endif
+void *coduomp_sdl_native_window_handle_compat(void);
+qboolean coduomp_sdl_probe_renderer_string_compat(char *buffer,
+                                                  size_t bufferSize);
 
 #endif
