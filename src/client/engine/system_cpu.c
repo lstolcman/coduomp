@@ -6,6 +6,7 @@
 #include "q_shared.h"
 
 #include "platform/dynamic_library_boundary.h"
+#include "platform/sdl_platform.h"
 #include "system_localization.h"
 #include "system_process_lock.h"
 
@@ -43,9 +44,7 @@ enum {
     SYS_BYTES_PER_MEGABYTE = 1024 * 1024,
     SYS_MIN_AVAILABLE_VIRTUAL_MEMORY = 128 * 1024 * 1024,
     SYS_PHYSICAL_MEMORY_CAP_MB = 1024,
-    SYS_LOW_MEMORY_THRESHOLD_BYTES = 96 * 1024 * 1024,
-    SYS_LOW_MEMORY_DIALOG_FLAGS = 52,
-    SYS_DIALOG_RESULT_YES = 6
+    SYS_LOW_MEMORY_THRESHOLD_BYTES = 96 * 1024 * 1024
 };
 
 /* Exact .rdata qword at 0x005b9bd0: 0x3fdfffffff000000. */
@@ -303,8 +302,9 @@ int32_t Sys_GetPhysicalMemoryMB(void)
          * the caption first, then the dialog body. */
         const char *title = Sys_LocalizeString("WIN_LOW_MEMORY_TITLE");
         const char *body = Sys_LocalizeString("WIN_LOW_MEMORY_BODY");
-        if (MessageBoxA(NULL, body, title, SYS_LOW_MEMORY_DIALOG_FLAGS) !=
-            SYS_DIALOG_RESULT_YES) {
+        if (coduomp_sdl_show_message_box_compat(
+                title, body, CODUOMP_SDL_DIALOG_YES_NO) !=
+            CODUOMP_SDL_DIALOG_FIRST) {
             Sys_DeleteProcessLockFile();
             exit(0);
         }

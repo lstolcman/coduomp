@@ -325,7 +325,7 @@ renderer_mode_set_result_t GLW_SetMode(
             Sys_LocalizeString("WIN_COLORDEPTH_WARN_TITLE"),
             Sys_LocalizeString("WIN_COLORDEPTH_WARN_BODY"),
             CODUOMP_SDL_DIALOG_OK_CANCEL);
-        if (choice == 0)
+        if (choice != CODUOMP_SDL_DIALOG_FIRST)
             return R_MODE_SET_INVALID;
     }
 

@@ -929,35 +929,58 @@ void CoduoSDL_ShowErrorDialog(const char *message, const char *title)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: portable equivalent of the original modal
- * MessageBoxA question used when archived hardware information changes. */
+ * MessageBoxA questions. Returns the chosen zero-based button index, or
+ * CODUOMP_SDL_DIALOG_FAILED when the platform cannot present the dialog. */
 int32_t coduomp_sdl_show_message_box_compat(
     const char *title, const char *body, coduomp_sdl_dialog_style_t style)
 {
     SDL_MessageBoxData data;
-    SDL_MessageBoxButtonData buttons[2];
-    int32_t selectedButton = 1;
+    SDL_MessageBoxButtonData buttons[3];
+    int32_t selectedButton = CODUOMP_SDL_DIALOG_FAILED;
 
     memset(&data, 0, sizeof(data));
+    memset(buttons, 0, sizeof(buttons));
     data.flags = SDL_MESSAGEBOX_INFORMATION;
     data.window = coduoSdlWindow;
     data.title = title;
     data.message = body;
-    buttons[0].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
-    buttons[0].buttonid = 0;
-    buttons[0].text = style == CODUOMP_SDL_DIALOG_YES_NO ? "Yes" : "OK";
-    if (style == CODUOMP_SDL_DIALOG_OK) {
-        data.numbuttons = 1;
-    } else {
-        buttons[1].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT;
-        buttons[1].buttonid = 1;
-        buttons[1].text = style == CODUOMP_SDL_DIALOG_YES_NO ? "No" : "Cancel";
+
+    switch (style) {
+    case CODUOMP_SDL_DIALOG_YES_NO:
+    case CODUOMP_SDL_DIALOG_YES_NO_CANCEL:
+        buttons[0].text = "Yes";
+        buttons[1].text = "No";
+        buttons[2].text = "Cancel";
+        data.numbuttons = style == CODUOMP_SDL_DIALOG_YES_NO_CANCEL ? 3 : 2;
+        break;
+    case CODUOMP_SDL_DIALOG_OK_CANCEL:
+        buttons[0].text = "OK";
+        buttons[1].text = "Cancel";
         data.numbuttons = 2;
+        break;
+    case CODUOMP_SDL_DIALOG_OK:
+    default:
+        buttons[0].text = "OK";
+        data.numbuttons = 1;
+        break;
     }
+
+    buttons[0].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
+    buttons[0].buttonid = CODUOMP_SDL_DIALOG_FIRST;
+    if (data.numbuttons > 1) {
+        buttons[1].buttonid = CODUOMP_SDL_DIALOG_SECOND;
+        buttons[data.numbuttons - 1].flags =
+            SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT;
+    }
+    if (data.numbuttons > 2)
+        buttons[2].buttonid = CODUOMP_SDL_DIALOG_THIRD;
+
     data.buttons = buttons;
     if (SDL_ShowMessageBox(&data, &selectedButton) != 0)
-        return style == CODUOMP_SDL_DIALOG_OK ? 1 : 0;
-
-    return selectedButton == 0 ? 1 : 0;
+        return CODUOMP_SDL_DIALOG_FAILED;
+    if (selectedButton < 0 || selectedButton >= data.numbuttons)
+        return CODUOMP_SDL_DIALOG_FAILED;
+    return selectedButton;
 }
 
 /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): Miles' DirectSound provider

@@ -20,7 +20,8 @@ static qboolean coduomp_show_reconfigure_dialog(const char *body,
                                                 const char *title)
 {
     return coduomp_sdl_show_message_box_compat(
-               title, body, CODUOMP_SDL_DIALOG_YES_NO) != 0
+               title, body, CODUOMP_SDL_DIALOG_YES_NO) ==
+                   CODUOMP_SDL_DIALOG_FIRST
                ? qtrue
                : qfalse;
 }
