@@ -338,7 +338,11 @@ renderer_mode_set_result_t GLW_SetMode(
     if (GLW_CreateWindow(
             driverName, outputWindowWidth, outputWindowHeight,
             colorBits, windowMode) == qfalse) {
-        return R_MODE_SET_INVALID;
+        /* NOT_FROM_ORIGINAL_SOURCE: preserve the original result distinction
+         * between an unavailable exclusive display mode and an invalid mode. */
+        return windowMode == CODUOMP_WINDOW_MODE_EXCLUSIVE
+                   ? R_MODE_SET_FULLSCREEN_UNAVAILABLE
+                   : R_MODE_SET_INVALID;
     }
 
     CoduoSDL_GetDesktopMode(
