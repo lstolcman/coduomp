@@ -100,6 +100,22 @@ if(CODUOMP_BUILD_CLIENT)
 			HEADER SDL.h
 			LIBRARIES SDL2 SDL2-static
 			PATH_SUFFIXES include/SDL2)
+		if(CODUOMP_SDL2_FOUND AND TARGET SDL2::SDL2main)
+			list(PREPEND CODUOMP_SDL2_LIBRARIES SDL2::SDL2main)
+		elseif(CODUOMP_SDL2_FOUND)
+			# The application uses a portable main(); without SDL2main the
+			# Windows loader has no WinMain wrapper to call it.
+			find_library(CODUOMP_SDL2MAIN_LIBRARY
+				NAMES SDL2main SDL2main-static
+				HINTS ${CODUOMP_DEP_PREFIX}
+				PATH_SUFFIXES lib lib/${CODUOMP_ARCH} lib/Release lib/Debug)
+			if(NOT CODUOMP_SDL2MAIN_LIBRARY)
+				message(FATAL_ERROR
+					"SDL2main is required for the portable client entry point.")
+			endif()
+			list(PREPEND CODUOMP_SDL2_LIBRARIES
+				"${CODUOMP_SDL2MAIN_LIBRARY}")
+		endif()
 	endif()
 	if(NOT CODUOMP_JPEG_FOUND)
 		coduomp_resolve_dependency(JPEG

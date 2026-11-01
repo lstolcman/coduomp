@@ -1,34 +1,23 @@
 #include "q_shared.h"
 
 #include "platform/crt_boundary.h"
+#include "platform/sdl_platform.h"
 
 #include <string.h>
 
-#if defined(__linux__)
 enum {
     /* Highest video-memory tier used by United Offensive's shipped
-     * configure_mp.csv recommendation table. */
-    CODUOMP_LINUX_VIDEO_MEMORY_PROFILE_MB = 256
+     * configure_mp.csv recommendation table. Any measured value at or above
+     * this tier selects the same highest-quality row, so it is also the
+     * conservative value used when no native measurement is available. */
+    CODUOMP_VIDEO_MEMORY_PROFILE_MB = 256
 };
-
-/* NOT_FROM_ORIGINAL_SOURCE: native Linux hardware discovery currently runs
- * before SDL creates the OpenGL renderer, so no renderer-backed video-memory
- * value is available at this boundary.  Zero means unknown; future native
- * providers return a positive measured value and automatically bypass the
- * recommendation fallback in Sys_GetVideoMemoryMB. */
-static int32_t coduomp_linux_detect_video_memory_mb(void)
-{
-    return 0;
-}
-#endif
 
 #if defined(_WIN32)
 #define COBJMACROS
 #include <windows.h>
-#include <ddraw.h>
+#include <dxgi.h>
 #endif
-
-#if defined(_WIN32)
 
 typedef struct videoMemoryRendererEstimate_s {
     const char *rendererPrefix;
@@ -46,12 +35,72 @@ _Static_assert(sizeof(videoMemoryRendererEstimate_t) == 0x08,
                "i386 renderer-memory estimate stride changed");
 #endif
 
+#if defined(_WIN32)
+/* NOT_FROM_ORIGINAL_SOURCE: the original Win32 probe measured local video
+ * memory with DirectDraw. DXGI exposes the same dedicated-adapter quantity
+ * without creating a window, device context, or OpenGL context. The entry
+ * point is resolved dynamically so every supported toolchain can build the
+ * probe without adding a link dependency. */
+static uint32_t coduomp_windows_query_dedicated_video_memory(void)
+{
+    /* IID_IDXGIFactory, copied from the shipped SDK header. */
+    static const GUID factoryId = {
+        0x7b7166ec, 0x21c7, 0x44ae,
+        {0xb2, 0x1a, 0xc9, 0xae, 0x32, 0x1a, 0xe3, 0x69}
+    };
+    typedef HRESULT (WINAPI *coduomp_create_dxgi_factory_fn)(
+        REFIID interfaceId, void **factory);
+    HMODULE dxgiLibrary;
+    coduomp_create_dxgi_factory_fn createFactory;
+    IDXGIFactory *factory = NULL;
+    uint32_t maximumBytes = 0;
+
+    dxgiLibrary = LoadLibraryA("dxgi.dll");
+    if (dxgiLibrary == NULL)
+        return 0;
+    createFactory = (coduomp_create_dxgi_factory_fn)(uintptr_t)
+        GetProcAddress(dxgiLibrary, "CreateDXGIFactory");
+    if (createFactory == NULL ||
+        FAILED(createFactory(&factoryId, (void **)&factory)) ||
+        factory == NULL) {
+        FreeLibrary(dxgiLibrary);
+        return 0;
+    }
+
+    for (UINT index = 0;; ++index) {
+        IDXGIAdapter *adapter = NULL;
+        DXGI_ADAPTER_DESC description;
+
+        if (factory->lpVtbl->EnumAdapters(factory, index, &adapter) != S_OK ||
+            adapter == NULL) {
+            break;
+        }
+        memset(&description, 0, sizeof(description));
+        if (SUCCEEDED(adapter->lpVtbl->GetDesc(adapter, &description))) {
+            SIZE_T bytes = description.DedicatedVideoMemory;
+            if (bytes == 0)
+                bytes = description.SharedSystemMemory;
+            if (bytes > UINT32_MAX)
+                bytes = UINT32_MAX;
+            if ((uint32_t)bytes > maximumBytes)
+                maximumBytes = (uint32_t)bytes;
+        }
+        adapter->lpVtbl->Release(adapter);
+    }
+
+    factory->lpVtbl->Release(factory);
+    FreeLibrary(dxgiLibrary);
+    return maximumBytes;
+}
+#endif
+
+#if defined(_WIN32)
 /* Source: CoDUOMP.exe 0x00469410..0x00469768.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_00469410_00469769.mcode.
  * Role name: the OpenGL fallback passes GL_RENDERER here, and every table
  * result is shifted left by 20 before returning. Ordering is significant:
  * model-specific prefixes precede their generic family prefix. */
-static uint32_t Win_EstimateVideoMemoryBytesFromRenderer(
+static uint32_t coduomp_estimate_video_memory_bytes_from_renderer(
     const char *renderer)
 {
     /* The original constructs all 47 records in its 0x178-byte stack frame at
@@ -118,244 +167,40 @@ static uint32_t Win_EstimateVideoMemoryBytesFromRenderer(
     }
     return 0;
 }
-
-enum {
-    WIN_DDRAW_LOCAL_VIDEO_MEMORY = 0x4000,
-    WIN_DDRAW_COOPERATIVE_FLAGS = 17,
-    WIN_OPENGL_RENDERER_NAME = 0x1f01,
-    WIN_OPENGL_PIXEL_FLAGS = 37
-};
-
-/* Source: CoDUOMP.exe 0x00469260..0x004692d0.
- * Evidence: coduomp/mcode/CoDUOMP/FUN_00469260_004692d1.mcode.
- * Role name: DirectDrawCreateEx produces IDirectDraw7, whose
- * GetAvailableVidMem method receives DDSCAPS_LOCALVIDMEM. */
-static uint32_t Win_GetDirectDrawVideoMemoryBytes(GUID *adapterGuid)
-{
-    IDirectDraw7 *directDraw = NULL;
-    DDSCAPS2 caps;
-    DWORD totalBytes = 0;
-    DWORD freeBytes = 0;
-    HRESULT result;
-
-    result = DirectDrawCreateEx(adapterGuid, (void **)&directDraw,
-                                &IID_IDirectDraw7, NULL);
-    if (FAILED(result))
-        return 0;
-
-    memset(&caps, 0, sizeof(caps));
-    caps.dwCaps = WIN_DDRAW_LOCAL_VIDEO_MEMORY;
-    result = IDirectDraw7_GetAvailableVidMem(
-        directDraw, &caps, &totalBytes, &freeBytes);
-    IDirectDraw7_Release(directDraw);
-    return SUCCEEDED(result) ? (uint32_t)totalBytes : 0;
-}
-
-/* Source: CoDUOMP.exe 0x004692e0..0x00469302, recovered from the executable
- * gap as the DirectDrawEnumerateExA callback passed at 0x004698f5. */
-static BOOL WINAPI Win_CollectDirectDrawVideoMemory(
-    GUID *adapterGuid, LPSTR description, LPSTR name, LPVOID context,
-    HMONITOR monitor)
-{
-    uint32_t *maximumBytes = (uint32_t *)context;
-    (void)description;
-    (void)name;
-
-    if (monitor == NULL) {
-        const uint32_t bytes =
-            Win_GetDirectDrawVideoMemoryBytes(adapterGuid);
-        if (bytes > *maximumBytes)
-            *maximumBytes = bytes;
-    }
-    return TRUE;
-}
-
-/* Source: CoDUOMP.exe 0x00469310..0x004693e4.
- * Evidence: coduomp/mcode/CoDUOMP/FUN_00469310_004693e5.mcode.
- * This fallback gives IDirectDraw7 a one-pixel dummy window and exclusive
- * fullscreen cooperative level before querying local video memory. */
-static uint32_t Win_GetExclusiveDirectDrawVideoMemoryBytes(
-    GUID *adapterGuid)
-{
-    IDirectDraw7 *directDraw = NULL;
-    DDSCAPS2 caps;
-    DWORD totalBytes = 0;
-    DWORD freeBytes = 0;
-    HWND window;
-    HRESULT result;
-
-    result = DirectDrawCreateEx(adapterGuid, (void **)&directDraw,
-                                &IID_IDirectDraw7, NULL);
-    if (FAILED(result))
-        return 0;
-
-    /* 0x0046932f..0x00469355: DirectDraw is created before the dummy window.
-     * Every post-window exit destroys the window before releasing DirectDraw. */
-    window = CreateWindowExA(
-        0, "static", "dummy", 0, 0, 0, 1, 1,
-        NULL, NULL, GetModuleHandleA(NULL), NULL);
-    if (window == NULL) {
-        IDirectDraw7_Release(directDraw);
-        return 0;
-    }
-    result = IDirectDraw7_SetCooperativeLevel(
-        directDraw, window, WIN_DDRAW_COOPERATIVE_FLAGS);
-    if (FAILED(result)) {
-        DestroyWindow(window);
-        IDirectDraw7_Release(directDraw);
-        return 0;
-    }
-
-    memset(&caps, 0, sizeof(caps));
-    caps.dwCaps = WIN_DDRAW_LOCAL_VIDEO_MEMORY;
-    result = IDirectDraw7_GetAvailableVidMem(
-        directDraw, &caps, &totalBytes, &freeBytes);
-    DestroyWindow(window);
-    IDirectDraw7_Release(directDraw);
-    return SUCCEEDED(result) ? (uint32_t)totalBytes : 0;
-}
-
-/* Source: CoDUOMP.exe 0x004693f0..0x0046940a, recovered from the executable
- * gap as the second DirectDrawEnumerateExA callback at 0x0046991a. */
-static BOOL WINAPI Win_CollectExclusiveDirectDrawVideoMemory(
-    GUID *adapterGuid, LPSTR description, LPSTR name, LPVOID context,
-    HMONITOR monitor)
-{
-    uint32_t *maximumBytes = (uint32_t *)context;
-    const uint32_t bytes =
-        Win_GetExclusiveDirectDrawVideoMemoryBytes(adapterGuid);
-    (void)description;
-    (void)name;
-    (void)monitor;
-
-    if (bytes > *maximumBytes)
-        *maximumBytes = bytes;
-    return TRUE;
-}
-
-/* Source: CoDUOMP.exe 0x00469770..0x004698dc.
- * Evidence: coduomp/mcode/CoDUOMP/FUN_00469770_004698dd.mcode.
- * Final Windows fallback: construct a temporary OpenGL context, read
- * GL_RENDERER, and estimate memory through the original 47-entry table. */
-static uint32_t Win_GetOpenGLVideoMemoryBytes(void)
-{
-    typedef HGLRC (WINAPI *wgl_create_context_t)(HDC);
-    typedef BOOL (WINAPI *wgl_make_current_t)(HDC, HGLRC);
-    typedef BOOL (WINAPI *wgl_delete_context_t)(HGLRC);
-    typedef const unsigned char *(WINAPI *gl_get_string_t)(unsigned int);
-
-    HWND window;
-    HDC deviceContext;
-    HMODULE openGL;
-    wgl_create_context_t createContext;
-    wgl_make_current_t makeCurrent;
-    wgl_delete_context_t deleteContext;
-    gl_get_string_t getString;
-    PIXELFORMATDESCRIPTOR descriptor;
-    HGLRC renderContext;
-    int pixelFormat;
-    uint32_t memoryBytes = 0;
-
-    window = CreateWindowExA(
-        0, "static", "dummy", 0, 0, 0, 1, 1,
-        NULL, NULL, GetModuleHandleA(NULL), NULL);
-    if (window == NULL)
-        return 0;
-
-    deviceContext = GetDC(window);
-    if (deviceContext == NULL) {
-        DestroyWindow(window);
-        return 0;
-    }
-
-    openGL = LoadLibraryA("opengl32.dll");
-    if (openGL == NULL) {
-        ReleaseDC(window, deviceContext);
-        DestroyWindow(window);
-        return 0;
-    }
-
-    createContext = (wgl_create_context_t)(uintptr_t)
-        GetProcAddress(openGL, "wglCreateContext");
-    makeCurrent = (wgl_make_current_t)(uintptr_t)
-        GetProcAddress(openGL, "wglMakeCurrent");
-    deleteContext = (wgl_delete_context_t)(uintptr_t)
-        GetProcAddress(openGL, "wglDeleteContext");
-    getString = (gl_get_string_t)(uintptr_t)
-        GetProcAddress(openGL, "glGetString");
-    /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-    if (createContext == NULL || makeCurrent == NULL ||
-        deleteContext == NULL || getString == NULL) {
-        FreeLibrary(openGL);
-        ReleaseDC(window, deviceContext);
-        DestroyWindow(window);
-        return 0;
-    }
-
-    memset(&descriptor, 0, sizeof(descriptor));
-    descriptor.nSize = sizeof(descriptor);
-    descriptor.nVersion = 1;
-    descriptor.dwFlags = WIN_OPENGL_PIXEL_FLAGS;
-    descriptor.iPixelType = PFD_TYPE_RGBA;
-
-    pixelFormat = ChoosePixelFormat(deviceContext, &descriptor);
-    if (pixelFormat != 0) {
-        DescribePixelFormat(deviceContext, pixelFormat,
-                            sizeof(descriptor), &descriptor);
-        if (SetPixelFormat(deviceContext, pixelFormat, &descriptor) != FALSE) {
-            renderContext = createContext(deviceContext);
-            if (renderContext != NULL) {
-                if (makeCurrent(deviceContext, renderContext) != FALSE) {
-                    const unsigned char *const renderer =
-                        getString(WIN_OPENGL_RENDERER_NAME);
-                    if (renderer != NULL) {
-                        memoryBytes = Win_EstimateVideoMemoryBytesFromRenderer(
-                            (const char *)renderer);
-                    }
-                    makeCurrent(NULL, NULL);
-                }
-                deleteContext(renderContext);
-            }
-        }
-    }
-
-    FreeLibrary(openGL);
-    /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-    ReleaseDC(window, deviceContext);
-    DestroyWindow(window);
-    return memoryBytes;
-}
-
 #endif
 
 /* Source: CoDUOMP.exe 0x004698e0..0x00469958.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004698e0_00469959.mcode.
  * Role name: the result is stored at 0x009cf1e4, printed as video-card MB,
- * and used as sys_vidMB. DirectDraw is tried both directly and through
+ * and used as sys_vidMB. The original tries DirectDraw directly and through
  * adapter enumeration before the OpenGL renderer-name fallback.
+ *
+ * NOT_FROM_ORIGINAL_SOURCE: the SDL application shell has no DirectDraw or
+ * WGL device. Use the dedicated-adapter DXGI measurement on Windows and the
+ * recovered renderer-name table through a hidden SDL OpenGL context. Unknown
+ * hardware reports the shipped recommendation table's highest tier so the
+ * selected configure_mp.csv row remains the top-quality profile.
  *
  * The final value is a power-of-two MB bucket. If rounding upward overshoots
  * the measured ceiling by more than 32 MB, the previous bucket is selected. */
 int32_t Sys_GetVideoMemoryMB(void)
 {
-#if defined(_WIN32)
-    uint32_t memoryBytes = Win_GetDirectDrawVideoMemoryBytes(NULL);
+    uint32_t memoryBytes = 0;
 
+#if defined(_WIN32)
+    memoryBytes = coduomp_windows_query_dedicated_video_memory();
     if (memoryBytes == 0) {
-        DirectDrawEnumerateExA(Win_CollectDirectDrawVideoMemory,
-                               &memoryBytes, 0);
+        char renderer[256];
+
+        if (coduomp_sdl_probe_renderer_string_compat(
+                renderer, sizeof(renderer)) != qfalse) {
+            memoryBytes = coduomp_estimate_video_memory_bytes_from_renderer(
+                renderer);
+        }
     }
-    if (memoryBytes == 0) {
-        memoryBytes = Win_GetExclusiveDirectDrawVideoMemoryBytes(NULL);
-    }
-    if (memoryBytes == 0) {
-        DirectDrawEnumerateExA(
-            Win_CollectExclusiveDirectDrawVideoMemory, &memoryBytes, 0);
-    }
+#endif
     if (memoryBytes == 0)
-        memoryBytes = Win_GetOpenGLVideoMemoryBytes();
-    if (memoryBytes == 0)
-        return 0;
+        return CODUOMP_VIDEO_MEMORY_PROFILE_MB;
 
     const uint32_t measuredMegabytes =
         ((memoryBytes - 1u) >> 20) + 1u;
@@ -365,21 +210,4 @@ int32_t Sys_GetVideoMemoryMB(void)
     if (bucketMegabytes - measuredMegabytes > 32u)
         bucketMegabytes >>= 1;
     return (int32_t)bucketMegabytes;
-#elif defined(__linux__)
-    /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): reporting unknown video
-     * memory as zero selected UO's 32-MB profile, whose r_picmip2=3 setting
-     * admits repeating model textures into a non-wrapping texture sheet.  A
-     * positive native measurement remains authoritative.  Until a provider
-     * is available, use the shipped recommendation table's 256-MB ceiling. */
-    const int32_t detectedMegabytes =
-        coduomp_linux_detect_video_memory_mb();
-    return detectedMegabytes > 0
-               ? detectedMegabytes
-               : CODUOMP_LINUX_VIDEO_MEMORY_PROFILE_MB;
-#else
-    /* NOT_FROM_ORIGINAL_SOURCE: the recovered probe is entirely Win32
-     * DirectDraw/WGL code. Native render backends will supply a platform GPU
-     * memory query when the renderer boundary is made operational. */
-    return 0;
-#endif
 }

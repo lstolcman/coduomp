@@ -2,6 +2,7 @@
 
 #include "client/console.h"
 #include "platform/crt_boundary.h"
+#include "platform/sdl_platform.h"
 #include "system_event.h"
 
 #include <string.h>
@@ -9,8 +10,6 @@
 #if defined(_WIN32)
 #include <mmsystem.h>
 #include <windows.h>
-#else
-#include "platform/sdl_platform.h"
 #endif
 
 enum {
@@ -31,9 +30,7 @@ enum {
     IN_MIDI_CHANNEL_MASK = 0x0f,
     IN_MIDI_NOTE_ON = 0x90,
     IN_MIDI_NOTE_OFF = 0x80,
-    IN_MIDI_DATA_BYTE_MASK = 0xff,
-    IN_RAW_INPUT_GENERIC_DESKTOP_USAGE_PAGE = 1,
-    IN_RAW_INPUT_MOUSE_USAGE = 2
+    IN_MIDI_DATA_BYTE_MASK = 0xff
 };
 
 cvar_t *in_mouse; /* original 0x048a5484 */
@@ -45,6 +42,8 @@ cvar_t *in_joystick; /* original 0x048a548c */
 cvar_t *in_joyBallScale; /* original 0x048a5494 */
 cvar_t *in_debugjoystick; /* original 0x048a5490 */
 cvar_t *joy_threshold; /* original 0x048a549c */
+
+cvar_t *in_rawInput;
 
 /* Set by the platform window/event layer. The original Win32 activation
  * handler at 0x0046fa90 writes this process-local state. */
@@ -58,18 +57,8 @@ static qboolean mouseInitialized;   /* original 0x009cdbc4 */
 static int32_t midiDeviceCount;     /* original 0x009cda50 */
 
 #if defined(_WIN32)
-/* The Win32 window procedure installs this handle during WM_CREATE. It is a
- * process-local platform handle, not a serialized or cross-module ABI field. */
-HWND win32MainWindow; /* original 0x0489bb88 */
-
-cvar_t *in_rawInput;
-
-/* NOT_FROM_ORIGINAL_SOURCE_STORAGE_FILE: Windows Raw Input registration and
- * per-frame motion state for the improved client's unaccelerated mouse path. */
-static qboolean rawInputRegistered;
-static int64_t rawMouseDeltaX;
-static int64_t rawMouseDeltaY;
-
+/* WinMM joystick and MIDI services remain native device providers. They do not
+ * create, own, or present the game window, which is always an SDL window. */
 static MIDIINCAPSA midiDeviceCaps[IN_MIDI_DEVICE_CAPACITY];
                                       /* original 0x009cda54..0x009cdbb3 */
 static HMIDIIN midiInputHandle;       /* original 0x009cdbb4 */
@@ -95,169 +84,49 @@ static void IN_StartupMIDI(void);
 static void IN_ShutdownMIDI(void);
 static void MidiInfo_f(void);
 
-#if defined(_WIN32)
-/* NOT_FROM_ORIGINAL_SOURCE: publish whether the requested Raw Input path is
- * currently available without conflating it with the archived user choice. */
-static void coduomp_win32_publish_raw_input_status(qboolean active)
+/* NOT_FROM_ORIGINAL_SOURCE: publish which pointer-capture path the SDL window
+ * currently owns. SDL relative mode supplies unaccelerated device motion; the
+ * archived in_rawInput=0 fallback captures the cursor and recenters it through
+ * SDL's portable window position API. */
+static void coduomp_input_publish_raw_input_status(qboolean active)
 {
     (void)Cvar_Set2("in_rawInputActive",
                     active != qfalse ? "1" : "0", qtrue);
 }
 
-/* NOT_FROM_ORIGINAL_SOURCE: discard reports from an earlier capture or input
- * mode so they cannot become movement after focus or configuration changes. */
-static void coduomp_win32_clear_raw_mouse_motion(void)
+/* NOT_FROM_ORIGINAL_SOURCE: the pump must not also translate absolute SDL
+ * motion reports while the recovered recentering fallback polls the cursor. */
+qboolean coduomp_input_absolute_capture_active(void)
 {
-    rawMouseDeltaX = 0;
-    rawMouseDeltaY = 0;
+    return mouseActive != qfalse && in_rawInput != NULL &&
+                   in_rawInput->integer == 0
+               ? qtrue
+               : qfalse;
 }
-
-/* NOT_FROM_ORIGINAL_SOURCE: register the foreground game window for generic
- * desktop mouse reports. Legacy messages remain enabled for buttons/wheel. */
-static qboolean coduomp_win32_register_raw_input(void)
-{
-    RAWINPUTDEVICE mouse = {
-        .usUsagePage = IN_RAW_INPUT_GENERIC_DESKTOP_USAGE_PAGE,
-        .usUsage = IN_RAW_INPUT_MOUSE_USAGE,
-        .dwFlags = 0,
-        .hwndTarget = win32MainWindow
-    };
-
-    if (win32MainWindow == NULL)
-        return qfalse;
-    if (RegisterRawInputDevices(&mouse, 1, sizeof(mouse)) == FALSE) {
-        Com_Printf("WARNING: Raw mouse input registration failed (%lu); "
-                   "using legacy Windows mouse input.\n",
-                   (unsigned long)GetLastError());
-        return qfalse;
-    }
-
-    rawInputRegistered = qtrue;
-    return qtrue;
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: release this process's generic-mouse Raw Input
- * registration while preserving the legacy button and wheel message path. */
-static void coduomp_win32_unregister_raw_input(void)
-{
-    RAWINPUTDEVICE mouse = {
-        .usUsagePage = IN_RAW_INPUT_GENERIC_DESKTOP_USAGE_PAGE,
-        .usUsage = IN_RAW_INPUT_MOUSE_USAGE,
-        .dwFlags = RIDEV_REMOVE,
-        .hwndTarget = NULL
-    };
-
-    if (rawInputRegistered == qfalse)
-        return;
-    if (RegisterRawInputDevices(&mouse, 1, sizeof(mouse)) == FALSE) {
-        Com_Printf("WARNING: Raw mouse input removal failed (%lu).\n",
-                   (unsigned long)GetLastError());
-    }
-    rawInputRegistered = qfalse;
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: make the live Raw Input registration follow the
- * archived setting and the lifetime of the current game window. */
-static void coduomp_win32_sync_raw_input(void)
-{
-    const qboolean requested =
-        mouseInitialized != qfalse && in_rawInput != NULL &&
-        in_rawInput->integer != 0;
-
-    coduomp_win32_clear_raw_mouse_motion();
-    if (requested != qfalse && rawInputRegistered == qfalse) {
-        coduomp_win32_publish_raw_input_status(
-            coduomp_win32_register_raw_input());
-    } else if (requested == qfalse) {
-        coduomp_win32_unregister_raw_input();
-        coduomp_win32_publish_raw_input_status(qfalse);
-        if (mouseActive != qfalse && win32MainWindow != NULL)
-            (void)SetCursorPos(windowCenterX, windowCenterY);
-    } else {
-        coduomp_win32_publish_raw_input_status(qtrue);
-    }
-
-    if (in_rawInput != NULL)
-        in_rawInput->modified = qfalse;
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: attach Raw Input to each recreated renderer
- * window, including windows created by a video restart. */
-void coduomp_win32_raw_input_window_created(void)
-{
-    coduomp_win32_sync_raw_input();
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: detach before the renderer destroys its target
- * window so a later video restart can register the replacement cleanly. */
-void coduomp_win32_raw_input_window_destroyed(void)
-{
-    coduomp_win32_unregister_raw_input();
-    coduomp_win32_clear_raw_mouse_motion();
-    coduomp_win32_publish_raw_input_status(qfalse);
-}
-
-/* NOT_FROM_ORIGINAL_SOURCE: consume one foreground relative mouse report and
- * accumulate it for the engine's existing once-per-frame movement event. */
-void coduomp_win32_raw_input_event(HRAWINPUT inputHandle)
-{
-    RAWINPUT input;
-    UINT inputSize = sizeof(input);
-    const UINT copied = GetRawInputData(
-        inputHandle, RID_INPUT, &input, &inputSize,
-        sizeof(RAWINPUTHEADER));
-
-    if (copied == (UINT)-1 ||
-        copied < sizeof(RAWINPUTHEADER) + sizeof(RAWMOUSE)) {
-        return;
-    }
-    if (input.header.dwType != RIM_TYPEMOUSE ||
-        (input.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) != 0 ||
-        rawInputRegistered == qfalse || in_rawInput == NULL ||
-        in_rawInput->integer == 0 || mouseActive == qfalse ||
-        sysInputAppActive == qfalse) {
-        return;
-    }
-
-    rawMouseDeltaX += input.data.mouse.lLastX;
-    rawMouseDeltaY += input.data.mouse.lLastY;
-}
-#endif
 
 /* Source: CoDUOMP.exe 0x004699b0..0x00469a72.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_004699b0_00469a73.mcode.
  * Role name: this is the Win32 cursor-capture body reached by
- * IN_ActivateMouse. */
+ * IN_ActivateMouse. The SDL boundary supplies the equivalent relative or
+ * recentered-grab capture. */
 static void IN_ActivateWin32Mouse(void)
 {
-#if defined(_WIN32)
-    RECT windowRect;
-    const int32_t screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    const int32_t screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    if (in_rawInput != NULL && in_rawInput->integer == 0) {
+        int32_t centerX;
+        int32_t centerY;
 
-    GetWindowRect(win32MainWindow, &windowRect);
-    if (windowRect.left < 0)
-        windowRect.left = 0;
-    if (windowRect.top < 0)
-        windowRect.top = 0;
-    if (windowRect.right >= screenWidth)
-        windowRect.right = screenWidth - 1;
-    if (windowRect.bottom >= screenHeight)
-        windowRect.bottom = screenHeight - 1;
-
-    windowCenterX = (windowRect.right + windowRect.left) / 2;
-    windowCenterY = (windowRect.bottom + windowRect.top) / 2;
-    SetCursorPos(windowCenterX, windowCenterY);
-    SetCapture(win32MainWindow);
-    if (com_developer->integer == 0)
-        ClipCursor(&windowRect);
-    while (ShowCursor(FALSE) >= 0) {
+        CoduoSDL_SetRelativeMouse(qfalse);
+        CoduoSDL_SetWindowGrab(qtrue);
+        CoduoSDL_GetWindowCenter(&centerX, &centerY);
+        windowCenterX = centerX;
+        windowCenterY = centerY;
+        CoduoSDL_WarpMouseToWindowCenter();
+    } else {
+        CoduoSDL_SetWindowGrab(qfalse);
+        CoduoSDL_SetRelativeMouse(qtrue);
+        windowCenterX = 0;
+        windowCenterY = 0;
     }
-#else
-    CoduoSDL_SetRelativeMouse(qtrue);
-    windowCenterX = 0;
-    windowCenterY = 0;
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x00469a80..0x00469aaa.
@@ -266,15 +135,8 @@ static void IN_ActivateWin32Mouse(void)
  * deactivation path. */
 static void IN_DeactivateWin32Mouse(void)
 {
-#if defined(_WIN32)
-    if (com_developer->integer == 0)
-        ClipCursor(NULL);
-    ReleaseCapture();
-    while (ShowCursor(TRUE) < 0) {
-    }
-#else
+    CoduoSDL_SetWindowGrab(qfalse);
     CoduoSDL_SetRelativeMouse(qfalse);
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x00469ab0..0x00469af5.
@@ -282,19 +144,21 @@ static void IN_DeactivateWin32Mouse(void)
  * Role name: obtains the Win32 cursor displacement and recenters it. */
 static void IN_Win32Mouse(int32_t *deltaX, int32_t *deltaY)
 {
-#if defined(_WIN32)
-    POINT cursor;
+    int32_t cursorX;
+    int32_t cursorY;
 
-    GetCursorPos(&cursor);
-    SetCursorPos(windowCenterX, windowCenterY);
-    *deltaX = cursor.x - windowCenterX;
-    *deltaY = cursor.y - windowCenterY;
-#else
-    /* NOT_FROM_ORIGINAL_SOURCE: non-Windows backends enqueue their native
-     * relative-motion events directly. */
     *deltaX = 0;
     *deltaY = 0;
-#endif
+    if (coduomp_input_absolute_capture_active() == qfalse)
+        return;
+
+    (void)CoduoSDL_GetGlobalMousePosition(&cursorX, &cursorY);
+    *deltaX = cursorX - windowCenterX;
+    *deltaY = cursorY - windowCenterY;
+
+    /* NOT_FROM_ORIGINAL_SOURCE: keep the fallback pointer in the game window
+     * exactly like the recovered SetCursorPos recentering boundary. */
+    CoduoSDL_WarpMouseToWindowCenter();
 }
 
 /* Source: CoDUOMP.exe 0x00469b00..0x00469b37.
@@ -311,6 +175,7 @@ void IN_ActivateMouse(void)
     if (mouseActive == qfalse) {
         mouseActive = qtrue;
         IN_ActivateWin32Mouse();
+        coduomp_input_publish_raw_input_status(qtrue);
     }
 }
 
@@ -321,10 +186,8 @@ void IN_DeactivateMouse(void)
 {
     if (mouseInitialized != qfalse && mouseActive != qfalse) {
         mouseActive = qfalse;
-#if defined(_WIN32)
-        coduomp_win32_clear_raw_mouse_motion();
-#endif
         IN_DeactivateWin32Mouse();
+        coduomp_input_publish_raw_input_status(qfalse);
     }
 }
 
@@ -375,28 +238,10 @@ void IN_MouseMove(void)
     int32_t deltaX;
     int32_t deltaY;
 
-#if defined(_WIN32)
-    if (rawInputRegistered != qfalse && in_rawInput != NULL &&
-        in_rawInput->integer != 0) {
-        if (rawMouseDeltaX > INT32_MAX)
-            deltaX = INT32_MAX;
-        else if (rawMouseDeltaX < INT32_MIN)
-            deltaX = INT32_MIN;
-        else
-            deltaX = (int32_t)rawMouseDeltaX;
-        if (rawMouseDeltaY > INT32_MAX)
-            deltaY = INT32_MAX;
-        else if (rawMouseDeltaY < INT32_MIN)
-            deltaY = INT32_MIN;
-        else
-            deltaY = (int32_t)rawMouseDeltaY;
-        coduomp_win32_clear_raw_mouse_motion();
-    } else {
-        IN_Win32Mouse(&deltaX, &deltaY);
-    }
-#else
+    /* NOT_FROM_ORIGINAL_SOURCE: the SDL pump translates relative motion
+     * directly; only the archived in_rawInput=0 path still polls and recenters
+     * the cursor here, matching the recovered Win32 body. */
     IN_Win32Mouse(&deltaX, &deltaY);
-#endif
     if (deltaX != 0 || deltaY != 0)
         Sys_QueEvent(0, SE_MOUSE, deltaX, deltaY, 0, NULL);
 }
@@ -420,10 +265,7 @@ static void IN_Startup(void)
 void IN_Shutdown(void)
 {
     IN_DeactivateMouse();
-#if defined(_WIN32)
-    coduomp_win32_unregister_raw_input();
-    coduomp_win32_publish_raw_input_status(qfalse);
-#endif
+    coduomp_input_publish_raw_input_status(qfalse);
     IN_ShutdownMIDI();
     Cmd_RemoveCommand("midiinfo");
 }
@@ -452,10 +294,8 @@ void IN_Init(void)
 
     in_mouse = Cvar_Get("in_mouse", "1",
                         CVAR_ARCHIVE | CVAR_LATCH);
-#if defined(_WIN32)
     in_rawInput = Cvar_Get("in_rawInput", "1", CVAR_ARCHIVE);
     (void)Cvar_Get("in_rawInputActive", "0", CVAR_ROM);
-#endif
     in_joystick = Cvar_Get("in_joystick", "0",
                            CVAR_ARCHIVE | CVAR_LATCH);
     in_joyBallScale =
@@ -466,9 +306,6 @@ void IN_Init(void)
         Cvar_Get("joy_threshold", "0.15", CVAR_ARCHIVE);
 
     IN_Startup();
-#if defined(_WIN32)
-    coduomp_win32_sync_raw_input();
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x00469e20..0x00469e4a, recovered from an executable
@@ -488,10 +325,18 @@ void IN_Activate(qboolean active)
 void IN_Frame(void)
 {
     IN_JoyMove();
-#if defined(_WIN32)
-    if (in_rawInput != NULL && in_rawInput->modified != qfalse)
-        coduomp_win32_sync_raw_input();
-#endif
+    /* COMPATIBILITY_PATCH (NOT_FROM_ORIGINAL_SOURCE): re-select the pointer
+     * capture path when the archived preference changes, mirroring the retired
+     * Raw Input registration update. */
+    if (in_rawInput != NULL && in_rawInput->modified != qfalse) {
+        in_rawInput->modified = qfalse;
+        if (mouseActive != qfalse) {
+            IN_DeactivateWin32Mouse();
+            IN_ActivateWin32Mouse();
+        }
+        coduomp_input_publish_raw_input_status(
+            mouseActive != qfalse ? qtrue : qfalse);
+    }
     if (mouseInitialized == qfalse)
         return;
 
@@ -517,9 +362,6 @@ void IN_Frame(void)
 void IN_ClearStates(void)
 {
     previousMouseButtons = 0;
-#if defined(_WIN32)
-    coduomp_win32_clear_raw_mouse_motion();
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x00469ed0..0x0046a067.

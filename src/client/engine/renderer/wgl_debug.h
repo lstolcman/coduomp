@@ -18,7 +18,6 @@ typedef HPBUFFERARB renderer_wgl_pbuffer_t;
 typedef GLYPHMETRICSFLOAT renderer_wgl_glyph_metrics_float_t;
 typedef LAYERPLANEDESCRIPTOR renderer_wgl_layer_plane_descriptor_t;
 typedef PROC renderer_wgl_proc_t;
-typedef WNDPROC renderer_win32_window_proc_t;
 typedef DWORD renderer_wgl_dword_t;
 typedef COLORREF renderer_wgl_color_t;
 #else
@@ -32,15 +31,12 @@ typedef struct renderer_wgl_glyph_metrics_float_s
 typedef struct renderer_wgl_layer_plane_descriptor_s
     renderer_wgl_layer_plane_descriptor_t;
 typedef void (RENDERER_GL_API_CALL *renderer_wgl_proc_t)(void);
-typedef intptr_t
-    (RENDERER_GL_API_CALL *renderer_win32_window_proc_t)(
-        void *window, uint32_t message, uintptr_t wParam, intptr_t lParam);
 
 #endif
 
-/* The Windows SDK owns PIXELFORMATDESCRIPTOR. The non-Windows spelling keeps
- * the unused WGL setup path compileable. This operating-system ABI record has
- * the same 40-byte layout on 32- and 64-bit Windows. */
+/* The Windows SDK owns PIXELFORMATDESCRIPTOR. The portable spelling retains
+ * the recovered 40-byte pixel-format record for evidence and ABI layout
+ * checks; the live format is negotiated by the SDL window boundary. */
 #if defined(_WIN32)
 typedef PIXELFORMATDESCRIPTOR renderer_pixel_format_descriptor_t;
 #else
@@ -131,39 +127,20 @@ _Static_assert(offsetof(renderer_pixel_format_descriptor_t, dwDamageMask) == 0x2
 _Static_assert(sizeof(renderer_pixel_format_descriptor_t) == 0x28,
                "pixel-format descriptor size changed");
 
-typedef enum renderer_wgl_setup_result_e {
-    R_WGL_SETUP_SUCCESS = 0,
-    R_WGL_SETUP_PIXEL_FORMAT_FAILED = 1,
-    R_WGL_SETUP_CONTEXT_FAILED = 2
-} renderer_wgl_setup_result_t;
-
 typedef enum renderer_mode_set_result_e {
     R_MODE_SET_SUCCESS = 0,
     R_MODE_SET_FULLSCREEN_UNAVAILABLE = 1,
     R_MODE_SET_INVALID = 2
 } renderer_mode_set_result_t;
 
-/* Original 0x039826e4. The Win32 GL window setup owns this HDC; retained as
- * an opaque native pointer so it widens normally on 64-bit Windows. */
-extern renderer_wgl_device_context_t rendererWin32DeviceContext;
-extern renderer_wgl_render_context_t rendererWin32RenderContext;
-extern qboolean rendererWin32PixelFormatSet;
-extern int32_t rendererWin32DesktopColorBits;
-extern int32_t rendererWin32DesktopWidth;
-extern int32_t rendererWin32DesktopHeight;
-extern renderer_win32_window_proc_t rendererWin32WindowProcedure;
+/* NOT_FROM_ORIGINAL_SOURCE: the SDL application shell owns the native game
+ * window, display mode, and OpenGL context. The WGL entry slots below remain
+ * only as inert typed dispatch storage for the recovered qgl_wgl_entries
+ * inventory; no WGL context or device context is created. */
 /* Original 0x0389f6e0..0x0389fce0, captured by GLimp_InitGamma and restored
  * by GLimp_Shutdown. */
 extern uint16_t rendererOriginalGammaRamp[3][256];
 
-void GLW_BuildPFD(renderer_pixel_format_descriptor_t *descriptor,
-                  int32_t colorBits, int32_t depthBits,
-                  int32_t stencilBits, qboolean stereo);
-int32_t GLW_ChoosePFD(
-    renderer_wgl_device_context_t deviceContext,
-    renderer_pixel_format_descriptor_t *preferred);
-renderer_wgl_setup_result_t GLW_SetPFD(
-    renderer_pixel_format_descriptor_t *descriptor);
 qboolean GLW_InitDriver(int32_t colorBits);
 qboolean GLW_CreateWindow(const char *driverName, int32_t width,
                           int32_t height, int32_t colorBits,

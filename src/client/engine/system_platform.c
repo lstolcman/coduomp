@@ -6,6 +6,7 @@
 #include "qcommon/game_module_abi_types.h"
 #include "networking/net_address.h"
 #include "platform/dynamic_library_boundary.h"
+#include "platform/sdl_platform.h"
 #if defined(__APPLE__)
 #include "platform/macos_app_bundle.h"
 #endif
@@ -25,14 +26,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <SDL.h>
+
 #if defined(_WIN32)
 #include <windows.h>
 #include <mmsystem.h>
 #include <shellapi.h>
 #include <shellscalingapi.h>
 #else
-#include "platform/sdl_platform.h"
-
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -58,9 +59,13 @@ static char sysCurrentUser[SYS_USER_NAME_CAPACITY];
 static OSVERSIONINFOA sysOsVersionInfo;  /* original 0x0489bb98 */
 static char sysInstallMediaPath[MAX_OSPATH];
                                         /* original 0x009cf1e8..0x009cf2e7 */
-static HBITMAP sysSplashBitmap;
-static qboolean sysSplashClassRegistered;
 #endif
+
+/* NOT_FROM_ORIGINAL_SOURCE: the retail coduo.bmp splash is presented by a
+ * temporary SDL window. It is a startup bitmap, not the game renderer
+ * window, and no Win32 window or GDI surface is created for it. */
+static SDL_Window *coduompSplashWindow;
+static SDL_Surface *coduompSplashBitmap;
 
 /* Source: CoDUOMP.exe 0x0046be10..0x0046c26a.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0046be10_0046c26b.mcode, the exact
@@ -124,22 +129,8 @@ void Sys_Init(void)
         va("%" PRIuPTR, (uintptr_t)sysApplicationInstance),
         CVAR_ROM);
 #endif
-
-    WNDPROC windowProcedure = MainWndProc;
-    uintptr_t windowProcedureAddress = 0;
-    _Static_assert(sizeof(windowProcedureAddress) >= sizeof(windowProcedure),
-                   "WNDPROC must fit in uintptr_t");
-    memcpy(&windowProcedureAddress, &windowProcedure,
-           sizeof(windowProcedure));
-#if UINTPTR_MAX == UINT32_MAX
-    (void)Cvar_Get(
-        "win_wndproc", va("%i", (int32_t)windowProcedureAddress),
-        CVAR_ROM);
-#else
-    (void)Cvar_Get(
-        "win_wndproc", va("%" PRIuPTR, windowProcedureAddress),
-        CVAR_ROM);
-#endif
+    /* NOT_FROM_ORIGINAL_SOURCE: the SDL application shell owns the native
+     * window procedure, so the recovered win_wndproc handoff has no consumer. */
 #else
     /* NOT_FROM_ORIGINAL_SOURCE: native Unix renderers do not consume the
      * Win32 architecture/instance/window-procedure cvars. */
@@ -338,75 +329,51 @@ void coduomp_sys_enable_dpi_awareness(void)
 /* Source: CoDUOMP.exe 0x0046e2e0..0x0046e474.
  * Evidence: coduomp/mcode/CoDUOMP/FUN_0046e2e0_0046e475.mcode and the PE
  * imports at 0x00586284..0x00586300. The title, class, and bitmap strings prove
- * that 0x009d0918 owns the startup splash rather than the gameplay window. */
+ * that 0x009d0918 owns the startup splash rather than the gameplay window.
+ * The recovered SDL application shell presents the same retail bitmap in a
+ * temporary SDL window; the game renderer window remains the only OpenGL
+ * surface. */
 void Sys_CreateSplashWindow(void)
 {
-#if defined(_WIN32)
+    SDL_Surface *bitmap;
+    SDL_Surface *windowSurface;
+    SDL_Window *splash;
     enum {
-        SYS_SPLASH_ICON_RESOURCE = 133,
         SYS_SPLASH_WIDTH = 320,
         SYS_SPLASH_HEIGHT = 100
     };
-    WNDCLASSA windowClass = {0};
-    windowClass.lpfnWndProc = DefWindowProcA;
-    windowClass.hInstance = (HINSTANCE)sysApplicationInstance;
-    windowClass.hIcon = LoadIconA(
-        (HINSTANCE)sysApplicationInstance,
-        MAKEINTRESOURCEA(SYS_SPLASH_ICON_RESOURCE));
-    windowClass.hCursor = LoadCursorA(NULL, IDC_ARROW);
-    windowClass.lpszClassName = "CoD Splash Screen";
-    if (RegisterClassA(&windowClass) == 0)
-        return;
-    sysSplashClassRegistered = qtrue;
 
-    const int32_t screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    const int32_t screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    HBITMAP bitmap = (HBITMAP)LoadImageA(
-        NULL, "coduo.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-    if (bitmap == NULL) {
-        Sys_DestroySplashWindow();
+    if (coduompSplashWindow != NULL)
         return;
-    }
-    sysSplashBitmap = bitmap;
+    if (CoduoSDL_Init() == qfalse)
+        return;
 
-    HWND splash = CreateWindowExA(
-        WS_EX_APPWINDOW, "CoD Splash Screen",
+    bitmap = SDL_LoadBMP("coduo.bmp");
+    if (bitmap == NULL)
+        return;
+
+    int32_t splashWidth = bitmap->w > 0 ? bitmap->w : SYS_SPLASH_WIDTH;
+    int32_t splashHeight = bitmap->h > 0 ? bitmap->h : SYS_SPLASH_HEIGHT;
+
+    splash = SDL_CreateWindow(
         "CoD:United Offensive Multiplayer",
-        WS_POPUP | WS_BORDER | WS_SYSMENU,
-        (screenWidth - SYS_SPLASH_WIDTH) / 2,
-        (screenHeight - SYS_SPLASH_HEIGHT) / 2,
-        SYS_SPLASH_WIDTH, SYS_SPLASH_HEIGHT,
-        NULL, NULL, (HINSTANCE)sysApplicationInstance, NULL);
-    sysSplashWindow = splash;
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        splashWidth, splashHeight,
+        SDL_WINDOW_BORDERLESS | SDL_WINDOW_SHOWN);
     if (splash == NULL) {
-        Sys_DestroySplashWindow();
+        SDL_FreeSurface(bitmap);
         return;
     }
 
-    HWND image = CreateWindowExA(
-        0, "Static", NULL, WS_CHILD | WS_VISIBLE | SS_BITMAP,
-        0, 0, SYS_SPLASH_WIDTH, SYS_SPLASH_HEIGHT,
-        splash, NULL, (HINSTANCE)sysApplicationInstance, NULL);
-    if (image == NULL) {
-        Sys_DestroySplashWindow();
-        return;
+    coduompSplashBitmap = bitmap;
+    coduompSplashWindow = splash;
+    sysSplashWindow = splash;
+
+    windowSurface = SDL_GetWindowSurface(splash);
+    if (windowSurface != NULL) {
+        (void)SDL_BlitSurface(bitmap, NULL, windowSurface, NULL);
+        (void)SDL_UpdateWindowSurface(splash);
     }
-
-    (void)SendMessageA(
-        image, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bitmap);
-
-    RECT imageRect;
-    (void)GetWindowRect(image, &imageRect);
-    const int32_t imageWidth = imageRect.right - imageRect.left;
-    const int32_t imageHeight = imageRect.bottom - imageRect.top;
-    (void)SetWindowPos(
-        splash, NULL,
-        (screenWidth - imageWidth) / 2,
-        (screenHeight - imageHeight) / 2,
-        imageWidth, imageHeight, SWP_NOZORDER);
-#else
-    /* NOT_FROM_ORIGINAL_SOURCE: non-Windows launchers own any splash UI. */
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x0046e480..0x0046e4a8, recovered from the executable
@@ -414,37 +381,33 @@ void Sys_CreateSplashWindow(void)
  * Name: exact same-module Mac symbol Sys_DestroySplashWindow. */
 void Sys_DestroySplashWindow(void)
 {
-#if defined(_WIN32)
-    if (sysSplashWindow != NULL) {
-        ShowWindow((HWND)sysSplashWindow, SW_HIDE);
-        if (DestroyWindow((HWND)sysSplashWindow) == FALSE)
-            return;
-        sysSplashWindow = NULL;
+    if (coduompSplashWindow != NULL) {
+        SDL_DestroyWindow(coduompSplashWindow);
+        coduompSplashWindow = NULL;
     }
-    /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-    if (sysSplashBitmap != NULL) {
-        (void)DeleteObject(sysSplashBitmap);
-        sysSplashBitmap = NULL;
+    sysSplashWindow = NULL;
+    if (coduompSplashBitmap != NULL) {
+        SDL_FreeSurface(coduompSplashBitmap);
+        coduompSplashBitmap = NULL;
     }
-    if (sysSplashClassRegistered != qfalse) {
-        (void)UnregisterClassA("CoD Splash Screen",
-                               (HINSTANCE)sysApplicationInstance);
-        sysSplashClassRegistered = qfalse;
-    }
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x0046e4b0..0x0046e4ce, recovered from the executable
- * gap. Windows-only role name: shows and immediately paints the existing
- * startup splash window. */
+ * gap. Shows and immediately paints the existing startup splash window. */
 void Sys_ShowSplashWindow(void)
 {
-#if defined(_WIN32)
-    if (sysSplashWindow != NULL) {
-        ShowWindow((HWND)sysSplashWindow, SW_SHOW);
-        UpdateWindow((HWND)sysSplashWindow);
+    SDL_Surface *windowSurface;
+
+    if (coduompSplashWindow == NULL)
+        return;
+
+    SDL_ShowWindow(coduompSplashWindow);
+    windowSurface = SDL_GetWindowSurface(coduompSplashWindow);
+    if (windowSurface != NULL && coduompSplashBitmap != NULL) {
+        (void)SDL_BlitSurface(
+            coduompSplashBitmap, NULL, windowSurface, NULL);
+        (void)SDL_UpdateWindowSurface(coduompSplashWindow);
     }
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x0046e4d0..0x0046e4e2, recovered from the executable
@@ -452,10 +415,8 @@ void Sys_ShowSplashWindow(void)
  * Name: exact same-module Mac symbol Sys_HideSplashWindow. */
 void Sys_HideSplashWindow(void)
 {
-#if defined(_WIN32)
-    if (sysSplashWindow != NULL)
-        ShowWindow((HWND)sysSplashWindow, SW_HIDE);
-#endif
+    if (coduompSplashWindow != NULL)
+        SDL_HideWindow(coduompSplashWindow);
 }
 
 /* Source: CoDUOMP.exe 0x0046ad20..0x0046ae1f.
@@ -659,25 +620,19 @@ void Sys_LoadingKeepAlive(void)
 }
 
 /* NOT_FROM_ORIGINAL_SOURCE: shared expression of the Win32 message-pump and
- * display-idle reset inlined at CoDUOMP.exe 0x0043028c..0x004302e1 and
- * 0x0041d01b..0x0041d070. The original out-of-line Sys_LoadingKeepAlive
- * function above is independently empty. The final imported call takes
- * ES_DISPLAY_REQUIRED to reset the display idle timer. */
+ * display-idle reset, and two-millisecond yield inlined at CoDUOMP.exe
+ * 0x0043028c..0x004302e1 and 0x0041d01b..0x0041d070. The original out-of-line
+ * Sys_LoadingKeepAlive function above is independently empty. The final
+ * imported call takes ES_DISPLAY_REQUIRED to reset the display idle timer.
+ * SDL pumps the same native window messages on every host so the splash and
+ * console remain responsive during archive loading. */
 void coduomp_loading_keepalive(void)
 {
 #if defined(_WIN32)
-    MSG message;
-
-    if (PeekMessageA(
-            &message, NULL, WM_POWERBROADCAST, WM_POWERBROADCAST,
-            PM_NOREMOVE) != FALSE &&
-        GetMessageA(
-            &message, NULL, WM_POWERBROADCAST, WM_POWERBROADCAST) > 0) {
-        TranslateMessage(&message);
-        DispatchMessageA(&message);
-    }
     (void)SetThreadExecutionState(ES_DISPLAY_REQUIRED);
 #endif
+    CoduoSDL_PumpEvents();
+    SDL_Delay(2);
 }
 
 /* Preserve this recovered boundary's validated input, state, and compatibility invariants. */
@@ -696,19 +651,20 @@ _Noreturn void Sys_Error(const char *format, ...)
     Sys_Print(errorText);
     Sys_Print("\n");
 
-#if defined(_WIN32)
     Sys_SetErrorText(errorText);
     Sys_ShowConsole(SYS_CONSOLE_VISIBLE, qtrue);
 
-    MSG message;
-    while (GetMessageA(&message, NULL, 0, 0) != FALSE) {
-        TranslateMessage(&message);
-        DispatchMessageA(&message);
+#if defined(_WIN32)
+    /* The recovered developer console is a Win32 edit-control window; keep it
+     * responsive while the user reads the fatal message. The SDL game window
+     * has already been destroyed by Sys_Shutdown. */
+    if (sysConsoleWindow != NULL) {
+        MSG message;
+        while (GetMessageA(&message, NULL, 0, 0) != FALSE) {
+            TranslateMessage(&message);
+            DispatchMessageA(&message);
+        }
     }
-#else
-    /* NOT_FROM_ORIGINAL_SOURCE: native fatal-error presentation until the
-     * native application shell supplies a graphical error console. Sys_Print
-     * above remains the native text presentation boundary. */
 #endif
 
     Com_Quit_f();
@@ -735,9 +691,7 @@ _Noreturn void Sys_Quit(void)
     Com_InitPushEvent();
     Sys_ClearEventQueue();
     Key_Shutdown();
-#if !defined(_WIN32)
     CoduoSDL_Shutdown();
-#endif
     exit(EXIT_SUCCESS);
 }
 
@@ -985,40 +939,12 @@ char *Sys_GetCurrentUser(void)
  * carriage return, or backspace by calling strtok and ignoring its result. */
 char *Sys_GetClipboardData(void)
 {
-#if defined(_WIN32)
-    char *clipboardText = NULL;
-
-    if (OpenClipboard(NULL) == FALSE)
-        return NULL;
-
-    HANDLE clipboardHandle = GetClipboardData(CF_TEXT);
-    if (clipboardHandle != NULL) {
-        const char *const source = GlobalLock(clipboardHandle);
-        if (source != NULL) {
-            const SIZE_T allocationBytes = GlobalSize(clipboardHandle);
-            /* NOT_FROM_ORIGINAL_SOURCE: preserve this recovered boundary's validated input, state, and compatibility invariants. */
-            if (allocationBytes != 0 && allocationBytes <= UINT32_MAX) {
-                const size_t copyBytes = (size_t)allocationBytes - 1u;
-                clipboardText = Z_MallocInternal((size_t)allocationBytes + 1u);
-                strncpy(clipboardText, source, copyBytes);
-                clipboardText[copyBytes] = '\0';
-            }
-            GlobalUnlock(clipboardHandle);
-            if (clipboardText != NULL)
-                (void)strtok(clipboardText, "\n\r\b");
-        }
-    }
-
-    CloseClipboard();
-    return clipboardText;
-#else
-    /* NOT_FROM_ORIGINAL_SOURCE: SDL supplies the macOS/Unix window-system
+    /* NOT_FROM_ORIGINAL_SOURCE: SDL supplies the native window-system
      * clipboard while preserving the original malloc-owned return contract. */
     char *const clipboardText = coduomp_sdl_get_clipboard_text_compat();
     if (clipboardText != NULL)
         (void)strtok(clipboardText, "\n\r\b");
     return clipboardText;
-#endif
 }
 
 /* Source: CoDUOMP.exe 0x0046b740..0x0046b75d, recovered from the executable

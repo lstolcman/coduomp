@@ -38,10 +38,11 @@ set(CODUOMP_MINIZIP_FOUND TRUE)
 set(CODUOMP_MINIZIP_INCLUDE_DIRS "")
 set(CODUOMP_MINIZIP_LIBRARIES coduomp_minizip)
 
-# SDL2
+# SDL2. The application entry point is a portable main(); SDL2main supplies
+# the platform trampoline (WinMain on Windows) that calls it.
 set(CODUOMP_SDL2_FOUND TRUE)
 set(CODUOMP_SDL2_INCLUDE_DIRS "")
-set(CODUOMP_SDL2_LIBRARIES SDL2::SDL2-static)
+set(CODUOMP_SDL2_LIBRARIES SDL2::SDL2main SDL2::SDL2-static)
 
 # libjpeg-turbo (ExternalProject; the interface target carries headers and the
 # per-configuration archive)

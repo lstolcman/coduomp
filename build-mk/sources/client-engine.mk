@@ -93,7 +93,7 @@ CLIENT_ENGINE_C_SOURCES := \
 	src/client/engine/renderer/gl_logging_controller.c \
 	src/client/engine/renderer/gl_profile.c \
 	src/client/engine/renderer/gl_state.c \
-	src/client/engine/renderer/platform_wgl.c \
+	src/client/engine/renderer/platform_glw.c \
 	src/client/engine/renderer/presentation_2d_compat.c \
 	src/client/engine/renderer/punkbuster_gl.c \
 	src/client/engine/renderer/qgl_dispatch.c \

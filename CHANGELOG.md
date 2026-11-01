@@ -28,9 +28,17 @@ This is a feature-oriented summary of lasting, user-visible differences from the
 ### Platforms and display
 
 - Extends client support to macOS and Linux.
+- The Windows client now uses SDL2 for its game window, display modes, OpenGL
+  context, presentation, gamma, clipboard, dialogs, and translated input, the
+  same application shell used on macOS and Linux. The original Win32 window
+  class, WGL context, pixel-format database, and window-message pump are gone;
+  rendering, mode selection, gamma tables, and input bindings are unchanged.
+  See `docs/sdl2win.md` for the migration, parity evidence, and the retained
+  non-renderer Win32 services (developer console, WinMM joystick/MIDI, DXGI
+  hardware query).
 - The graphics menu adds a Current Display option and filters modern presets through 3840 x 2160 to resolutions reported by the selected display.
 - The Monitor selector chooses the display used for window placement, fullscreen presentation, and resolution discovery on Windows, macOS, and Linux. Its archived `r_display` cvar uses a zero-based index (default `0`); apply the graphics settings or run `vid_restart` after changing it. An unavailable selection falls back to the first display.
-- `r_fullscreen` selects Windowed (`0`), Fullscreen (`1`, the default), or Borderless (`2`). Fullscreen keeps the OS display mode and other monitors active. On macOS and Linux, Fullscreen enters desktop fullscreen while Borderless remains an undecorated desktop-sized window.
+- `r_fullscreen` selects Windowed (`0`), Fullscreen (`1`, the default), or Borderless (`2`). Fullscreen keeps the OS display mode and other monitors active. On every host, Fullscreen enters desktop fullscreen while Borderless remains an undecorated desktop-sized window.
 - Widescreen support covers the gameplay FOV, menus, HUD, reticles, optical overlays, and full-screen effects; classic fitted 4:3 remains selectable.
 - The Graphics page has an 80-120 horizontal field-of-view slider below Brightness, with its current value beside the meter. `cg_fov` is the displayed view angle directly. Changing the resolution or Fill Screen/Classic 4:3 presentation resets it to the aspect-aware default only when the effective aspect ratio changes; right-clicking the slider restores that same default.
 - The FOV preference is archived and remains editable on servers with cheats disabled. Startup and server joins do not automatically adjust it to the display aspect.

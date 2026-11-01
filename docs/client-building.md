@@ -447,6 +447,9 @@ exclusive fullscreen on the second monitor. The display mode is restored
 when exclusive fullscreen exits. On macOS, standard exclusive fullscreen on
 the primary display can also capture and blank the other connected displays.
 Use Fullscreen or Borderless when the other monitors should remain visible.
+The Windows client uses the same SDL window boundary as macOS and Linux; see
+[SDL2 window and rendering migration](sdl2win.md) for the window, context,
+gamma, and input parity details.
 
 The **Gameplay View** selector also applies on a renderer restart:
 

@@ -3,15 +3,9 @@
 
 #include "q_shared.h"
 
-#if defined(_WIN32)
-#include <windows.h>
-extern HWND win32MainWindow; /* original 0x0489bb88 */
+/* The mouse-button domain and the archived raw-input preference are shared by
+ * every host. Pointer capture itself is owned by the SDL window boundary. */
 extern cvar_t *in_rawInput;
-
-void coduomp_win32_raw_input_window_created(void);
-void coduomp_win32_raw_input_window_destroyed(void);
-void coduomp_win32_raw_input_event(HRAWINPUT inputHandle);
-#endif
 
 extern cvar_t *in_mouse; /* original 0x048a5484 */
 extern cvar_t *in_midi; /* original 0x048a5480 */
@@ -34,5 +28,8 @@ void IN_Init(void);
 void IN_Shutdown(void);
 void IN_Restart(void);
 void IN_Frame(void);
+/* NOT_FROM_ORIGINAL_SOURCE: reports whether the archived non-raw capture path
+ * owns mouse motion, so the SDL event pump does not duplicate its reports. */
+qboolean coduomp_input_absolute_capture_active(void);
 
 #endif
