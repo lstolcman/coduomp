@@ -1,5 +1,6 @@
 #include "system_process_lock.h"
 
+#include "platform/sdl_platform.h"
 #include "system_localization.h"
 #include "qcommon/com_sprintf.h"
 
@@ -16,9 +17,6 @@ char sysProcessLockFile[SYS_PROCESS_LOCK_NAME_CAPACITY];
 
 enum {
     SYS_PROCESS_ID_BYTES = 4,
-    SYS_PROCESS_LOCK_DIALOG_FLAGS =
-        MB_YESNOCANCEL | MB_ICONWARNING,
-    SYS_PROCESS_LOCK_ERROR_FLAGS = MB_ICONERROR,
     SYS_FATAL_EXIT_STATUS = -1,
     SYS_CONFIG_LANGUAGE_UNAVAILABLE = -1
 };
@@ -362,8 +360,8 @@ disk_full:
             Sys_LocalizeString("WIN_DISK_FULL_TITLE");
         const char *const body =
             Sys_LocalizeString("WIN_DISK_FULL_BODY");
-        (void)MessageBoxA(
-            NULL, body, title, SYS_PROCESS_LOCK_ERROR_FLAGS);
+        (void)coduomp_sdl_show_message_box_compat(
+            title, body, CODUOMP_SDL_DIALOG_OK);
         exit(SYS_FATAL_EXIT_STATUS);
     }
 }
@@ -405,13 +403,13 @@ qboolean coduomp_sys_check_improper_quit_config(void)
         Sys_LocalizeString("WIN_IMPROPER_QUIT_TITLE");
     const char *const body =
         Sys_LocalizeString("WIN_IMPROPER_QUIT_BODY");
-    const int32_t response = MessageBoxA(
-        NULL, body, title, SYS_PROCESS_LOCK_DIALOG_FLAGS);
-    if (response == IDYES) {
+    const int32_t response = coduomp_sdl_show_message_box_compat(
+        title, body, CODUOMP_SDL_DIALOG_YES_NO_CANCEL);
+    if (response == CODUOMP_SDL_DIALOG_FIRST) {
         Com_SetSafeMode();
         return qtrue;
     }
-    if (response == IDCANCEL) {
+    if (response == CODUOMP_SDL_DIALOG_THIRD) {
         Sys_DeleteProcessLockFile();
         Sys_ShutdownLocalization();
         exit(EXIT_SUCCESS);

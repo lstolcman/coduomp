@@ -32,7 +32,7 @@ command system are unchanged.
 | `WinMain` | `system_main.c` | portable `main`; SDL2main supplies the Windows `WinMain` trampoline |
 | `RegisterClassA` splash window and `LoadImageA` bitmap control | `system_platform.c` | SDL splash window presenting the same retail `coduo.bmp` |
 | `OpenClipboard`/`GetClipboardData(CF_TEXT)` | `system_platform.c` | `SDL_GetClipboardText` |
-| `MessageBoxA` fatal/reconfigure dialogs | `system_fatal.c`, `system_info.c`, `renderer/platform_glw.c` | `SDL_ShowSimpleMessageBox` and `SDL_ShowMessageBox` |
+| `MessageBoxA` fatal, hardware-change, low-memory, and process-lock dialogs | `system_fatal.c`, `system_info.c`, `system_cpu.c`, `system_process_lock.c`, `renderer/platform_glw.c` | `SDL_ShowSimpleMessageBox` and `SDL_ShowMessageBox` |
 
 `renderer/platform_wgl.c` is now `renderer/platform_glw.c`. It contains the
 recovered `GLW_*` mode policy and OpenGL extension inventory only; every

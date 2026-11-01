@@ -77,8 +77,15 @@ void CoduoSDL_ShowErrorDialog(const char *message, const char *title);
 typedef enum coduomp_sdl_dialog_style_e {
     CODUOMP_SDL_DIALOG_OK = 0,
     CODUOMP_SDL_DIALOG_OK_CANCEL = 1,
-    CODUOMP_SDL_DIALOG_YES_NO = 2
+    CODUOMP_SDL_DIALOG_YES_NO = 2,
+    CODUOMP_SDL_DIALOG_YES_NO_CANCEL = 3
 } coduomp_sdl_dialog_style_t;
+typedef enum coduomp_sdl_dialog_result_e {
+    CODUOMP_SDL_DIALOG_FIRST = 0,
+    CODUOMP_SDL_DIALOG_SECOND = 1,
+    CODUOMP_SDL_DIALOG_THIRD = 2,
+    CODUOMP_SDL_DIALOG_FAILED = -1
+} coduomp_sdl_dialog_result_t;
 int32_t coduomp_sdl_show_message_box_compat(
     const char *title, const char *body, coduomp_sdl_dialog_style_t style);
 char *coduomp_sdl_get_clipboard_text_compat(void);
